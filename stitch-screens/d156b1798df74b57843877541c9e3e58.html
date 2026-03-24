@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SweatSheet - Progress</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700;800;900&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "outline": "#767575",
+            "surface-container-low": "#131313",
+            "on-error-container": "#ffa8a3",
+            "error-container": "#9f0519",
+            "surface": "#0e0e0e",
+            "inverse-on-surface": "#565555",
+            "secondary-dim": "#ee8138",
+            "surface-tint": "#ff9066",
+            "on-secondary-fixed": "#592500",
+            "on-tertiary-container": "#4b2f00",
+            "on-primary-fixed-variant": "#541800",
+            "on-secondary-container": "#fff6f2",
+            "on-secondary-fixed-variant": "#853b00",
+            "secondary": "#ff8d44",
+            "inverse-primary": "#a93900",
+            "primary-fixed-dim": "#f76526",
+            "error": "#ff716c",
+            "secondary-container": "#9a4600",
+            "on-background": "#ffffff",
+            "on-primary-fixed": "#000000",
+            "tertiary-fixed-dim": "#e59904",
+            "primary-fixed": "#ff7943",
+            "on-surface-variant": "#adaaaa",
+            "surface-container": "#1a1919",
+            "tertiary-dim": "#e59904",
+            "on-secondary": "#4c1f00",
+            "on-tertiary": "#583800",
+            "surface-container-highest": "#262626",
+            "surface-container-high": "#201f1f",
+            "surface-variant": "#262626",
+            "primary-dim": "#ff743b",
+            "inverse-surface": "#fcf9f8",
+            "on-tertiary-fixed": "#2c1a00",
+            "tertiary-fixed": "#f5a61c",
+            "error-dim": "#d7383b",
+            "surface-dim": "#0e0e0e",
+            "surface-bright": "#2c2c2c",
+            "tertiary": "#ffb546",
+            "tertiary-container": "#f5a61c",
+            "on-tertiary-fixed-variant": "#573700",
+            "secondary-fixed": "#ffc5a6",
+            "surface-container-lowest": "#000000",
+            "primary-container": "#ff7943",
+            "secondary-fixed-dim": "#ffb286",
+            "on-primary-container": "#441200",
+            "background": "#0e0e0e",
+            "on-surface": "#ffffff",
+            "outline-variant": "#484847",
+            "primary": "#ff9066",
+            "on-error": "#490006",
+            "on-primary": "#571a00"
+          },
+          fontFamily: {
+            "headline": ["Lexend"],
+            "body": ["Manrope"],
+            "label": ["Manrope"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 0px;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary selection:text-on-primary">
+<!-- Top Navigation Shell -->
+<nav class="bg-[#0e0e0e]/70 backdrop-blur-xl fixed top-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 flex justify-between items-center px-6 py-4 w-full">
+<span class="text-2xl font-black text-[#ff9066] italic font-['Lexend'] uppercase tracking-tighter">SweatSheet</span>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-white/60 hover:opacity-80 transition-opacity active:scale-95 transition-transform" data-icon="account_circle">account_circle</span>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="min-h-screen max-w-[390px] mx-auto pt-24 pb-32 px-6 flex flex-col gap-8">
+<!-- Exercise Selector Section -->
+<header class="flex flex-col gap-4">
+<div class="flex flex-col gap-1">
+<span class="font-label text-primary uppercase tracking-[0.2em] text-[10px] font-bold">Current Exercise</span>
+<div class="flex items-center justify-between bg-surface-container-highest p-4 rounded-xl active:scale-[0.98] transition-transform cursor-pointer">
+<h1 class="font-headline text-2xl font-black uppercase tracking-tight">Bench Press</h1>
+<span class="material-symbols-outlined text-primary" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</header>
+<!-- Kinetic Chart Section -->
+<section class="flex flex-col gap-4">
+<div class="flex justify-between items-end">
+<div class="flex flex-col">
+<span class="font-label text-on-surface-variant text-[10px] uppercase font-bold tracking-widest">Performance Arc</span>
+<div class="flex items-baseline gap-2">
+<span class="font-headline text-4xl font-black tracking-tighter">105</span>
+<span class="font-headline text-xl text-primary font-bold">KG</span>
+</div>
+</div>
+<div class="flex gap-2">
+<div class="px-3 py-1 bg-primary text-on-primary text-[10px] font-black rounded-full">1M</div>
+<div class="px-3 py-1 bg-surface-container-highest text-on-surface-variant text-[10px] font-black rounded-full">6M</div>
+</div>
+</div>
+<!-- Simulated Line Chart with Asymmetric Energy -->
+<div class="relative w-full h-48 bg-surface-container-low rounded-xl overflow-hidden border border-white/5">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 100">
+<defs>
+<lineargradient id="chartGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#ff9066" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#ff9066" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0 80 Q 20 75, 30 60 T 50 40 T 70 50 T 90 20 L 100 15 L 100 100 L 0 100 Z" fill="url(#chartGradient)"></path>
+<path d="M0 80 Q 20 75, 30 60 T 50 40 T 70 50 T 90 20 L 100 15" fill="none" stroke="#ff9066" stroke-linecap="round" stroke-width="2"></path>
+<!-- Points -->
+<circle cx="30" cy="60" fill="#ff9066" r="1.5"></circle>
+<circle cx="50" cy="40" fill="#ff9066" r="1.5"></circle>
+<circle class="animate-pulse" cx="90" cy="20" fill="#ff9066" r="2.5"></circle>
+</svg>
+<div class="absolute bottom-4 left-4 flex gap-8">
+<span class="font-label text-[8px] text-white/20 uppercase font-bold tracking-widest">Oct 01</span>
+<span class="font-label text-[8px] text-white/20 uppercase font-bold tracking-widest">Oct 15</span>
+<span class="font-label text-[8px] text-white/20 uppercase font-bold tracking-widest">Now</span>
+</div>
+</div>
+</section>
+<!-- History List -->
+<section class="flex flex-col gap-6">
+<h2 class="font-headline text-lg font-black uppercase tracking-tight border-l-4 border-primary pl-4">Session Log</h2>
+<div class="flex flex-col gap-3">
+<!-- PR Highlighted Session -->
+<div class="relative group">
+<div class="absolute inset-0 bg-primary/10 blur-xl rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="relative flex flex-col gap-4 p-5 bg-surface-container-highest rounded-xl border-l-4 border-primary active:scale-[0.98] transition-transform">
+<div class="flex justify-between items-start">
+<div class="flex flex-col">
+<span class="font-headline text-xl font-black tracking-tight uppercase">Nov 02</span>
+<span class="font-label text-xs text-on-surface-variant font-medium">Push Day A • 08:45 AM</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="bg-primary text-on-primary font-headline text-[10px] font-black px-2 py-0.5 rounded italic">NEW PR</span>
+<span class="font-headline text-2xl font-black text-primary">105kg</span>
+</div>
+</div>
+<div class="flex gap-4 border-t border-white/5 pt-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="layers">layers</span>
+<span class="font-label text-xs font-bold text-on-surface-variant uppercase tracking-tighter">3 Sets</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="timer">timer</span>
+<span class="font-label text-xs font-bold text-on-surface-variant uppercase tracking-tighter">45m</span>
+</div>
+<div class="ml-auto flex items-center gap-1 text-primary">
+<span class="font-label text-[10px] font-black uppercase">Details</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Session Item -->
+<div class="flex flex-col gap-4 p-5 bg-surface-container-high rounded-xl border border-white/5 active:scale-[0.98] transition-transform">
+<div class="flex justify-between items-start">
+<div class="flex flex-col">
+<span class="font-headline text-xl font-black tracking-tight uppercase">Oct 28</span>
+<span class="font-label text-xs text-on-surface-variant font-medium">Upper Body • 06:15 PM</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-headline text-2xl font-black text-on-surface/80">100kg</span>
+</div>
+</div>
+<div class="flex gap-4 border-t border-white/5 pt-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-white/20 text-sm" data-icon="layers">layers</span>
+<span class="font-label text-xs font-bold text-white/40 uppercase tracking-tighter">4 Sets</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-white/20 text-sm" data-icon="timer">timer</span>
+<span class="font-label text-xs font-bold text-white/40 uppercase tracking-tighter">52m</span>
+</div>
+</div>
+</div>
+<!-- Session Item -->
+<div class="flex flex-col gap-4 p-5 bg-surface-container-high rounded-xl border border-white/5 active:scale-[0.98] transition-transform opacity-80">
+<div class="flex justify-between items-start">
+<div class="flex flex-col">
+<span class="font-headline text-xl font-black tracking-tight uppercase">Oct 20</span>
+<span class="font-label text-xs text-on-surface-variant font-medium">Strength Focus • 07:00 AM</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-headline text-2xl font-black text-on-surface/80">80kg</span>
+</div>
+</div>
+<div class="flex gap-4 border-t border-white/5 pt-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-white/20 text-sm" data-icon="layers">layers</span>
+<span class="font-label text-xs font-bold text-white/40 uppercase tracking-tighter">3 Sets</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-white/20 text-sm" data-icon="timer">timer</span>
+<span class="font-label text-xs font-bold text-white/40 uppercase tracking-tighter">38m</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Visual CTA / Motivation Section -->
+<div class="relative w-full h-32 rounded-xl overflow-hidden mt-4">
+<img alt="Progress Background" class="w-full h-full object-cover brightness-[0.3] grayscale" data-alt="dramatic low-key photography of a weightlifting platform in a dimly lit industrial gym with atmospheric orange glow" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAi-VN8Mci98-v5rEYqUVkHL7VaZzFNwV9_v18ZmsM5jE_im_OkjY7cpSiVtxxRl0tw02iOwK94-uF80Wn-HJv0MXMrMANfGpEzvHOk3jDUabL4FoB6wVt3WEfK1IG6KOz-mIrB5aA2nvZgHzzntiaBv1Byk5m9040wlFuK375zIZh0EpbnfWCgwaxmVhIvRWVgFY4Mwj2DfVJqpm461BKl7XWEjdnEBuPyY_SMMs3ZWLCdRQR4uxo1Vnyw7eTPOgvosHHosdXDVAE"/>
+<div class="absolute inset-0 bg-gradient-to-r from-background via-transparent to-transparent flex items-center px-6">
+<div class="flex flex-col">
+<span class="font-headline text-lg font-black italic tracking-tighter uppercase leading-none">Stay Focused.</span>
+<span class="font-label text-[10px] font-bold text-primary uppercase tracking-widest">Next session tomorrow</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="bg-[#0e0e0e]/70 backdrop-blur-xl fixed bottom-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 border-t border-white/5 shadow-[0_-10px_30px_rgba(255,144,102,0.05)] flex justify-around items-center h-20 pb-safe px-4">
+<div class="flex flex-col items-center justify-center text-white/40 hover:text-[#ff9066]/80 active:scale-90 transition-transform haptic-feedback">
+<span class="material-symbols-outlined text-2xl" data-icon="calendar_today">calendar_today</span>
+<span class="font-['Lexend'] text-[10px] font-bold uppercase tracking-widest mt-1">Today</span>
+</div>
+<div class="flex flex-col items-center justify-center text-white/40 hover:text-[#ff9066]/80 active:scale-90 transition-transform haptic-feedback">
+<span class="material-symbols-outlined text-2xl" data-icon="fitness_center">fitness_center</span>
+<span class="font-['Lexend'] text-[10px] font-bold uppercase tracking-widest mt-1">Log</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#ff9066] scale-110 transition-all active:scale-90 transition-transform haptic-feedback">
+<span class="material-symbols-outlined text-2xl" data-icon="query_stats" style="font-variation-settings: 'FILL' 1;">query_stats</span>
+<span class="font-['Lexend'] text-[10px] font-bold uppercase tracking-widest mt-1">Progress</span>
+</div>
+<div class="flex flex-col items-center justify-center text-white/40 hover:text-[#ff9066]/80 active:scale-90 transition-transform haptic-feedback">
+<span class="material-symbols-outlined text-2xl" data-icon="add_box">add_box</span>
+<span class="font-['Lexend'] text-[10px] font-bold uppercase tracking-widest mt-1">Upload</span>
+</div>
+</nav>
+</body></html>

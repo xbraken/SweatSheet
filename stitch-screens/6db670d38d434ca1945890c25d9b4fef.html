@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+
+<html class="dark"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700;800;900&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "outline": "#767575",
+              "surface-container-low": "#131313",
+              "on-error-container": "#ffa8a3",
+              "error-container": "#9f0519",
+              "surface": "#0e0e0e",
+              "inverse-on-surface": "#565555",
+              "secondary-dim": "#ee8138",
+              "surface-tint": "#ff9066",
+              "on-secondary-fixed": "#592500",
+              "on-tertiary-container": "#4b2f00",
+              "on-primary-fixed-variant": "#541800",
+              "on-secondary-container": "#fff6f2",
+              "on-secondary-fixed-variant": "#853b00",
+              "secondary": "#ff8d44",
+              "inverse-primary": "#a93900",
+              "primary-fixed-dim": "#f76526",
+              "error": "#ff716c",
+              "secondary-container": "#9a4600",
+              "on-background": "#ffffff",
+              "on-primary-fixed": "#000000",
+              "tertiary-fixed-dim": "#e59904",
+              "primary-fixed": "#ff7943",
+              "on-surface-variant": "#adaaaa",
+              "surface-container": "#1a1919",
+              "tertiary-dim": "#e59904",
+              "on-secondary": "#4c1f00",
+              "on-tertiary": "#583800",
+              "surface-container-highest": "#262626",
+              "surface-container-high": "#201f1f",
+              "surface-variant": "#262626",
+              "primary-dim": "#ff743b",
+              "inverse-surface": "#fcf9f8",
+              "on-tertiary-fixed": "#2c1a00",
+              "tertiary-fixed": "#f5a61c",
+              "error-dim": "#d7383b",
+              "surface-dim": "#0e0e0e",
+              "surface-bright": "#2c2c2c",
+              "tertiary": "#ffb546",
+              "tertiary-container": "#f5a61c",
+              "on-tertiary-fixed-variant": "#573700",
+              "secondary-fixed": "#ffc5a6",
+              "surface-container-lowest": "#000000",
+              "primary-container": "#ff7943",
+              "secondary-fixed-dim": "#ffb286",
+              "on-primary-container": "#441200",
+              "background": "#0e0e0e",
+              "on-surface": "#ffffff",
+              "outline-variant": "#484847",
+              "primary": "#ff9066",
+              "on-error": "#490006",
+              "on-primary": "#571a00"
+            },
+            fontFamily: {
+              "headline": ["Lexend"],
+              "body": ["Manrope"],
+              "label": ["Manrope"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .bg-obsidian-gradient {
+            background: linear-gradient(180deg, rgba(14, 14, 14, 0) 0%, rgba(14, 14, 14, 1) 100%);
+        }
+        .text-glow {
+            text-shadow: 0 0 20px rgba(255, 144, 102, 0.3);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body antialiased selection:bg-primary selection:text-on-primary">
+<!-- Top Navigation Shell -->
+<header class="fixed top-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 bg-[#0e0e0e]/70 backdrop-blur-xl flex justify-between items-center px-6 py-4 w-full">
+<div class="flex items-center gap-2">
+<span class="text-2xl font-black text-[#ff9066] italic font-headline uppercase tracking-tighter">SweatSheet</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-white/60 hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+<button class="text-white/60 hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full max-w-[390px] mx-auto pt-24 pb-32 px-6 min-h-screen">
+<!-- Hero Greeting -->
+<section class="mb-10">
+<p class="font-label text-primary font-bold uppercase tracking-[0.2em] text-[10px] mb-1">Monday, Oct 26</p>
+<h1 class="font-headline text-4xl font-black leading-none tracking-tight text-white uppercase">Keep Moving,<br/>Alex.</h1>
+</section>
+<!-- Primary CTA -->
+<section class="mb-12">
+<button class="w-full bg-primary text-on-primary-fixed py-5 rounded-full flex items-center justify-between px-8 group active:scale-[0.98] transition-all shadow-[0_10px_30px_rgba(255,144,102,0.15)]">
+<span class="font-headline font-black text-xl uppercase italic tracking-tight">Start Workout</span>
+<span class="material-symbols-outlined text-3xl group-hover:translate-x-1 transition-transform" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+</section>
+<!-- Last Session Summary (Asymmetric Layout) -->
+<section class="mb-12">
+<div class="flex items-end justify-between mb-4">
+<h2 class="font-headline text-lg font-bold uppercase tracking-tight">Last Session</h2>
+<span class="text-on-surface-variant text-xs font-bold uppercase tracking-widest">Oct 24</span>
+</div>
+<div class="relative bg-surface-container-highest rounded-xl p-6 overflow-hidden border-l-4 border-primary">
+<div class="relative z-10">
+<h3 class="font-headline text-2xl font-extrabold text-white mb-6 italic uppercase">Leg Day</h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Duration</span>
+<span class="font-headline text-xl font-bold">45<span class="text-xs ml-1 text-primary">m</span></span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Total Volume</span>
+<span class="font-headline text-xl font-bold">12,000<span class="text-xs ml-1 text-primary">kg</span></span>
+</div>
+</div>
+</div>
+<!-- Abstract Decorative Element -->
+<div class="absolute -right-4 -bottom-4 opacity-5 pointer-events-none">
+<span class="material-symbols-outlined text-[120px]" data-icon="fitness_center">fitness_center</span>
+</div>
+</div>
+</section>
+<!-- Weekly Volume Chart (Editorial Style) -->
+<section class="mb-12">
+<h2 class="font-headline text-lg font-bold uppercase tracking-tight mb-6">Muscle Volume</h2>
+<div class="bg-surface-container-low p-6 rounded-xl space-y-5">
+<!-- Bar Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+<span>Chest</span>
+<span class="text-white">85%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[85%] rounded-full"></div>
+</div>
+</div>
+<!-- Bar Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+<span>Back</span>
+<span class="text-white">60%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[60%] rounded-full"></div>
+</div>
+</div>
+<!-- Bar Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+<span>Legs</span>
+<span class="text-white">95%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[95%] rounded-full"></div>
+</div>
+</div>
+<!-- Bar Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+<span>Shoulders</span>
+<span class="text-white">40%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[40%] rounded-full"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Personal Records (Horizontal Scroll) -->
+<section class="mb-8">
+<div class="flex items-center justify-between mb-4">
+<h2 class="font-headline text-lg font-bold uppercase tracking-tight">Recent PRs</h2>
+<button class="text-primary text-[10px] font-bold uppercase tracking-widest">View All</button>
+</div>
+<div class="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
+<!-- PR Card 1 -->
+<div class="min-w-[160px] bg-gradient-to-br from-primary/20 to-surface-container-highest p-5 rounded-xl border border-primary/10 flex flex-col justify-between aspect-square">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-primary" data-icon="workspace_premium" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<span class="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest">Oct 20</span>
+</div>
+<div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Bench Press</p>
+<p class="font-headline text-3xl font-black text-white italic leading-none">100<span class="text-xs text-primary ml-1">kg</span></p>
+</div>
+</div>
+<!-- PR Card 2 -->
+<div class="min-w-[160px] bg-surface-container-highest p-5 rounded-xl flex flex-col justify-between aspect-square">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-tertiary" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest">Oct 18</span>
+</div>
+<div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Deadlift</p>
+<p class="font-headline text-3xl font-black text-white italic leading-none">150<span class="text-xs text-primary ml-1">kg</span></p>
+</div>
+</div>
+<!-- PR Card 3 -->
+<div class="min-w-[160px] bg-surface-container-highest p-5 rounded-xl flex flex-col justify-between aspect-square">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-primary-fixed" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest">Oct 15</span>
+</div>
+<div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Squat</p>
+<p class="font-headline text-3xl font-black text-white italic leading-none">120<span class="text-xs text-primary ml-1">kg</span></p>
+</div>
+</div>
+</div>
+</section>
+<!-- Stepper Logic Component Example (Task Requirement) -->
+<section class="mb-12">
+<h2 class="font-headline text-lg font-bold uppercase tracking-tight mb-6">Quick Adjust Weight</h2>
+<div class="bg-surface-container-highest rounded-xl p-8 flex items-center justify-between">
+<button class="w-16 h-16 rounded-full bg-surface-container-high border border-white/5 flex items-center justify-center active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-3xl" data-icon="remove">remove</span>
+</button>
+<div class="text-center">
+<span class="font-headline text-5xl font-black text-white italic">80</span>
+<span class="block font-label text-[10px] font-bold uppercase tracking-widest text-primary mt-1">Kilograms</span>
+</div>
+<button class="w-16 h-16 rounded-full bg-primary text-on-primary flex items-center justify-center active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-3xl" data-icon="add">add</span>
+</button>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 bg-[#0e0e0e]/70 backdrop-blur-xl border-t border-white/5 flex justify-around items-center h-20 pb-safe px-4 shadow-[0_-10px_30px_rgba(255,144,102,0.05)]">
+<!-- Today - ACTIVE -->
+<a class="flex flex-col items-center justify-center text-[#ff9066] scale-110 transition-all" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="calendar_today" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+<span class="font-headline text-[10px] font-bold uppercase tracking-widest">Today</span>
+</a>
+<!-- Log -->
+<a class="flex flex-col items-center justify-center text-white/40 hover:text-[#ff9066]/80 transition-transform active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="fitness_center">fitness_center</span>
+<span class="font-headline text-[10px] font-bold uppercase tracking-widest">Log</span>
+</a>
+<!-- Progress -->
+<a class="flex flex-col items-center justify-center text-white/40 hover:text-[#ff9066]/80 transition-transform active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="query_stats">query_stats</span>
+<span class="font-headline text-[10px] font-bold uppercase tracking-widest">Progress</span>
+</a>
+<!-- Upload -->
+<a class="flex flex-col items-center justify-center text-white/40 hover:text-[#ff9066]/80 transition-transform active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="add_box">add_box</span>
+<span class="font-headline text-[10px] font-bold uppercase tracking-widest">Upload</span>
+</a>
+</nav>
+</body></html>

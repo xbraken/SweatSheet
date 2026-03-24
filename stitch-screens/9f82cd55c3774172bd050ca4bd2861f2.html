@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SweatSheet - Active Session</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700;800;900&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "outline": "#767575",
+              "surface-container-low": "#131313",
+              "on-error-container": "#ffa8a3",
+              "error-container": "#9f0519",
+              "surface": "#0e0e0e",
+              "inverse-on-surface": "#565555",
+              "secondary-dim": "#ee8138",
+              "surface-tint": "#ff9066",
+              "on-secondary-fixed": "#592500",
+              "on-tertiary-container": "#4b2f00",
+              "on-primary-fixed-variant": "#541800",
+              "on-secondary-container": "#fff6f2",
+              "on-secondary-fixed-variant": "#853b00",
+              "secondary": "#ff8d44",
+              "inverse-primary": "#a93900",
+              "primary-fixed-dim": "#f76526",
+              "error": "#ff716c",
+              "secondary-container": "#9a4600",
+              "on-background": "#ffffff",
+              "on-primary-fixed": "#000000",
+              "tertiary-fixed-dim": "#e59904",
+              "primary-fixed": "#ff7943",
+              "on-surface-variant": "#adaaaa",
+              "surface-container": "#1a1919",
+              "tertiary-dim": "#e59904",
+              "on-secondary": "#4c1f00",
+              "on-tertiary": "#583800",
+              "surface-container-highest": "#262626",
+              "surface-container-high": "#201f1f",
+              "surface-variant": "#262626",
+              "primary-dim": "#ff743b",
+              "inverse-surface": "#fcf9f8",
+              "on-tertiary-fixed": "#2c1a00",
+              "tertiary-fixed": "#f5a61c",
+              "error-dim": "#d7383b",
+              "surface-dim": "#0e0e0e",
+              "surface-bright": "#2c2c2c",
+              "tertiary": "#ffb546",
+              "tertiary-container": "#f5a61c",
+              "on-tertiary-fixed-variant": "#573700",
+              "secondary-fixed": "#ffc5a6",
+              "surface-container-lowest": "#000000",
+              "primary-container": "#ff7943",
+              "secondary-fixed-dim": "#ffb286",
+              "on-primary-container": "#441200",
+              "background": "#0e0e0e",
+              "on-surface": "#ffffff",
+              "outline-variant": "#484847",
+              "primary": "#ff9066",
+              "on-error": "#490006",
+              "on-primary": "#571a00"
+            },
+            fontFamily: {
+              "headline": ["Lexend"],
+              "body": ["Manrope"],
+              "label": ["Manrope"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .bg-glass {
+            background: rgba(14, 14, 14, 0.7);
+            backdrop-filter: blur(20px);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<div class="max-w-[390px] mx-auto min-h-screen relative flex flex-col pb-40">
+<!-- TopAppBar (From JSON) -->
+<header class="fixed top-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 bg-[#0e0e0e]/70 backdrop-blur-xl flex justify-between items-center px-6 py-4 w-full">
+<h1 class="text-2xl font-black text-[#ff9066] italic font-['Lexend'] uppercase tracking-tighter">SweatSheet</h1>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-white/60" data-icon="account_circle">account_circle</span>
+</div>
+</header>
+<!-- Timer Header (Contextual) -->
+<div class="mt-16 px-6 pt-6 pb-4">
+<div class="flex flex-col items-start">
+<span class="font-headline text-[10px] uppercase tracking-[0.2em] text-primary font-bold">Session Time</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="timer">timer</span>
+<span class="font-headline text-5xl font-black tracking-tighter text-on-surface">24:15</span>
+</div>
+</div>
+</div>
+<!-- Main Content Area -->
+<main class="flex-grow px-4 space-y-6">
+<!-- Active Exercise Card -->
+<section class="bg-surface-container-high rounded-xl p-5 space-y-6 border border-white/5 shadow-2xl">
+<!-- Header -->
+<div class="flex justify-between items-start">
+<div class="space-y-1">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Current Exercise</span>
+<input class="bg-transparent border-none p-0 font-headline text-2xl font-black text-on-surface focus:ring-0 w-full" type="text" value="Bench Press"/>
+</div>
+<button class="text-on-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+<!-- Set Rows -->
+<div class="space-y-3">
+<!-- Set 1 (Completed State) -->
+<div class="flex items-center justify-between p-4 bg-primary/10 rounded-lg border border-primary/20">
+<div class="flex items-center gap-4">
+<span class="font-headline font-black text-primary text-lg">1</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold uppercase text-primary/80">Completed</span>
+<span class="font-headline font-bold text-on-surface">10 reps · 60 kg</span>
+</div>
+</div>
+<div class="h-10 w-10 bg-primary rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-fixed font-bold" data-icon="check" style="font-variation-settings: 'wght' 700;">check</span>
+</div>
+</div>
+<!-- Set 2 (Active State / Steppers) -->
+<div class="bg-surface-container-highest rounded-lg p-5 space-y-5 border border-white/5">
+<div class="flex items-center gap-3 mb-2">
+<span class="font-headline font-black text-on-surface-variant text-lg">2</span>
+<span class="text-[10px] font-black uppercase tracking-widest text-primary">In Progress</span>
+</div>
+<!-- Steppers Grid -->
+<div class="grid grid-cols-2 gap-4">
+<!-- Weight Stepper -->
+<div class="space-y-2">
+<label class="text-[10px] font-black uppercase text-on-surface-variant tracking-widest block px-1">Weight (kg)</label>
+<div class="flex items-center bg-surface-container rounded-full p-1 border border-white/5">
+<button class="h-12 w-12 flex items-center justify-center rounded-full bg-surface-container-highest active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-on-surface" data-icon="remove">remove</span>
+</button>
+<input class="w-full bg-transparent border-none text-center font-headline text-xl font-bold focus:ring-0" type="number" value="62.5"/>
+<button class="h-12 w-12 flex items-center justify-center rounded-full bg-surface-container-highest active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-on-surface" data-icon="add">add</span>
+</button>
+</div>
+</div>
+<!-- Reps Stepper -->
+<div class="space-y-2">
+<label class="text-[10px] font-black uppercase text-on-surface-variant tracking-widest block px-1">Reps</label>
+<div class="flex items-center bg-surface-container rounded-full p-1 border border-white/5">
+<button class="h-12 w-12 flex items-center justify-center rounded-full bg-surface-container-highest active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-on-surface" data-icon="remove">remove</span>
+</button>
+<input class="w-full bg-transparent border-none text-center font-headline text-xl font-bold focus:ring-0" type="number" value="8"/>
+<button class="h-12 w-12 flex items-center justify-center rounded-full bg-surface-container-highest active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-on-surface" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Mark Complete -->
+<button class="w-full py-4 bg-surface-bright rounded-full font-headline font-black uppercase tracking-tighter text-on-surface flex items-center justify-center gap-2 active:scale-95 transition-transform border border-white/10 shadow-lg">
+<span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+                            Complete Set
+                        </button>
+</div>
+</div>
+<!-- Add Buttons (Secondary) -->
+<div class="pt-4 grid grid-cols-1 gap-3">
+<button class="flex items-center justify-center gap-2 py-4 bg-white/5 rounded-full text-on-surface font-headline font-bold uppercase text-xs tracking-widest hover:bg-white/10 transition-colors border border-white/5">
+<span class="material-symbols-outlined text-lg" data-icon="playlist_add">playlist_add</span>
+                        Add Set
+                    </button>
+<button class="flex items-center justify-center gap-2 py-4 bg-white/5 rounded-full text-on-surface font-headline font-bold uppercase text-xs tracking-widest hover:bg-white/10 transition-colors border border-white/5">
+<span class="material-symbols-outlined text-lg" data-icon="fitness_center">fitness_center</span>
+                        Add Exercise
+                    </button>
+</div>
+</section>
+<!-- Workout Visual (Minimalist Background Element) -->
+<div class="relative h-40 rounded-xl overflow-hidden group">
+<img alt="gym atmosphere" class="absolute inset-0 w-full h-full object-cover opacity-30 grayscale group-hover:scale-105 transition-transform duration-700" data-alt="atmospheric dark gym interior with industrial racks and moody dramatic lighting on weights and equipment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYx6ukQ99r3y4Kqyc-Sv6tcP2orpZwFiPyKThSOQd6tFcOsR1GfYBj4qwgqHc_0VPwMwADrscTbyexzWx-w0K5aMUhHMma8CyU5LvpdGB8_TkGGGgOz5zWrR2fSXg9ra9uz-iEbkueaBcQMbgyszB7N-DUKm0-LiPj2ECKmbhCTeq8Pl-aRZbfSrO2o7rqZga_sNd4p8-cy_rM6SkuZ_vjRxzTpfMYa7_kuwP9N2qXnAEFunleo-DYEdatBVjNIn08in7z43f8Vy0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<span class="text-[10px] font-black uppercase tracking-[0.3em] text-primary/60">Workout Intensity</span>
+<div class="flex items-center gap-1 mt-1">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<div class="w-1.5 h-8 bg-primary rounded-full"></div>
+<div class="w-1.5 h-10 bg-primary rounded-full"></div>
+<div class="w-1.5 h-6 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-4 bg-white/20 rounded-full"></div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer Actions (Sticky) -->
+<div class="fixed bottom-0 w-full max-w-[390px] left-1/2 -translate-x-1/2 z-50 px-4 pb-8 pt-4 bg-gradient-to-t from-surface via-surface/95 to-transparent">
+<button class="w-full bg-primary hover:bg-primary-fixed transition-colors py-5 rounded-full flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(255,144,102,0.3)] active:scale-95 transition-transform haptic-feedback">
+<span class="font-headline font-black text-on-primary-fixed uppercase tracking-tighter text-xl">Finish Workout</span>
+<span class="material-symbols-outlined text-on-primary-fixed font-bold" data-icon="sports_score">sports_score</span>
+</button>
+</div>
+<!-- BottomNavBar (From JSON) -->
+<!-- Suppressed because this is a focused transactional task (Active Session) per the "Semantic Shell" mandate -->
+</div>
+</body></html>
