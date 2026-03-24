@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const client = new OpenAI({ apiKey: process.env.OPENAI_KEY })
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData()
@@ -10,18 +10,15 @@ export async function POST(req: NextRequest) {
 
   const bytes = await file.arrayBuffer()
   const base64 = Buffer.from(bytes).toString('base64')
-  const mediaType = file.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
+  const dataUrl = `data:${file.type};base64,${base64}`
 
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 512,
     messages: [{
       role: 'user',
       content: [
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: mediaType, data: base64 },
-        },
+        { type: 'image_url', image_url: { url: dataUrl } },
         {
           type: 'text',
           text: `Extract workout data from this Apple Fitness or Strava screenshot.
@@ -41,7 +38,7 @@ Return only the JSON, no other text.`,
     }],
   })
 
-  const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  const text = response.choices[0].message.content ?? ''
 
   try {
     const data = JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim())

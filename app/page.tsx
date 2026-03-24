@@ -2,103 +2,121 @@ import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
 
 export default function TodayPage() {
-  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' }).toUpperCase()
+  const now = new Date()
+  const dayName = now.toLocaleDateString('en-GB', { weekday: 'long' })
+  const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const hour = now.getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+
+  const week = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+  const todayIdx = (now.getDay() + 6) % 7 // Mon=0
+  const completedDays = [0] // Monday done
 
   return (
-    <main className="pb-24 px-4 pt-6">
+    <main className="max-w-[390px] mx-auto min-h-screen pb-32 px-6 pt-12">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <span className="font-headline font-black text-primary text-xl tracking-tight">SWEATSHEET</span>
-        <div className="flex gap-3">
-          <button className="material-symbols-outlined text-[#adaaaa]">search</button>
-          <button className="material-symbols-outlined text-[#adaaaa]">account_circle</button>
-        </div>
-      </div>
+      <header className="mb-10">
+        <p className="font-label text-on-surface-variant text-sm tracking-wide mb-1">{dayName}, {dateStr}</p>
+        <h1 className="font-headline text-3xl font-black tracking-tight text-on-surface">{greeting}, Edmond.</h1>
+      </header>
 
-      {/* Greeting */}
-      <p className="text-xs text-[#adaaaa] mb-1">{today}</p>
-      <h1 className="font-headline font-black text-4xl leading-tight mb-6">KEEP MOVING,<br />ALEX.</h1>
-
-      {/* Start Workout CTA */}
-      <Link
-        href="/log"
-        className="flex items-center justify-between w-full bg-primary text-black font-headline font-bold text-lg px-6 py-4 rounded-xl mb-6"
-      >
-        START WORKOUT
-        <span className="material-symbols-outlined">arrow_forward</span>
-      </Link>
-
-      {/* Last Session */}
-      <div className="bg-[#1a1919] rounded-xl p-4 mb-6">
-        <div className="flex justify-between items-center mb-3">
-          <span className="text-xs font-bold text-[#adaaaa] tracking-widest">LAST SESSION</span>
-          <span className="text-xs text-[#adaaaa]">OCT 24</span>
-        </div>
-        <p className="font-headline font-bold text-xl text-primary mb-3">LEG DAY</p>
-        <div className="flex gap-6">
-          <div>
-            <p className="text-2xl font-headline font-black">45<span className="text-sm font-body font-normal text-[#adaaaa]"> kg</span></p>
-            <p className="text-xs text-[#adaaaa]">OLM AFTER</p>
+      {/* Active Session Card */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
+            <h2 className="font-headline text-lg font-bold tracking-tight">Active session</h2>
           </div>
-          <div>
-            <p className="text-2xl font-headline font-black">12,000<span className="text-sm font-body font-normal text-[#adaaaa]"> kg</span></p>
-            <p className="text-xs text-[#adaaaa]">TOTAL VOLUME</p>
-          </div>
+          <span className="font-label text-xs font-bold text-primary-container uppercase tracking-widest">42:15</span>
         </div>
-      </div>
-
-      {/* Muscle Volume */}
-      <div className="mb-6">
-        <p className="text-xs font-bold text-[#adaaaa] tracking-widest mb-3">MUSCLE VOLUME</p>
-        {[
-          { label: 'CHEST', pct: 80 },
-          { label: 'BACK', pct: 60 },
-          { label: 'LEGS', pct: 86 },
-          { label: 'SHOULDERS', pct: 48 },
-        ].map(({ label, pct }) => (
-          <div key={label} className="flex items-center gap-3 mb-2">
-            <span className="text-xs text-[#adaaaa] w-20">{label}</span>
-            <div className="flex-1 h-1.5 bg-[#262626] rounded-full">
-              <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+        <div className="bg-surface-container rounded-xl overflow-hidden p-1 space-y-1">
+          {/* Lift block */}
+          <div className="bg-surface-container-high rounded-lg p-5">
+            <div className="flex justify-between items-start mb-4">
+              <span className="font-headline text-sm font-bold text-primary-container">Lift</span>
+              <span className="material-symbols-outlined text-on-surface-variant">fitness_center</span>
             </div>
-            <span className="text-xs text-[#adaaaa] w-8 text-right">{pct}%</span>
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="font-label text-xs text-on-surface-variant mb-1">Current exercise</p>
+                <p className="font-headline text-xl font-bold leading-tight">Barbell back squat</p>
+              </div>
+              <p className="font-headline text-3xl font-black text-on-surface">225<span className="text-sm font-bold text-on-surface-variant ml-1">lbs</span></p>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <div className="px-3 py-1 bg-surface-container-highest rounded-full text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Set 3 of 5</div>
+              <div className="px-3 py-1 bg-surface-container-highest rounded-full text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">RPE 8</div>
+            </div>
           </div>
-        ))}
-      </div>
+          {/* Run block */}
+          <div className="bg-surface-container-high rounded-lg p-5">
+            <div className="flex justify-between items-start mb-4">
+              <span className="font-headline text-sm font-bold text-tertiary">Run</span>
+              <span className="material-symbols-outlined text-on-surface-variant">directions_run</span>
+            </div>
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="font-label text-xs text-on-surface-variant mb-1">Distance covered</p>
+                <p className="font-headline text-3xl font-black text-on-surface">3.2<span className="text-sm font-bold text-on-surface-variant ml-1">km</span></p>
+              </div>
+              <div className="text-right">
+                <p className="font-label text-xs text-on-surface-variant mb-1">Pace</p>
+                <p className="font-headline text-xl font-bold">5:30</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Link href="/log" className="w-full mt-4 bg-surface-container-highest py-4 rounded-xl flex items-center justify-center gap-2 font-headline font-bold text-sm tracking-wide text-on-surface hover:bg-surface-bright transition-colors">
+          <span className="material-symbols-outlined text-lg">add_circle</span>
+          Add block
+        </Link>
+      </section>
+
+      {/* This week */}
+      <section className="mb-10">
+        <h3 className="font-headline text-sm font-bold text-on-surface-variant mb-6 uppercase tracking-widest">This week</h3>
+        <div className="flex justify-between items-center bg-surface-container-low p-4 rounded-xl">
+          {week.map((d, i) => {
+            const done = completedDays.includes(i)
+            const isToday = i === todayIdx
+            return (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <span className={`font-label text-[10px] font-bold ${isToday ? 'text-primary-container' : 'text-on-surface-variant'}`}>{d}</span>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center
+                  ${done ? 'bg-primary-container' : isToday ? 'bg-primary/20 border-2 border-primary-container' : 'border border-outline-variant'}`}>
+                  {done && <span className="material-symbols-outlined text-on-primary-container text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
 
       {/* Recent PRs */}
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-3">
-          <p className="text-xs font-bold text-[#adaaaa] tracking-widest">RECENT PRS</p>
-          <button className="text-xs text-primary">VIEW ALL</button>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+      <section>
+        <h3 className="font-headline text-sm font-bold text-on-surface-variant mb-4 uppercase tracking-widest">Recent PRs</h3>
+        <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
           {[
-            { exercise: 'BENCH PRESS', value: '100', unit: 'kg' },
-            { exercise: 'BICEP', value: '150', unit: 'kg' },
+            { label: 'Deadlift', value: '405', unit: 'lbs' },
+            { label: 'Bench Press', value: '275', unit: 'lbs' },
+            { label: '5k Run', value: '22:45', unit: '' },
           ].map(pr => (
-            <div key={pr.exercise} className="bg-[#1a1919] rounded-xl p-4">
-              <p className="text-[10px] text-[#adaaaa] mb-2">{pr.exercise}</p>
-              <p className="font-headline font-black text-2xl">{pr.value}<span className="text-sm font-normal font-body text-[#adaaaa]"> {pr.unit}</span></p>
+            <div key={pr.label} className="flex-shrink-0 bg-surface-container p-4 rounded-xl min-w-[140px]">
+              <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mb-1">{pr.label}</p>
+              <p className="font-headline text-xl font-black text-tertiary">{pr.value}{pr.unit && <span className="text-xs ml-1">{pr.unit}</span>}</p>
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Quick Adjust Weight */}
-      <div className="mb-6">
-        <p className="text-xs font-bold text-[#adaaaa] tracking-widest mb-3">QUICK ADJUST WEIGHT</p>
-        <div className="bg-[#1a1919] rounded-xl p-4 flex items-center justify-between">
-          <button className="w-10 h-10 bg-[#262626] rounded-full flex items-center justify-center text-xl font-bold">−</button>
-          <div className="text-center">
-            <p className="font-headline font-black text-4xl">80</p>
-            <p className="text-xs text-[#adaaaa]">KILOGRAMS</p>
-          </div>
-          <button className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-black text-xl font-bold">+</button>
-        </div>
-      </div>
+      </section>
 
       <BottomNav />
+
+      {/* Floating finish button */}
+      <div className="fixed bottom-28 right-6 z-50">
+        <button className="bg-gradient-to-br from-primary to-primary-container p-4 rounded-full shadow-2xl shadow-primary-container/40 active:scale-95 transition-transform">
+          <span className="material-symbols-outlined text-on-primary-container text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>done_all</span>
+        </button>
+      </div>
     </main>
   )
 }

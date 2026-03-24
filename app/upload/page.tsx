@@ -3,11 +3,8 @@ import { useState, useRef } from 'react'
 import BottomNav from '@/components/BottomNav'
 
 type ParsedWorkout = {
-  date: string
-  type: string
-  distance?: string
-  pace?: string
-  duration: string
+  date: string; type: string; duration?: string
+  distance?: string; pace?: string; calories?: string; heartRate?: string
 }
 
 export default function UploadPage() {
@@ -18,12 +15,8 @@ export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file')
-      return
-    }
-    setLoading(true)
-    setError(null)
+    if (!file.type.startsWith('image/')) { setError('Please upload an image file'); return }
+    setLoading(true); setError(null)
     try {
       const formData = new FormData()
       formData.append('image', file)
@@ -39,97 +32,153 @@ export default function UploadPage() {
   }
 
   return (
-    <main className="pb-24 px-4 pt-6">
+    <main className="max-w-[390px] mx-auto min-h-screen pb-32">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <span className="font-headline font-black text-primary text-xl tracking-tight">SWEATSHEET</span>
-        <button className="material-symbols-outlined text-[#adaaaa]">account_circle</button>
-      </div>
+      <header className="flex justify-between items-center px-6 py-4">
+        <h1 className="text-2xl font-black text-primary tracking-tighter font-headline">SweatSheet</h1>
+        <span className="material-symbols-outlined text-primary text-2xl">account_circle</span>
+      </header>
 
-      <h1 className="font-headline font-black text-4xl mb-1">IMPORT</h1>
-      <h1 className="font-headline font-black text-4xl text-primary mb-4">MOMENTUM</h1>
-      <p className="text-sm text-[#adaaaa] mb-8">
-        Upload an Apple Fitness or Strava screenshot — we&apos;ll extract your workout automatically.
-      </p>
+      <div className="px-6 pt-4 space-y-10">
+        {/* Title */}
+        <section className="space-y-2">
+          <h2 className="font-headline text-3xl font-bold tracking-tight text-on-surface">Upload</h2>
+          <p className="font-body text-base font-medium text-on-surface-variant leading-relaxed">
+            Upload an Apple Fitness or Strava screenshot — we&apos;ll extract your workout automatically
+          </p>
+        </section>
 
-      {/* Upload area */}
-      <div
-        onDragOver={e => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
-        onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer transition-colors mb-8 ${dragging ? 'border-primary bg-primary/10' : 'border-[#484847]'}`}
-      >
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-        {loading ? (
-          <>
-            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-sm text-[#adaaaa]">Parsing workout...</p>
-          </>
-        ) : (
-          <>
-            <div className="w-12 h-12 bg-[#262626] rounded-xl flex items-center justify-center mb-4">
-              <span className="material-symbols-outlined text-primary text-2xl">add_photo_alternate</span>
+        {/* Drop zone */}
+        <section>
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-br from-primary/20 to-transparent rounded-xl blur opacity-30 group-hover:opacity-60 transition duration-500" />
+            <div
+              onDragOver={e => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+              onClick={() => inputRef.current?.click()}
+              className={`relative flex flex-col items-center justify-center w-full aspect-square bg-surface-container rounded-xl cursor-pointer transition-colors duration-300 overflow-hidden border ${dragging ? 'border-primary-container bg-surface-container-high' : 'border-outline-variant/10 hover:bg-surface-container-high'}`}
+            >
+              <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+              {loading ? (
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="w-10 h-10 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-on-surface-variant">Parsing workout...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center text-center p-8 space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-primary-container/10 flex items-center justify-center mb-2">
+                    <span className="material-symbols-outlined text-primary text-4xl">cloud_upload</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="font-headline text-xl font-bold text-on-surface">Drop screenshot</span>
+                    <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant/60">or tap to browse files</p>
+                  </div>
+                </div>
+              )}
+              <div className="absolute bottom-4 left-4 right-4 flex justify-between opacity-20">
+                <div className="h-px w-8 bg-primary" /><div className="h-px w-8 bg-primary" />
+              </div>
+              <div className="absolute top-4 left-4 right-4 flex justify-between opacity-20">
+                <div className="h-px w-8 bg-primary" /><div className="h-px w-8 bg-primary" />
+              </div>
             </div>
-            <p className="font-bold text-sm mb-1">TAP TO UPLOAD</p>
-            <p className="text-xs text-[#adaaaa]">MAXIMUM FILE SIZE: 10MB</p>
-          </>
-        )}
-      </div>
-
-      {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
-
-      {/* Recently parsed */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-bold text-[#adaaaa] tracking-widest">RECENTLY PARSED</p>
-        <button className="text-xs text-primary">HISTORY</button>
-      </div>
-
-      {parsed ? (
-        <div className="bg-[#1a1919] rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-headline font-bold text-lg">{parsed.date}</p>
-            <span className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-              <span className="material-symbols-outlined text-black text-sm">check</span>
-            </span>
           </div>
-          <p className="text-xs text-[#adaaaa] mb-3">⏱ {parsed.duration} DURATION</p>
-          <div className="grid grid-cols-2 gap-4">
-            {parsed.distance && (
-              <div>
-                <p className="text-xs text-[#adaaaa] mb-1">DISTANCE</p>
-                <p className="font-headline font-black text-2xl">{parsed.distance}</p>
+          {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
+        </section>
+
+        {/* Recently parsed */}
+        <section className="space-y-6">
+          <div className="flex justify-between items-end">
+            <h3 className="font-headline text-lg font-bold tracking-tight text-on-surface">Recently parsed</h3>
+            <span className="font-label text-[10px] uppercase tracking-widest text-tertiary">{parsed ? 'Success' : ''}</span>
+          </div>
+
+          <div className="bg-surface-container rounded-xl overflow-hidden p-1 space-y-1">
+            {parsed ? (
+              <div className="bg-surface-container-high rounded-lg p-5 space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">{parsed.type}</p>
+                    <h4 className="font-headline text-xl font-bold text-on-surface">{parsed.date}</h4>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant/40">more_vert</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {parsed.distance && <div className="space-y-1">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Distance</p>
+                    <p className="font-headline text-3xl font-black text-primary-container">{parsed.distance}</p>
+                  </div>}
+                  {parsed.pace && <div className="space-y-1 text-right">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Pace</p>
+                    <p className="font-headline text-3xl font-black text-on-surface">{parsed.pace}</p>
+                  </div>}
+                  {parsed.duration && <div className="space-y-1">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Duration</p>
+                    <p className="font-headline text-3xl font-black text-on-surface">{parsed.duration}</p>
+                  </div>}
+                  {parsed.calories && <div className="space-y-1 text-right">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Calories</p>
+                    <p className="font-headline text-3xl font-black text-on-surface">{parsed.calories}</p>
+                  </div>}
+                </div>
+                <button className="w-full py-4 bg-surface-container-highest rounded-lg flex justify-center items-center gap-2 hover:bg-outline-variant/20 transition-colors active:scale-[0.98]">
+                  <span className="font-label text-xs font-bold uppercase tracking-widest text-primary-container">View workout details</span>
+                  <span className="material-symbols-outlined text-sm text-primary-container">arrow_forward</span>
+                </button>
+              </div>
+            ) : (
+              <div className="bg-surface-container-high rounded-lg p-5 space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Morning run</p>
+                    <h4 className="font-headline text-xl font-bold text-on-surface">October 24, 2023</h4>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant/40">more_vert</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Distance</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className="font-headline text-3xl font-black text-primary-container">8.42</span>
+                      <span className="font-body text-xs text-on-surface-variant">km</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Pace</p>
+                    <div className="flex items-baseline justify-end gap-1">
+                      <span className="font-headline text-3xl font-black text-on-surface">5:12</span>
+                      <span className="font-body text-xs text-on-surface-variant">/km</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Duration</p>
+                    <span className="font-headline text-3xl font-black text-on-surface">43:21</span>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Elev gain</p>
+                    <div className="flex items-baseline justify-end gap-1">
+                      <span className="font-headline text-3xl font-black text-on-surface">112</span>
+                      <span className="font-body text-xs text-on-surface-variant">m</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
-            {parsed.pace && (
-              <div>
-                <p className="text-xs text-[#adaaaa] mb-1">AVG PACE</p>
-                <p className="font-headline font-black text-2xl">{parsed.pace}</p>
+
+            <div className="bg-surface-container-low rounded-xl p-5 flex justify-between items-center opacity-60">
+              <div className="flex flex-col">
+                <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Leg day</span>
+                <span className="font-headline text-sm font-bold">October 22, 2023</span>
               </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="bg-[#1a1919] rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-headline font-bold text-lg">OCT 15 RUN</p>
-            <span className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-              <span className="material-symbols-outlined text-black text-sm">check</span>
-            </span>
-          </div>
-          <p className="text-xs text-[#adaaaa] mb-3">⏱ 28:34 DURATION</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-[#adaaaa] mb-1">DISTANCE</p>
-              <p className="font-headline font-black text-2xl">5.2 <span className="text-sm font-normal font-body text-[#adaaaa]">KM</span></p>
-            </div>
-            <div>
-              <p className="text-xs text-[#adaaaa] mb-1">AVG PACE</p>
-              <p className="font-headline font-black text-2xl">5:30 <span className="text-sm font-normal font-body text-[#adaaaa]">M/K</span></p>
+              <div className="text-right">
+                <span className="font-headline text-lg font-bold">12,450 kg</span>
+                <p className="font-body text-[10px] text-on-surface-variant">Total volume</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        </section>
+      </div>
 
       <BottomNav />
     </main>
