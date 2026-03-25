@@ -35,41 +35,26 @@ function calcPace(distStr: string, timeStr: string): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// ── Rest Timer overlay ────────────────────────────────────────────────────────
-function RestTimer({ seconds, onDone }: { seconds: number; onDone: () => void }) {
-  const [remaining, setRemaining] = useState(seconds)
-  useEffect(() => {
-    if (remaining <= 0) { onDone(); return }
-    const t = setTimeout(() => setRemaining(r => r - 1), 1000)
-    return () => clearTimeout(t)
-  }, [remaining, onDone])
-  const pct = (remaining / seconds) * 100
-  const m = Math.floor(remaining / 60)
-  const s = remaining % 60
+// ── Inline Rest Timer Button ──────────────────────────────────────────────────
+function RestButton({ seconds, total, onSkip }: { seconds: number; total: number; onSkip: () => void }) {
+  const pct = (seconds / total) * 100
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
   return (
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] z-50 px-4 pt-safe pt-4">
-      <div className="bg-[#1a1a1a] border border-[#ff9066]/30 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl">
-        <div className="relative w-10 h-10 flex-shrink-0">
-          <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#2a2a2a" strokeWidth="3" />
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#ff9066" strokeWidth="3"
-              strokeDasharray={`${2 * Math.PI * 15}`}
-              strokeDashoffset={`${2 * Math.PI * 15 * (1 - pct / 100)}`}
-              strokeLinecap="round" className="transition-all duration-1000" />
-          </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black font-headline text-[#ff9066]">
-            {m}:{String(s).padStart(2, '0')}
-          </span>
-        </div>
-        <div className="flex-1">
-          <p className="text-xs font-bold text-[#e5e2e1]">Rest</p>
-          <p className="text-[10px] text-[#a48b83]">Next set incoming…</p>
-        </div>
-        <button onClick={onDone} className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-3 py-2 bg-[#2a2a2a] rounded-xl">
-          Skip
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={onSkip}
+      className="relative w-full py-3.5 rounded-xl font-headline font-bold text-sm overflow-hidden flex items-center justify-center gap-2 text-[#a48b83] border border-[#353534]"
+    >
+      {/* shrinking fill */}
+      <span
+        className="absolute inset-0 bg-[#ff9066]/15 origin-left transition-none"
+        style={{ transform: `scaleX(${pct / 100})`, transformOrigin: 'left' }}
+      />
+      <span className="material-symbols-outlined text-base text-[#ff9066]">timer</span>
+      <span className="relative">
+        Resting {m}:{String(s).padStart(2, '0')} — tap to skip
+      </span>
+    </button>
   )
 }
 
@@ -335,7 +320,8 @@ export default function LogPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [hints, setHints] = useState<ExerciseHint[]>([])
-  const [restTimer, setRestTimer] = useState<number | null>(null)
+  const [restingBlockId, setRestingBlockId] = useState<number | null>(null)
+  const [restRemaining, setRestRemaining] = useState(0)
   const [restDuration, setRestDuration] = useState(90)
   const [showAddSheet, setShowAddSheet] = useState(false)
   const [prs, setPrs] = useState<{ exercise: string; weight: number }[]>([])
@@ -354,6 +340,14 @@ export default function LogPage() {
     setRestDuration(v)
     localStorage.setItem('ss_rest_duration', String(v))
   }
+
+  // Countdown tick
+  useEffect(() => {
+    if (restingBlockId === null) return
+    if (restRemaining <= 0) { setRestingBlockId(null); return }
+    const t = setTimeout(() => setRestRemaining(r => r - 1), 1000)
+    return () => clearTimeout(t)
+  }, [restingBlockId, restRemaining])
 
   // Fetch exercise hints + starred
   useEffect(() => {
@@ -397,7 +391,10 @@ export default function LogPage() {
       if (b.type !== 'lift' || b.id !== blockId) return b
       const updated = b.sets.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
-      if (justDone && restDuration > 0) setRestTimer(Date.now())
+      if (justDone && restDuration > 0) {
+        setRestingBlockId(blockId)
+        setRestRemaining(restDuration)
+      }
       return { ...b, sets: updated }
     }))
   }
@@ -489,7 +486,7 @@ export default function LogPage() {
 
   return (
     <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
-      {restTimer !== null && <RestTimer seconds={restDuration} onDone={() => setRestTimer(null)} />}
+
       {showPrs && prs.length > 0 && <PrToast prs={prs} onDone={() => setShowPrs(false)} />}
       {showAddSheet && <AddBlockSheet onAdd={handleAddBlock} onClose={() => setShowAddSheet(false)} />}
       {pickerBlockId !== null && (
@@ -652,14 +649,22 @@ export default function LogPage() {
                         </div>
                       </div>
                     </div>
-                    {/* Full-width log set button */}
-                    <button
-                      onClick={() => toggleSet(block.id, set.id)}
-                      className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
-                    >
-                      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                      Log set
-                    </button>
+                    {/* Log set / rest timer */}
+                    {restingBlockId === block.id ? (
+                      <RestButton
+                        seconds={restRemaining}
+                        total={restDuration}
+                        onSkip={() => setRestingBlockId(null)}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => toggleSet(block.id, set.id)}
+                        className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                        Log set
+                      </button>
+                    )}
                   </div>
                 )
 
