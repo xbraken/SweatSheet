@@ -279,6 +279,153 @@ async function streamParseAppleHealth(
   return workouts.sort((a, b) => b.date.localeCompare(a.date))
 }
 
+// ── Shortcut JSON import ──────────────────────────────────────────────────────
+// Accepts JSON produced by an Apple Shortcut querying HealthKit directly.
+// This avoids re-downloading the full 1.6 GB Apple Health export.
+//
+// Expected JSON shape (all HR-sample fields are optional):
+// {
+//   "workouts": [
+//     { "type": "Running", "startDate": "2025-03-20T07:30:00+00:00",
+//       "endDate": "2025-03-20T08:15:00+00:00", "durationSec": 2700,
+//       "distanceKm": 8.5, "calories": 520,
+//       "avgHR": 152, "minHR": 130, "maxHR": 178, "isIndoor": false }
+//   ],
+//   "hrSamples": [
+//     { "date": "2025-03-20T07:30:15+00:00", "bpm": 135 }
+//   ]
+// }
+
+const SHORTCUT_ACTIVITY: Record<string, string> = {
+  running: 'Outdoor run',
+  'outdoor run': 'Outdoor run',
+  'indoor run': 'Indoor run',
+  cycling: 'Cycling',
+  'outdoor cycling': 'Cycling',
+  'indoor cycling': 'Cycling',
+  walking: 'Walking',
+  hkworkoutactivitytyperunning: 'Outdoor run',
+  hkworkoutactivitytypecycling: 'Cycling',
+  hkworkoutactivitytypewalking: 'Walking',
+}
+
+// Accept many possible field-name spellings so the Shortcut is flexible
+function scField(w: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const k of keys) if (w[k] !== undefined) return w[k]
+  return undefined
+}
+
+function parseShortcutJSON(raw: unknown): ParsedWorkout[] {
+  if (!raw || typeof raw !== 'object') throw new Error('Not an object')
+  const data = raw as Record<string, unknown>
+  const wArr = data.workouts
+  if (!Array.isArray(wArr)) throw new Error('Missing workouts array')
+
+  // Flatten HR samples with timestamps, sorted ascending
+  const hrArr = Array.isArray(data.hrSamples) ? data.hrSamples : []
+  const hrFlat = (hrArr as Record<string, unknown>[])
+    .map(s => {
+      const dateStr = String(scField(s, 'date', 'startDate', 'timestamp') ?? '')
+      const bpm = Number(scField(s, 'bpm', 'value', 'heartRate') ?? NaN)
+      if (!dateStr || isNaN(bpm) || bpm <= 0) return null
+      const ts = new Date(dateStr).getTime()
+      return isNaN(ts) ? null : { ts, bpm: Math.round(bpm) }
+    })
+    .filter(Boolean) as Array<{ ts: number; bpm: number }>
+  hrFlat.sort((a, b) => a.ts - b.ts)
+
+  const results: ParsedWorkout[] = []
+  for (const raw of wArr) {
+    const w = raw as Record<string, unknown>
+
+    const typeStr = String(scField(w, 'type', 'workoutType', 'activity') ?? '').toLowerCase().trim()
+    let activity = SHORTCUT_ACTIVITY[typeStr]
+    if (!activity) continue
+
+    const startStr = String(scField(w, 'startDate', 'start', 'startedAt') ?? '')
+    const endStr = String(scField(w, 'endDate', 'end', 'endedAt') ?? '')
+    const startTs = new Date(startStr).getTime()
+    const endTs = new Date(endStr).getTime()
+    if (isNaN(startTs) || isNaN(endTs) || endTs <= startTs) continue
+
+    if (w.isIndoor && activity === 'Outdoor run') activity = 'Indoor run'
+
+    const date = startStr.split('T')[0]
+
+    // Duration
+    const durSec = scField(w, 'durationSec', 'duration')
+    const durMin = scField(w, 'durationMin')
+    let totalSec: number
+    if (durSec !== undefined && !isNaN(Number(durSec))) totalSec = Math.round(Number(durSec))
+    else if (durMin !== undefined && !isNaN(Number(durMin))) totalSec = Math.round(Number(durMin) * 60)
+    else totalSec = Math.round((endTs - startTs) / 1000)
+
+    const hh = Math.floor(totalSec / 3600)
+    const mm = Math.floor((totalSec % 3600) / 60)
+    const ss = totalSec % 60
+    const duration = hh > 0
+      ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+      : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+
+    // Distance — prefer explicit unit fields, then distanceUnit, then guess from magnitude
+    let distKm = 0
+    const distKmField = scField(w, 'distanceKm')
+    const distMiField = scField(w, 'distanceMi')
+    const distMField = scField(w, 'distanceM')
+    const distField = scField(w, 'distance')
+    const distUnit = String(scField(w, 'distanceUnit', 'unit') ?? '').toLowerCase()
+    if (distKmField !== undefined) distKm = Number(distKmField)
+    else if (distMiField !== undefined) distKm = Number(distMiField) * 1.60934
+    else if (distMField !== undefined) distKm = Number(distMField) / 1000
+    else if (distField !== undefined) {
+      const raw = Number(distField)
+      if (distUnit === 'mi') distKm = raw * 1.60934
+      else if (distUnit === 'm') distKm = raw / 1000
+      else if (distUnit === 'km') distKm = raw
+      else distKm = raw > 500 ? raw / 1000 : raw // heuristic: >500 is likely metres
+    }
+    if (isNaN(distKm)) distKm = 0
+
+    // Pace
+    const paceSecPerKm = distKm > 0.1 ? totalSec / distKm : null
+    const pace = paceSecPerKm
+      ? `${Math.floor(paceSecPerKm / 60)}:${String(Math.round(paceSecPerKm % 60)).padStart(2, '0')}`
+      : null
+
+    // HR stats
+    const avgHR = Number(scField(w, 'avgHR', 'averageHeartRate', 'heartRate') ?? NaN)
+    const minHR = Number(scField(w, 'minHR', 'minimumHeartRate') ?? NaN)
+    const maxHR = Number(scField(w, 'maxHR', 'maximumHeartRate') ?? NaN)
+    const cals = Number(scField(w, 'calories', 'activeEnergyKcal', 'totalEnergyBurned') ?? NaN)
+
+    // Match flat HR samples to this workout window
+    const samples: Array<{ offsetSec: number; bpm: number }> = []
+    for (const s of hrFlat) {
+      if (s.ts < startTs) continue
+      if (s.ts > endTs) break
+      samples.push({ offsetSec: Math.round((s.ts - startTs) / 1000), bpm: s.bpm })
+    }
+
+    results.push({
+      date,
+      activity,
+      distance: distKm.toFixed(2),
+      duration,
+      pace,
+      calories: isNaN(cals) || cals <= 0 ? null : Math.round(cals),
+      heartRate: isNaN(avgHR) || avgHR <= 0 ? null : Math.round(avgHR),
+      hrMin: isNaN(minHR) || minHR <= 0 ? null : Math.round(minHR),
+      hrMax: isNaN(maxHR) || maxHR <= 0 ? null : Math.round(maxHR),
+      startedAt: startStr,
+      endedAt: endStr,
+      sourceName: 'Shortcuts',
+      hrSamples: samples,
+    })
+  }
+
+  return results.sort((a, b) => b.date.localeCompare(a.date))
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
@@ -300,8 +447,10 @@ export default function ImportPage() {
 
   const processFile = useCallback(async (file: File) => {
     setError(null)
-    if (!file.name.endsWith('.xml')) {
-      setError('Please upload an XML file. Unzip your export.zip first and find Export.xml inside.')
+    const isJson = file.name.endsWith('.json')
+    const isXml = file.name.endsWith('.xml')
+    if (!isJson && !isXml) {
+      setError('Please upload Export.xml (Apple Health) or a SweatSheet Shortcut JSON file.')
       return
     }
 
@@ -310,15 +459,26 @@ export default function ImportPage() {
 
     let parsed: ParsedWorkout[]
     try {
-      parsed = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
+      if (isJson) {
+        const text = await file.text()
+        const json = JSON.parse(text)
+        parsed = parseShortcutJSON(json)
+        setParseProgress(100)
+      } else {
+        parsed = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
+      }
     } catch {
-      setError('Failed to read the file. Make sure it is a valid Apple Health Export.xml.')
+      setError(isJson
+        ? 'Could not read the JSON file. Make sure it was exported from the SweatSheet Shortcut.'
+        : 'Failed to read the file. Make sure it is a valid Apple Health Export.xml.')
       setPhase('upload')
       return
     }
 
     if (parsed.length === 0) {
-      setError('No supported workouts found. Make sure this is your Apple Health Export.xml.')
+      setError(isJson
+        ? 'No supported workouts found in the JSON. Check your Shortcut exported Running, Cycling, or Walking.'
+        : 'No supported workouts found. Make sure this is your Apple Health Export.xml.')
       setPhase('upload')
       return
     }
@@ -435,18 +595,42 @@ export default function ImportPage() {
       {/* ── Phase: Upload ──────────────────────────────────────────── */}
       {phase === 'upload' && (
         <>
-          <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-4">
-            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-primary-container">How to export</p>
+          {/* Option A — Shortcut (recommended for ongoing syncs) */}
+          <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#4bdece]">Recommended · Quick Sync</span>
+              <span className="text-[9px] bg-[#4bdece]/10 text-[#4bdece] px-2 py-0.5 rounded-full font-bold font-label uppercase tracking-wide">~1 MB</span>
+            </div>
+            <p className="text-sm text-on-surface-variant leading-snug">Use the <span className="text-on-surface font-semibold">SweatSheet Shortcut</span> on your iPhone to export only recent workouts — no giant downloads needed for day-to-day syncing.</p>
+            <div className="mt-1 flex flex-col gap-2">
+              {[
+                { icon: 'download', text: 'Install the SweatSheet Shortcut on your iPhone (link in Settings)' },
+                { icon: 'play_circle', text: 'Run it — choose how many days back to export' },
+                { icon: 'upload', text: 'Share the .json file here and import instantly' },
+              ].map(({ icon, text }, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-[#4bdece]/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="material-symbols-outlined text-[#4bdece] text-sm">{icon}</span>
+                  </div>
+                  <p className="text-xs text-on-surface-variant leading-snug">{text}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Option B — Full XML (first-time or if Shortcut isn't set up) */}
+          <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-3">
+            <span className="text-[10px] font-bold font-label uppercase tracking-widest text-on-surface-variant/60">Full Export · First-time import</span>
             {[
               { icon: 'favorite', text: 'Open the Health app on your iPhone' },
               { icon: 'account_circle', text: 'Tap your profile picture → Export All Health Data' },
               { icon: 'folder_zip', text: 'Unzip the file, then find and upload Export.xml here' },
             ].map(({ icon, text }, i) => (
               <div key={i} className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="material-symbols-outlined text-primary-container text-base">{icon}</span>
+                <div className="w-6 h-6 rounded-full bg-primary-container/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="material-symbols-outlined text-primary-container text-sm">{icon}</span>
                 </div>
-                <p className="text-sm text-on-surface-variant leading-snug">{text}</p>
+                <p className="text-xs text-on-surface-variant leading-snug">{text}</p>
               </div>
             ))}
           </section>
@@ -461,9 +645,9 @@ export default function ImportPage() {
             }`}
           >
             <span className="material-symbols-outlined text-5xl text-on-surface/20">upload_file</span>
-            <p className="font-headline font-bold text-base text-on-surface">Upload Export.xml</p>
+            <p className="font-headline font-bold text-base text-on-surface">Upload Export.xml or .json</p>
             <p className="text-xs text-on-surface-variant">Drag and drop, or tap to browse</p>
-            <input ref={fileRef} type="file" accept=".xml" className="hidden" onChange={onFileChange} />
+            <input ref={fileRef} type="file" accept=".xml,.json" className="hidden" onChange={onFileChange} />
           </div>
 
           {error && (
