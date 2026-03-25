@@ -330,7 +330,7 @@ function RunDetailSheet({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-32 md:pb-8">
+        <div className="flex-1 overflow-y-auto px-5 pb-32 md:pb-8 md:max-w-3xl md:mx-auto md:w-full">
           {/* HR badges */}
           {(detail.heart_rate || detail.hr_min || detail.hr_max) && (
             <div className="flex gap-2 mt-4 flex-wrap">
@@ -596,9 +596,13 @@ function RunDetailSheet({
                         {compareDetail ? 'HR comparison (% completion)' : 'Heart rate over time'}
                       </p>
                       {chartHoveredIdx !== null && hVal !== undefined && (
-                        <span className="text-sm font-black font-headline text-[#ff9066]">
-                          {hTimeLabel && <span className="text-[#a48b83] font-normal mr-1">{hTimeLabel}</span>}{hVal} bpm
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {hTimeLabel && !compareDetail && <span className="text-[10px] text-[#a48b83]">{hTimeLabel}</span>}
+                          <span className="text-sm font-black font-headline text-[#ff9066]">{hVal} bpm</span>
+                          {hCompareVal !== null && compareValues.length > 0 && (
+                            <span className="text-sm font-black font-headline text-[#4bdece]">{hCompareVal} bpm</span>
+                          )}
+                        </div>
                       )}
                     </div>
 
