@@ -59,6 +59,11 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   const startDate = attr(xml, 'startDate').split(' ')[0]
   if (!startDate) return null
 
+  // Detect indoor runs via metadata
+  const isIndoor = type === 'HKWorkoutActivityTypeRunning' &&
+    /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
+  const activity = isIndoor ? 'Indoor run' : SUPPORTED[type]
+
   const durationMin = parseFloat(attr(xml, 'duration')) || 0
 
   // Distance: top-level attribute first, fall back to WorkoutStatistics
@@ -98,7 +103,7 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
 
   return {
     date: startDate,
-    activity: SUPPORTED[type],
+    activity,
     distance: distKm.toFixed(2),
     duration,
     pace,
