@@ -209,6 +209,18 @@ export default function ProgressPage() {
   const cardioTrend = useMemo(() => trendPercent(cardioValues, cardioInvert), [cardioValues, cardioInvert])
   const liftTrend = useMemo(() => trendPercent(liftPts), [liftPts])
 
+  // Default dot position = peak value in the visible range, not the last point
+  const liftPeakIdx = useMemo(() =>
+    liftPts.length === 0 ? 0 : liftPts.indexOf(Math.max(...liftPts)),
+    [liftPts]
+  )
+  const cardioPeakIdx = useMemo(() => {
+    if (cardioValues.length === 0) return 0
+    return cardioMetric === 'pace'
+      ? cardioValues.indexOf(Math.min(...cardioValues))  // lowest seconds = fastest
+      : cardioValues.indexOf(Math.max(...cardioValues))
+  }, [cardioValues, cardioMetric])
+
   const peakCardioValue = useMemo(() => {
     if (cardioValues.length === 0) return null
     if (cardioMetric === 'pace') {
@@ -474,7 +486,7 @@ export default function ProgressPage() {
 
           {/* Peak stat / hovered value */}
           {tab === 'lifts' && liftPts.length > 0 && (() => {
-            const idx = hoveredIdx ?? liftPts.length - 1
+            const idx = hoveredIdx ?? liftPeakIdx
             const pt = liftChartPts[idx]
             return (
               <div className="absolute top-6 right-6 flex flex-col items-end">
@@ -488,7 +500,7 @@ export default function ProgressPage() {
             )
           })()}
           {tab === 'cardio' && cardioChartPts.length > 0 && (() => {
-            const idx = hoveredIdx ?? cardioChartPts.length - 1
+            const idx = hoveredIdx ?? cardioPeakIdx
             const pt = cardioChartPts[idx]
             const display = cardioMetric === 'pace'
               ? `${Math.floor(pt.value / 60)}:${String(Math.round(pt.value % 60)).padStart(2, '0')}`
@@ -524,7 +536,7 @@ export default function ProgressPage() {
           {/* Lift SVG */}
           {tab === 'lifts' && (
             liftSvgPts ? (() => {
-              const hIdx = hoveredIdx ?? liftPts.length - 1
+              const hIdx = hoveredIdx ?? liftPeakIdx
               const hX = (hIdx / Math.max(liftPts.length - 1, 1)) * 300
               const hY = ptY(liftPts, liftPts[hIdx], false)
               return (
@@ -557,7 +569,7 @@ export default function ProgressPage() {
           {/* Cardio SVG */}
           {tab === 'cardio' && (
             cardioSvgPts ? (() => {
-              const hIdx = hoveredIdx ?? cardioChartPts.length - 1
+              const hIdx = hoveredIdx ?? cardioPeakIdx
               const hX = (hIdx / Math.max(cardioChartPts.length - 1, 1)) * 300
               const hY = ptY(cardioValues, cardioValues[hIdx], cardioInvert)
               return (
