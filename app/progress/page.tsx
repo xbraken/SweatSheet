@@ -235,6 +235,7 @@ function RunDetailSheet({
   const validPaceValues = paceValuesAll.filter(v => v > 0)
   const paceAvgSec = detail.pace ? (toSeconds(detail.pace) ?? null) : null
   const paceMinSec = validPaceValues.length > 0 ? Math.min(...validPaceValues) : null  // fastest
+  const paceMaxSec = validPaceValues.length > 0 ? Math.max(...validPaceValues) : null  // slowest (for display)
   // Use 95th-percentile as the slowest axis bound to ignore GPS outlier spikes
   const pace95th = validPaceValues.length > 0
     ? [...validPaceValues].sort((a, b) => a - b)[Math.floor(validPaceValues.length * 0.95)]
