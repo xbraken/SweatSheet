@@ -94,5 +94,13 @@ export async function initDb() {
     time_offset_sec INTEGER NOT NULL,
     hr_bpm INTEGER NOT NULL
   )`)
+
+  // Cumulative distance samples over time (for pace graph + best-segment calculation)
+  await db.execute(`CREATE TABLE IF NOT EXISTS cardio_distance_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cardio_id INTEGER NOT NULL REFERENCES cardio(id) ON DELETE CASCADE,
+    time_offset_sec INTEGER NOT NULL,
+    distance_km REAL NOT NULL
+  )`)
 }
 

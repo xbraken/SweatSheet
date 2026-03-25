@@ -177,6 +177,34 @@ export async function POST(req: NextRequest) {
         })))
       }
 
+      // Distance samples (optional — requires Shortcut to supply distanceSamples array)
+      const rawDistArr = Array.isArray(body.distanceSamples) ? body.distanceSamples as Record<string, unknown>[] : []
+      const distSamples: Array<{ offsetSec: number; distKm: number }> = []
+      if (rawDistArr.length > 0) {
+        const distFlat = rawDistArr
+          .map(s => {
+            const dateStr = String(field(s, 'date', 'startDate', 'timestamp') ?? '')
+            const val = Number(field(s, 'distanceKm', 'distance', 'value') ?? NaN)
+            if (!dateStr || isNaN(val) || val < 0) return null
+            const ts = new Date(dateStr).getTime()
+            return isNaN(ts) ? null : { ts, distKm: val }
+          })
+          .filter(Boolean) as Array<{ ts: number; distKm: number }>
+        distFlat.sort((a, b) => a.ts - b.ts)
+        let cumKm = 0
+        for (const s of distFlat) {
+          if (s.ts < startTs || s.ts > endTs) continue
+          cumKm += s.distKm
+          distSamples.push({ offsetSec: Math.round((s.ts - startTs) / 1000), distKm: cumKm })
+        }
+      }
+      if (distSamples.length > 0) {
+        await db.batch(distSamples.map(s => ({
+          sql: 'INSERT INTO cardio_distance_samples (cardio_id, time_offset_sec, distance_km) VALUES (?, ?, ?)',
+          args: [cardioId, s.offsetSec, s.distKm],
+        })))
+      }
+
       imported++
     } catch { /* skip failed rows */ }
   }

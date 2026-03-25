@@ -17,6 +17,7 @@ type WorkoutPayload = {
   startedAt?: string | null
   endedAt?: string | null
   hrSamples?: Array<{ offsetSec: number; bpm: number }>
+  distanceSamples?: Array<{ offsetSec: number; distKm: number }>
 }
 
 export async function POST(req: NextRequest) {
@@ -70,6 +71,15 @@ export async function POST(req: NextRequest) {
           w.hrSamples.map(s => ({
             sql: 'INSERT INTO cardio_hr_samples (cardio_id, time_offset_sec, hr_bpm) VALUES (?, ?, ?)',
             args: [cardioId, s.offsetSec, s.bpm],
+          }))
+        )
+      }
+      // Batch insert distance samples if present
+      if (w.distanceSamples && w.distanceSamples.length > 0) {
+        await db.batch(
+          w.distanceSamples.map(s => ({
+            sql: 'INSERT INTO cardio_distance_samples (cardio_id, time_offset_sec, distance_km) VALUES (?, ?, ?)',
+            args: [cardioId, s.offsetSec, s.distKm],
           }))
         )
       }

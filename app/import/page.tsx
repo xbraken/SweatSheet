@@ -17,6 +17,7 @@ type ParsedWorkout = {
   endedAt: string
   sourceName: string
   hrSamples: Array<{ offsetSec: number; bpm: number }>
+  distanceSamples: Array<{ offsetSec: number; distKm: number }>
 }
 
 type WorkoutRow = ParsedWorkout & {
@@ -127,6 +128,7 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
     endedAt,
     sourceName,
     hrSamples: [], // populated in streamParseAppleHealth after matching HR records
+    distanceSamples: [],
   }
 }
 
@@ -154,6 +156,20 @@ function parseHrRecord(xml: string): { ts: number; bpm: number } | null {
   const ts = parseAppleDate(dateStr)
   if (isNaN(ts)) return null
   return { ts, bpm: Math.round(value) }
+}
+
+/** Parse a single DistanceWalkingRunning Record element */
+function parseDistRecord(xml: string): { ts: number; dist: number } | null {
+  const source = attr(xml, 'sourceName').toLowerCase()
+  if (!source.includes('watch')) return null
+  const dateStr = attr(xml, 'startDate')
+  const value = parseFloat(attr(xml, 'value'))
+  const unit = attr(xml, 'unit')
+  if (!dateStr || isNaN(value) || value <= 0) return null
+  const ts = parseAppleDate(dateStr)
+  if (isNaN(ts)) return null
+  const distKm = unit === 'mi' ? value * 1.60934 : value
+  return { ts, dist: distKm }
 }
 
 /** Pass 1: collect workouts — original logic, completely unchanged */
@@ -191,8 +207,8 @@ async function collectWorkouts(
   return workouts
 }
 
-/** Pass 2: stream through the file again collecting HR samples for each workout window */
-async function collectHrSamples(
+/** Pass 2: stream through the file collecting HR and distance samples for each workout window */
+async function collectSamples(
   file: File,
   windows: Array<{ startTs: number; endTs: number; workout: ParsedWorkout }>,
   onProgress: (pct: number) => void,
@@ -201,9 +217,15 @@ async function collectHrSamples(
   const reader = file.stream().getReader()
   let buffer = ''
   let bytesRead = 0
-  // Map from startTs → samples array (windows are sorted by startTs)
-  const samplesMap = new Map<number, Array<{ offsetSec: number; bpm: number }>>()
-  for (const w of windows) samplesMap.set(w.startTs, [])
+  // Maps from startTs → samples (windows are sorted by startTs)
+  const hrMap = new Map<number, Array<{ offsetSec: number; bpm: number }>>()
+  const distRawMap = new Map<number, Array<{ ts: number; dist: number }>>()
+  for (const w of windows) {
+    hrMap.set(w.startTs, [])
+    distRawMap.set(w.startTs, [])
+  }
+
+  const NEEDLE = '<Record type="HKQuantityTypeIdentifier'
 
   try {
     while (true) {
@@ -215,7 +237,7 @@ async function collectHrSamples(
 
       let searchFrom = 0
       while (true) {
-        const idx = buffer.indexOf('<Record type="HKQuantityTypeIdentifierHeartRate"', searchFrom)
+        const idx = buffer.indexOf(NEEDLE, searchFrom)
         if (idx === -1) break
         const gtPos = buffer.indexOf('>', idx)
         if (gtPos === -1) { buffer = buffer.slice(idx); searchFrom = 0; break }
@@ -227,34 +249,57 @@ async function collectHrSamples(
           if (closeTag === -1) { buffer = buffer.slice(idx); searchFrom = 0; break }
           end = closeTag + 9
         }
-        const hr = parseHrRecord(buffer.slice(idx, end))
-        if (hr) {
-          for (const w of windows) {
-            if (hr.ts < w.startTs) break // windows sorted, so no later window can match either
-            if (hr.ts <= w.endTs) {
-              samplesMap.get(w.startTs)!.push({
-                offsetSec: Math.round((hr.ts - w.startTs) / 1000),
-                bpm: hr.bpm,
-              })
+        const recordXml = buffer.slice(idx, end)
+        const recordType = attr(recordXml, 'type')
+
+        if (recordType === 'HKQuantityTypeIdentifierHeartRate') {
+          const hr = parseHrRecord(recordXml)
+          if (hr) {
+            for (const w of windows) {
+              if (hr.ts < w.startTs) break
+              if (hr.ts <= w.endTs) {
+                hrMap.get(w.startTs)!.push({
+                  offsetSec: Math.round((hr.ts - w.startTs) / 1000),
+                  bpm: hr.bpm,
+                })
+              }
+            }
+          }
+        } else if (recordType === 'HKQuantityTypeIdentifierDistanceWalkingRunning') {
+          const d = parseDistRecord(recordXml)
+          if (d) {
+            for (const w of windows) {
+              if (d.ts < w.startTs) break
+              if (d.ts <= w.endTs) {
+                distRawMap.get(w.startTs)!.push({ ts: d.ts, dist: d.dist })
+              }
             }
           }
         }
+
         searchFrom = end
       }
       if (searchFrom > 0) buffer = buffer.slice(searchFrom)
-      if (!buffer.includes('<Record type="HKQuantityTypeIdentifierHeartRate"') && buffer.length > 2000) {
-        buffer = buffer.slice(-500)
-      }
+      if (!buffer.includes(NEEDLE) && buffer.length > 2000) buffer = buffer.slice(-500)
     }
   } finally { reader.releaseLock() }
 
   for (const w of windows) {
-    const samples = samplesMap.get(w.startTs) ?? []
-    w.workout.hrSamples = samples
-    if (samples.length > 0) {
-      if (!w.workout.hrMin) w.workout.hrMin = Math.min(...samples.map(s => s.bpm))
-      if (!w.workout.hrMax) w.workout.hrMax = Math.max(...samples.map(s => s.bpm))
+    const hrSamples = hrMap.get(w.startTs) ?? []
+    w.workout.hrSamples = hrSamples
+    if (hrSamples.length > 0) {
+      if (!w.workout.hrMin) w.workout.hrMin = Math.min(...hrSamples.map(s => s.bpm))
+      if (!w.workout.hrMax) w.workout.hrMax = Math.max(...hrSamples.map(s => s.bpm))
     }
+
+    // Accumulate raw distance deltas into cumulative distance samples
+    const rawDist = distRawMap.get(w.startTs) ?? []
+    rawDist.sort((a, b) => a.ts - b.ts)
+    let cumKm = 0
+    w.workout.distanceSamples = rawDist.map(d => {
+      cumKm += d.dist
+      return { offsetSec: Math.round((d.ts - w.startTs) / 1000), distKm: cumKm }
+    })
   }
 }
 
@@ -273,7 +318,7 @@ async function streamParseAppleHealth(
     .sort((a, b) => a.startTs - b.startTs)
 
   if (windows.length > 0) {
-    await collectHrSamples(file, windows, pct => onProgress(0.6 + pct * 0.4))
+    await collectSamples(file, windows, pct => onProgress(0.6 + pct * 0.4))
   }
 
   return workouts.sort((a, b) => b.date.localeCompare(a.date))
@@ -420,6 +465,7 @@ function parseShortcutJSON(raw: unknown): ParsedWorkout[] {
       endedAt: endStr,
       sourceName: 'Shortcuts',
       hrSamples: samples,
+      distanceSamples: [],
     })
   }
 

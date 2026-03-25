@@ -31,8 +31,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     args: [cardioId],
   })
 
+  const distSamplesRes = await db.execute({
+    sql: `SELECT time_offset_sec, distance_km FROM cardio_distance_samples
+          WHERE cardio_id = ? ORDER BY time_offset_sec`,
+    args: [cardioId],
+  })
+
   return NextResponse.json({
     ...runRes.rows[0],
     hrSamples: samplesRes.rows,
+    distanceSamples: distSamplesRes.rows,
   })
 }

@@ -15,6 +15,7 @@ type CardioEntry = {
 }
 
 type HrSample = { time_offset_sec: number; hr_bpm: number }
+type DistanceSample = { time_offset_sec: number; distance_km: number }
 
 type RunDetail = {
   cardio_id: number
@@ -28,6 +29,7 @@ type RunDetail = {
   hr_min: number | null
   hr_max: number | null
   hrSamples: HrSample[]
+  distanceSamples: DistanceSample[]
 }
 type CalendarDay = {
   date: string
@@ -93,6 +95,7 @@ function RunDetailSheet({
   const [compareDetail, setCompareDetail] = useState<RunDetail | null>(null)
   const [showComparePicker, setShowComparePicker] = useState(false)
   const [chartHoveredIdx, setChartHoveredIdx] = useState<number | null>(null)
+  const [paceHoveredIdx, setPaceHoveredIdx] = useState<number | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -103,6 +106,62 @@ function RunDetailSheet({
     if (!compareId) { setCompareDetail(null); return }
     fetch(`/api/run/${compareId}`).then(r => r.json()).then(setCompareDetail)
   }, [compareId])
+
+  /** Find fastest contiguous segment covering targetKm using a sliding window (O(n)) */
+  function findBestSegment(samples: DistanceSample[], targetKm: number): number | null {
+    if (samples.length < 2) return null
+    const maxDist = samples[samples.length - 1].distance_km
+    if (maxDist < targetKm) return null
+    let bestSec = Infinity
+    let j = 0
+    for (let i = 0; i < samples.length; i++) {
+      if (j <= i) j = i + 1
+      while (j < samples.length && samples[j].distance_km - samples[i].distance_km < targetKm) j++
+      if (j >= samples.length) break
+      // Interpolate exact time when cumulative distance reaches samples[i].distance_km + targetKm
+      const d0 = j > 0 ? samples[j - 1].distance_km - samples[i].distance_km : 0
+      const d1 = samples[j].distance_km - samples[i].distance_km
+      const frac = d1 > d0 ? (targetKm - d0) / (d1 - d0) : 0
+      const endTime = samples[j - 1].time_offset_sec + frac * (samples[j].time_offset_sec - samples[j - 1].time_offset_sec)
+      const segTime = endTime - samples[i].time_offset_sec
+      if (segTime < bestSec) bestSec = segTime
+    }
+    return isFinite(bestSec) ? Math.round(bestSec) : null
+  }
+
+  /** Derive N evenly-spaced instantaneous pace values (sec/km) from cumulative distance samples */
+  function normalizePaceSamples(samples: DistanceSample[], n = 120): number[] {
+    if (samples.length < 2) return []
+    const maxT = samples[samples.length - 1].time_offset_sec
+    const raw = Array.from({ length: n }, (_, i) => {
+      const target = (i / (n - 1)) * maxT
+      let j = samples.findIndex(s => s.time_offset_sec >= target)
+      if (j <= 0) j = 1
+      if (j >= samples.length) j = samples.length - 1
+      const dt = samples[j].time_offset_sec - samples[j - 1].time_offset_sec
+      const dd = samples[j].distance_km - samples[j - 1].distance_km
+      return dd > 0 && dt > 0 ? dt / dd : 0
+    })
+    // Smooth with a 7-point moving average to reduce GPS noise
+    return raw.map((_, i) => {
+      const s = Math.max(0, i - 3), e = Math.min(raw.length, i + 4)
+      const slice = raw.slice(s, e).filter(v => v > 0)
+      return slice.length > 0 ? slice.reduce((a, b) => a + b, 0) / slice.length : 0
+    })
+  }
+
+  /** Interpolate cumulative distance (km) at a given normalized index */
+  function distanceAtIdx(samples: DistanceSample[], idx: number, n: number): number {
+    if (samples.length < 2) return 0
+    const maxT = samples[samples.length - 1].time_offset_sec
+    const target = (idx / (n - 1)) * maxT
+    let j = samples.findIndex(s => s.time_offset_sec >= target)
+    if (j < 0) return samples[samples.length - 1].distance_km
+    if (j === 0) return samples[0].distance_km
+    const a = samples[j - 1], b = samples[j]
+    const t = (target - a.time_offset_sec) / (b.time_offset_sec - a.time_offset_sec)
+    return a.distance_km + t * (b.distance_km - a.distance_km)
+  }
 
   // Normalize HR curve to N evenly-spaced points by % completion
   function normalizeSamples(samples: HrSample[], n = 120): number[] {
@@ -148,7 +207,7 @@ function RunDetailSheet({
   const hasHr = detail.hrSamples.length > 1
   const hasCompareHr = compareDetail && compareDetail.hrSamples.length > 1
 
-  // Build chart data
+  // ── HR chart data ──────────────────────────────────────────────────────────
   const mainValues = hasHr ? normalizeSamples(detail.hrSamples) : []
   const compareValues = hasCompareHr ? normalizeSamples(compareDetail!.hrSamples) : []
 
@@ -167,6 +226,53 @@ function RunDetailSheet({
   const hCompareVal = compareValues.length > 0 ? compareValues[Math.round((hIdx / (mainValues.length - 1)) * (compareValues.length - 1))] : null
   const hX = mainValues.length > 1 ? (hIdx / (mainValues.length - 1)) * 300 : 150
   const hY = hVal !== undefined ? 80 - ((hVal - yMin) / (yMax - yMin || 1)) * 68 : 40
+
+  // ── Pace chart data ────────────────────────────────────────────────────────
+  const distSamples = detail.distanceSamples ?? []
+  const hasPace = distSamples.length > 3
+  const PACE_N = 120
+  const paceValuesAll = hasPace ? normalizePaceSamples(distSamples, PACE_N) : []
+  const validPaceValues = paceValuesAll.filter(v => v > 0)
+  const paceAvgSec = detail.pace ? (toSeconds(detail.pace) ?? null) : null
+  const paceMinSec = validPaceValues.length > 0 ? Math.min(...validPaceValues) : null  // fastest
+  const paceMaxSec = validPaceValues.length > 0 ? Math.max(...validPaceValues) : null  // slowest
+
+  const pYMin = paceMinSec !== null ? Math.max(30, paceMinSec - 15) : 200
+  const pYMax = paceMaxSec !== null ? Math.min(900, paceMaxSec + 15) : 600
+
+  const pacePts = paceValuesAll.length > 1
+    ? paceValuesAll.map((v, i) => {
+        const x = ((i / Math.max(paceValuesAll.length - 1, 1)) * 300).toFixed(1)
+        const pv = v > 0 ? v : pYMin  // clamp zeros to min
+        const y = (80 - ((pv - pYMin) / (pYMax - pYMin || 1)) * 68).toFixed(1)
+        return `${x},${y}`
+      }).join(' ')
+    : null
+
+  const pHovIdx = paceHoveredIdx ?? Math.floor((PACE_N - 1) / 2)
+  const pHovPace = paceValuesAll[pHovIdx] ?? 0
+  const pHovX = (pHovIdx / (PACE_N - 1)) * 300
+  const pHovY = pHovPace > 0 ? 80 - ((pHovPace - pYMin) / (pYMax - pYMin || 1)) * 68 : 40
+  const pHovDist = hasPace ? distanceAtIdx(distSamples, pHovIdx, PACE_N) : 0
+  const pHovTimeSec = hasPace
+    ? Math.round((pHovIdx / (PACE_N - 1)) * distSamples[distSamples.length - 1].time_offset_sec)
+    : null
+
+  // ── Best segments ──────────────────────────────────────────────────────────
+  const best5KSec = hasPace ? findBestSegment(distSamples, 5.0) : null
+  const best10KSec = hasPace ? findBestSegment(distSamples, 10.0) : null
+
+  function fmtSegTime(sec: number): string {
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = sec % 60
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
+
+  function fmtPaceSec(sec: number): string {
+    return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
+  }
 
   // Similar-pace runs for comparison picker (same activity, ±45s pace)
   const detailPaceSec = toSeconds(detail.pace)
@@ -222,6 +328,139 @@ function RunDetailSheet({
                 <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
                   <span className="text-xl font-black font-headline text-[#e5e2e1]">{detail.hr_max}</span>
                   <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">max bpm</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Pace Chart */}
+          {hasPace && (
+            <div className="mt-5 bg-[#131313] rounded-2xl p-4">
+              {(() => {
+                const maxT = distSamples[distSamples.length - 1].time_offset_sec
+                const interval = maxT > 1800 ? 600 : 300
+                const ticks: number[] = []
+                for (let t = interval; t < maxT - interval * 0.4; t += interval) ticks.push(t)
+
+                const pHovPaceLabel = pHovPace > 0 ? fmtPaceSec(pHovPace) : null
+
+                return (
+                  <>
+                    {/* Header row: avg pace left, range right */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">Pace over time</p>
+                        {paceAvgSec && (
+                          <span className="text-lg font-black font-headline text-[#4bdece]">{fmtPaceSec(paceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span></span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        {paceMinSec && paceMaxSec && (
+                          <>
+                            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">Range</p>
+                            <p className="text-xs text-[#4bdece]">
+                              <span className="font-black">{fmtPaceSec(paceMinSec)}</span>
+                              <span className="text-[#a48b83] mx-1">→</span>
+                              <span className="font-black">{fmtPaceSec(paceMaxSec)}</span>
+                              <span className="text-[#a48b83] ml-1">/km</span>
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Hover readout */}
+                    {paceHoveredIdx !== null && pHovPaceLabel && (
+                      <div className="flex items-center justify-end gap-2 mb-2">
+                        <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
+                        <span className="text-sm font-black font-headline text-[#4bdece]">{pHovPaceLabel} /km</span>
+                      </div>
+                    )}
+
+                    <svg
+                      className="w-full h-40"
+                      viewBox="0 0 300 102"
+                      preserveAspectRatio="none"
+                      style={{ touchAction: 'none' }}
+                      onPointerMove={e => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setPaceHoveredIdx(Math.max(0, Math.min(PACE_N - 1, Math.round(((e.clientX - rect.left) / rect.width) * (PACE_N - 1)))))
+                      }}
+                      onPointerLeave={() => setPaceHoveredIdx(null)}
+                    >
+                      <defs>
+                        <linearGradient id="paceGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#4bdece" stopOpacity="0.22" />
+                          <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Avg pace dashed line */}
+                      {paceAvgSec && (() => {
+                        const avgY = 80 - ((paceAvgSec - pYMin) / (pYMax - pYMin || 1)) * 68
+                        return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke="#4bdece" strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.35" />
+                      })()}
+
+                      {/* Fill + line */}
+                      {pacePts && (
+                        <>
+                          <polygon points={`0,80 ${pacePts} 300,80`} fill="url(#paceGrad)" />
+                          <polyline points={pacePts} fill="none" stroke="#4bdece" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </>
+                      )}
+
+                      {/* Hover scrubber */}
+                      {pacePts && (
+                        <>
+                          <line x1={pHovX} y1={0} x2={pHovX} y2={82} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
+                          <circle cx={pHovX} cy={pHovY} r="4" fill="#4bdece" />
+                        </>
+                      )}
+
+                      {/* Y axis labels (pace) */}
+                      <text x={3} y={14} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{fmtPaceSec(pYMax)}</text>
+                      <text x={3} y={79} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{fmtPaceSec(pYMin)}</text>
+
+                      {/* X axis baseline */}
+                      <line x1={0} y1={82} x2={300} y2={82} stroke="#2a2a2a" strokeWidth="0.5" />
+
+                      {/* X axis time labels */}
+                      <text x={2} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="start">0:00</text>
+                      {ticks.map(t => {
+                        const x = (t / maxT) * 300
+                        const h = Math.floor(t / 3600)
+                        const m = Math.floor((t % 3600) / 60)
+                        const s = t % 60
+                        const label = h > 0 ? `${h}:${String(m).padStart(2,'0')}` : s === 0 ? `${m}m` : `${m}:${String(s).padStart(2,'0')}`
+                        return <text key={t} x={x} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="middle">{label}</text>
+                      })}
+                      {maxT > 0 && (() => {
+                        const h = Math.floor(maxT / 3600)
+                        const m = Math.floor((maxT % 3600) / 60)
+                        const s = maxT % 60
+                        const endLabel = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`
+                        return <text x={298} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="end">{endLabel}</text>
+                      })()}
+                    </svg>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Best Segments */}
+          {(best5KSec !== null || best10KSec !== null) && (
+            <div className="mt-4 flex gap-2">
+              {best5KSec !== null && (
+                <div className="flex-1 bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
+                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Best 5K</span>
+                  <span className="text-xl font-black font-headline text-[#4bdece]">{fmtSegTime(best5KSec)}</span>
+                </div>
+              )}
+              {best10KSec !== null && (
+                <div className="flex-1 bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
+                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Best 10K</span>
+                  <span className="text-xl font-black font-headline text-[#4bdece]">{fmtSegTime(best10KSec)}</span>
                 </div>
               )}
             </div>
