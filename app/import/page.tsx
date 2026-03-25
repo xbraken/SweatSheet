@@ -30,6 +30,19 @@ function attr(xml: string, name: string): string {
   return m?.[1] ?? ''
 }
 
+/** Extract a numeric value from a WorkoutStatistics child element by HK type */
+function statValue(xml: string, statType: string, valueAttr = 'sum'): number | null {
+  const m = xml.match(new RegExp(`<WorkoutStatistics[^>]*type="${statType}"[^>]*/>`))
+  if (!m) return null
+  const v = parseFloat(attr(m[0], valueAttr))
+  return isNaN(v) || v === 0 ? null : v
+}
+
+function statUnit(xml: string, statType: string): string {
+  const m = xml.match(new RegExp(`<WorkoutStatistics[^>]*type="${statType}"[^>]*/>`))
+  return m ? attr(m[0], 'unit') : ''
+}
+
 function toSeconds(str: string | null): number | null {
   if (!str) return null
   const parts = str.split(':').map(Number)
@@ -47,10 +60,24 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   if (!startDate) return null
 
   const durationMin = parseFloat(attr(xml, 'duration')) || 0
-  const rawDist = parseFloat(attr(xml, 'totalDistance')) || 0
-  const distUnit = attr(xml, 'totalDistanceUnit')
+
+  // Distance: top-level attribute first, fall back to WorkoutStatistics
+  // (indoor runs store distance via accelerometer in WorkoutStatistics, not totalDistance)
+  let rawDist = parseFloat(attr(xml, 'totalDistance')) || 0
+  let distUnit = attr(xml, 'totalDistanceUnit')
+  if (rawDist === 0) {
+    const distStatType = type === 'HKWorkoutActivityTypeCycling'
+      ? 'HKQuantityTypeIdentifierDistanceCycling'
+      : 'HKQuantityTypeIdentifierDistanceWalkingRunning'
+    rawDist = statValue(xml, distStatType) ?? 0
+    if (rawDist > 0) distUnit = statUnit(xml, distStatType)
+  }
   const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
-  const calories = Math.round(parseFloat(attr(xml, 'totalEnergyBurned'))) || null
+
+  // Calories: top-level attribute first, fall back to WorkoutStatistics active energy
+  let caloriesRaw = parseFloat(attr(xml, 'totalEnergyBurned')) || 0
+  if (caloriesRaw === 0) caloriesRaw = statValue(xml, 'HKQuantityTypeIdentifierActiveEnergyBurned') ?? 0
+  const calories = caloriesRaw > 0 ? Math.round(caloriesRaw) : null
 
   const hrMatch = xml.match(/WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*average="([^"]*)"/)
   const avgHr = hrMatch ? Math.round(parseFloat(hrMatch[1])) || null : null

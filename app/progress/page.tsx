@@ -9,6 +9,7 @@ type CardioEntry = {
   distance: string | null
   duration: string | null
   pace: string | null
+  calories: number | null
 }
 type CalendarDay = {
   date: string
@@ -482,7 +483,8 @@ export default function ProgressPage() {
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{s.activity}</p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
-                      {s.duration && !s.pace && <p className="font-bold text-on-surface">{s.duration}</p>}
+                      {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
+                      {s.calories && <p className="text-xs text-on-surface-variant">{s.calories} kcal</p>}
                     </div>
                   </div>
                 )
