@@ -409,8 +409,8 @@ function RunDetailSheet({
                       </div>
                     </div>
 
-                    {/* Hover readout — fixed height to prevent chart jumping */}
-                    <div className="flex items-center justify-end gap-2 mb-2 h-5">
+                    {/* Hover readout */}
+                    <div className="flex items-center justify-end gap-3 mb-2 h-5">
                       {paceHoveredIdx !== null && pHovPaceLabel && (
                         <>
                           {!inCompare && pHovTimeSec !== null && (
@@ -418,19 +418,17 @@ function RunDetailSheet({
                               {pHovTimeSec >= 3600
                                 ? `${Math.floor(pHovTimeSec / 3600)}:${String(Math.floor((pHovTimeSec % 3600) / 60)).padStart(2, '0')}:${String(pHovTimeSec % 60).padStart(2, '0')}`
                                 : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
+                              {pHovDist > 0 && <span className="ml-1">{pHovDist.toFixed(2)} km</span>}
                             </span>
                           )}
-                          {!inCompare && pHovDist > 0 && (
-                            <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
-                          )}
-                          <span className="text-sm font-black font-headline" style={{ color: mainColor }}>{pHovPaceLabel} /km</span>
+                          <span className="text-sm font-black font-headline whitespace-nowrap" style={{ color: mainColor }}>{pHovPaceLabel} /km</span>
                           {inCompare && pHovComparePace > 0 && (
-                            <span className="text-sm font-black font-headline text-[#c084fc]">{fmtPaceSec(pHovComparePace)} /km</span>
+                            <span className="text-sm font-black font-headline text-[#c084fc] whitespace-nowrap">{fmtPaceSec(pHovComparePace)} /km</span>
                           )}
                         </>
                       )}
                     </div>
-
+                    <div className="relative">
                     <svg
                       className="w-full h-40"
                       viewBox="0 0 300 102"
@@ -523,6 +521,8 @@ function RunDetailSheet({
                       )}
                     </svg>
 
+                    </div>
+
                     {/* Pace legend when comparing */}
                     {inCompare && (
                       <div className="flex items-center justify-between mt-3">
@@ -591,21 +591,27 @@ function RunDetailSheet({
                   : null
                 return (
                   <>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-1">
                       <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
                         {compareDetail ? 'HR comparison (% completion)' : 'Heart rate over time'}
                       </p>
+                    </div>
+                    {/* Hover readout */}
+                    <div className="flex items-center justify-end gap-3 mb-2 h-5">
                       {chartHoveredIdx !== null && hVal !== undefined && (
-                        <div className="flex items-center gap-2">
-                          {hTimeLabel && !compareDetail && <span className="text-[10px] text-[#a48b83]">{hTimeLabel}</span>}
+                        <>
+                          {!compareDetail && hTimeLabel && (
+                            <span className="text-[10px] text-[#a48b83]">{hTimeLabel}</span>
+                          )}
                           <span className="text-sm font-black font-headline text-[#ff9066]">{hVal} bpm</span>
                           {hCompareVal !== null && compareValues.length > 0 && (
                             <span className="text-sm font-black font-headline text-[#c084fc]">{hCompareVal} bpm</span>
                           )}
-                        </div>
+                        </>
                       )}
                     </div>
 
+                    <div className="relative">
                     <svg
                       className="w-full h-40"
                       viewBox="0 0 300 102"
@@ -698,6 +704,8 @@ function RunDetailSheet({
                         </>
                       )}
                     </svg>
+
+                    </div>
                   </>
                 )
               })()}
