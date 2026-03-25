@@ -165,6 +165,16 @@ export default function AccountPage() {
           >
             {regenerating ? 'Regenerating…' : 'Regenerate key'}
           </button>
+          <a
+            href="/api/shortcut"
+            className="w-full py-3 rounded-xl bg-[#4bdece]/20 text-[#4bdece] text-sm font-bold font-label text-center flex items-center justify-center gap-2 hover:bg-[#4bdece]/30 transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">download</span>
+            Download SweatSheet Shortcut
+          </a>
+          <p className="text-[11px] text-[#a48b83] leading-snug">
+            Opens in iPhone Shortcuts — your API key is pre-filled. Requires <strong className="text-[#e5e2e1]">Allow Untrusted Shortcuts</strong> in iOS Settings → Privacy &amp; Security → Shortcuts.
+          </p>
         </div>
       </section>
 
