@@ -12,6 +12,7 @@ export default function LogPage() {
   const router = useRouter()
   const [blocks, setBlocks] = useState<Block[]>([])
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const updateSet = (blockId: number, setId: number, field: 'weight' | 'reps', delta: number) => {
     setBlocks(prev => prev.map(b => b.type === 'lift' && b.id === blockId
@@ -51,15 +52,21 @@ export default function LogPage() {
   const finishSession = async () => {
     if (blocks.length === 0) return
     setSaving(true)
+    setSaveError(null)
     try {
-      await fetch('/api/sessions', {
+      const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ blocks }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to save session')
+      }
       router.push('/')
     } catch (e) {
       console.error(e)
+      setSaveError(e instanceof Error ? e.message : 'Failed to save')
       setSaving(false)
     }
   }
@@ -77,6 +84,12 @@ export default function LogPage() {
           {saving ? 'Saving...' : 'Finish'}
         </button>
       </div>
+
+      {saveError && (
+        <div className="mx-4 mt-3 px-4 py-3 bg-red-900/40 border border-red-500/30 rounded-xl text-red-300 text-sm">
+          {saveError}
+        </div>
+      )}
 
       <div className="flex-grow px-4 pt-6 space-y-6">
         {blocks.length === 0 && (

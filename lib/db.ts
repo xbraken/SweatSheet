@@ -17,7 +17,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS blocks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('lift', 'run', 'cycle')),
+      type TEXT NOT NULL CHECK(type IN ('lift', 'run', 'cycle', 'cardio')),
       position INTEGER NOT NULL DEFAULT 0
     );
 
