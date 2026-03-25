@@ -107,7 +107,13 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   // Apple Watch uses "HKIndoorWorkout"; some older exports use "HKMetadataKeyIndoorWorkout"
   const isIndoor = /MetadataEntry[^>]*key="HKIndoorWorkout"[^>]*value="1"/.test(xml) ||
     /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
-  const activity = SUPPORTED[type] ?? (isIndoor ? 'Indoor run' : 'Outdoor run')
+  // Detect interval workouts by presence of lap events or WorkoutActivity sub-elements
+  const isInterval = type === 'HKWorkoutActivityTypeRunning' && (
+    xml.includes('<WorkoutActivity ') || xml.includes('HKWorkoutEventTypeLap')
+  )
+  const activity = isInterval
+    ? 'Interval run'
+    : SUPPORTED[type] ?? (isIndoor ? 'Indoor run' : 'Outdoor run')
 
   // Calories
   let caloriesRaw = parseFloat(attr(xml, 'totalEnergyBurned')) || 0
@@ -383,6 +389,8 @@ const SHORTCUT_ACTIVITY: Record<string, string> = {
   running: 'Outdoor run',
   'outdoor run': 'Outdoor run',
   'indoor run': 'Indoor run',
+  'interval run': 'Interval run',
+  'interval': 'Interval run',
   cycling: 'Cycling',
   'outdoor cycling': 'Cycling',
   'indoor cycling': 'Cycling',

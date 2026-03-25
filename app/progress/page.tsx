@@ -94,6 +94,7 @@ function RunDetailSheet({
   const [compareId, setCompareId] = useState<number | null>(null)
   const [compareDetail, setCompareDetail] = useState<RunDetail | null>(null)
   const [showComparePicker, setShowComparePicker] = useState(false)
+  const [compareSearch, setCompareSearch] = useState('')
   const [chartHoveredIdx, setChartHoveredIdx] = useState<number | null>(null)
   const [paceHoveredIdx, setPaceHoveredIdx] = useState<number | null>(null)
 
@@ -296,15 +297,6 @@ function RunDetailSheet({
     return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   }
 
-  // Similar-pace runs for comparison picker (same activity, ±45s pace)
-  const detailPaceSec = toSeconds(detail.pace)
-  const similarRuns = allCardio.filter(r => {
-    if (!r.cardio_id || r.cardio_id === runId) return false
-    if (r.activity !== detail.activity) return false
-    if (!detailPaceSec) return true
-    const rPace = toSeconds(r.pace)
-    return rPace ? Math.abs(rPace - detailPaceSec) <= 45 : false
-  })
 
   const durationLabel = detail.duration ?? ''
   const distLabel = detail.distance ? `${parseFloat(detail.distance).toFixed(2)} km` : ''
@@ -776,32 +768,47 @@ function RunDetailSheet({
             {showComparePicker && !compareDetail && (
               <div className="bg-[#131313] rounded-2xl border border-[#201f1f] overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-[#201f1f]">
-                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
-                    {similarRuns.length > 0 ? `Similar pace runs (±45s)` : 'All runs'}
-                  </p>
-                  <button onClick={() => setShowComparePicker(false)}>
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Compare with</p>
+                  <button onClick={() => { setShowComparePicker(false); setCompareSearch('') }}>
                     <span className="material-symbols-outlined text-[#a48b83] text-sm">close</span>
                   </button>
                 </div>
-                {(similarRuns.length > 0 ? similarRuns : allCardio.filter(r => r.cardio_id !== runId && r.activity === detail.activity)).slice(0, 20).map(r => (
-                  <button
-                    key={r.cardio_id}
-                    onClick={() => { setCompareId(r.cardio_id); setShowComparePicker(false) }}
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#201f1f] transition-colors text-left border-b border-[#201f1f]/50 last:border-0"
-                  >
-                    <div>
-                      <p className="text-[10px] text-[#a48b83] font-label uppercase">{formatDate(r.date)}</p>
-                      <p className="font-headline font-bold text-sm text-[#e5e2e1]">{r.distance ? `${r.distance} km` : r.activity}</p>
-                    </div>
-                    <div className="text-right">
-                      {r.pace && <p className="text-sm font-bold text-[#4bdece]">{r.pace} /km</p>}
-                      {r.heart_rate && <p className="text-xs text-[#a48b83]">avg {r.heart_rate} bpm</p>}
-                    </div>
-                  </button>
-                ))}
-                {similarRuns.length === 0 && allCardio.filter(r => r.cardio_id !== runId && r.activity === detail.activity).length === 0 && (
-                  <p className="px-4 py-4 text-sm text-[#a48b83]">No other {detail.activity} runs to compare</p>
-                )}
+                <div className="px-4 py-2 border-b border-[#201f1f]">
+                  <input
+                    type="text"
+                    placeholder="Search by date or activity…"
+                    value={compareSearch}
+                    onChange={e => setCompareSearch(e.target.value)}
+                    className="w-full bg-transparent text-sm text-[#e5e2e1] placeholder-[#a48b83] outline-none"
+                    autoFocus
+                  />
+                </div>
+                {allCardio
+                  .filter(r => {
+                    if (!r.cardio_id || r.cardio_id === runId) return false
+                    if (!r.activity.toLowerCase().includes('run')) return false
+                    if (!compareSearch) return true
+                    const q = compareSearch.toLowerCase()
+                    return r.date.includes(q) || r.activity.toLowerCase().includes(q)
+                  })
+                  .slice(0, 30)
+                  .map(r => (
+                    <button
+                      key={r.cardio_id}
+                      onClick={() => { setCompareId(r.cardio_id); setShowComparePicker(false); setCompareSearch('') }}
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#201f1f] transition-colors text-left border-b border-[#201f1f]/50 last:border-0"
+                    >
+                      <div>
+                        <p className="text-[10px] text-[#a48b83] font-label uppercase">{formatDate(r.date)}</p>
+                        <p className="font-headline font-bold text-sm text-[#e5e2e1]">{r.distance ? `${r.distance} km` : r.activity}</p>
+                        <p className="text-[10px] text-[#a48b83]">{r.activity}</p>
+                      </div>
+                      <div className="text-right">
+                        {r.pace && <p className="text-sm font-bold text-[#4bdece]">{r.pace} /km</p>}
+                        {r.heart_rate && <p className="text-xs text-[#a48b83]">avg {r.heart_rate} bpm</p>}
+                      </div>
+                    </button>
+                  ))}
               </div>
             )}
           </div>
