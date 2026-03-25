@@ -276,30 +276,13 @@ export default function ImportPage() {
     setImported(0)
     setPhase('importing')
 
-    let count = 0
-    for (const w of toImport) {
-      try {
-        await fetch('/api/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date: w.date,
-            blocks: [{
-              type: 'cardio',
-              activity: w.activity,
-              distance: w.distance,
-              time: w.duration,
-              pace: w.pace,
-              calories: w.calories,
-              heartRate: w.heartRate,
-              importedFrom: 'apple_health',
-            }],
-          }),
-        })
-        count++
-        setImported(count)
-      } catch { /* continue even if one fails */ }
-    }
+    const res = await fetch('/api/sessions/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workouts: toImport }),
+    })
+    const data = await res.json()
+    setImported(data.imported ?? toImport.length)
 
     setPhase('done')
   }
