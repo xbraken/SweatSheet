@@ -230,6 +230,9 @@ function RunDetailSheet({
   // ── Pace chart data ────────────────────────────────────────────────────────
   const distSamples = detail.distanceSamples ?? []
   const hasPace = distSamples.length > 3
+  // Use actual workout duration as x-axis end (GPS stops recording a few seconds before workout ends)
+  const durationSec = toSeconds(detail.duration) ?? (hasPace ? distSamples[distSamples.length - 1].time_offset_sec : 0)
+  const paceMaxT = hasPace ? Math.max(distSamples[distSamples.length - 1].time_offset_sec, durationSec) : durationSec
   const PACE_N = 120
   const paceValuesAll = hasPace ? normalizePaceSamples(distSamples, PACE_N) : []
   const validPaceValues = paceValuesAll.filter(v => v > 0)
@@ -260,7 +263,7 @@ function RunDetailSheet({
   const pHovY = pHovPace > 0 ? 10 + ((pHovPace - pYMin) / (pYMax - pYMin || 1)) * 68 : 78
   const pHovDist = hasPace ? distanceAtIdx(distSamples, pHovIdx, PACE_N) : 0
   const pHovTimeSec = hasPace
-    ? Math.round((pHovIdx / (PACE_N - 1)) * distSamples[distSamples.length - 1].time_offset_sec)
+    ? Math.round((pHovIdx / (PACE_N - 1)) * paceMaxT)
     : null
 
   // ── Best segments ──────────────────────────────────────────────────────────
@@ -342,7 +345,7 @@ function RunDetailSheet({
           {hasPace && (
             <div className="mt-5 bg-[#131313] rounded-2xl p-4">
               {(() => {
-                const maxT = distSamples[distSamples.length - 1].time_offset_sec
+                const maxT = paceMaxT
                 const interval = maxT > 1800 ? 600 : 300
                 const ticks: number[] = []
                 for (let t = interval; t < maxT - interval * 0.4; t += interval) ticks.push(t)

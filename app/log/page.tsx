@@ -583,7 +583,7 @@ export default function LogPage() {
                           <button onClick={() => updateSet(activeSet.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">remove</span>
                           </button>
-                          <span className="font-headline text-2xl font-black w-12 text-center">{activeSet.weight}</span>
+                          <span className="font-headline text-2xl font-black w-16 text-center">{activeSet.weight}</span>
                           <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">add</span>
                           </button>
@@ -609,7 +609,7 @@ export default function LogPage() {
                       type="range"
                       min={0}
                       max={300}
-                      step={0.5}
+                      step={2.5}
                       value={activeSet.weight}
                       onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value))}
                       className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
