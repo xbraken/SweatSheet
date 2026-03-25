@@ -366,8 +366,8 @@ function RunDetailSheet({
 
                 const pHovPaceLabel = pHovPace > 0 ? fmtPaceSec(pHovPace) : null
                 const inCompare = compareDetail && hasComparePace
-                const mainColor = inCompare ? '#ff9066' : '#4bdece'
-                const cmpColor = '#4bdece'
+                const mainColor = '#4bdece'
+                const cmpColor = '#c084fc'
 
                 return (
                   <>
@@ -388,7 +388,7 @@ function RunDetailSheet({
                           comparePaceAvgSec && (
                             <>
                               <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">{formatDate(compareDetail!.date)}</p>
-                              <span className="text-lg font-black font-headline text-[#4bdece]">
+                              <span className="text-lg font-black font-headline text-[#c084fc]">
                                 {fmtPaceSec(comparePaceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span>
                               </span>
                             </>
@@ -425,7 +425,7 @@ function RunDetailSheet({
                           )}
                           <span className="text-sm font-black font-headline" style={{ color: mainColor }}>{pHovPaceLabel} /km</span>
                           {inCompare && pHovComparePace > 0 && (
-                            <span className="text-sm font-black font-headline text-[#4bdece]">{fmtPaceSec(pHovComparePace)} /km</span>
+                            <span className="text-sm font-black font-headline text-[#c084fc]">{fmtPaceSec(pHovComparePace)} /km</span>
                           )}
                         </>
                       )}
@@ -475,8 +475,8 @@ function RunDetailSheet({
                         </>
                       )}
 
-                      {/* Hover scrubber */}
-                      {pacePts && (
+                      {/* Hover scrubber — only when actively hovering */}
+                      {pacePts && paceHoveredIdx !== null && (
                         <>
                           <line x1={pHovX} y1={0} x2={pHovX} y2={82} stroke={mainColor} strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
                           <circle cx={pHovX} cy={pHovY} r="4" fill={mainColor} />
@@ -533,16 +533,16 @@ function RunDetailSheet({
                             {paceAvgSec && <span className="text-[10px] font-bold" style={{ color: mainColor }}>{fmtPaceSec(paceAvgSec)} /km</span>}
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-0.5 bg-[#4bdece] rounded" />
+                            <div className="w-3 h-0.5 bg-[#c084fc] rounded" />
                             <span className="text-[10px] text-[#a48b83]">{formatDate(compareDetail!.date)}</span>
-                            {comparePaceAvgSec && <span className="text-[10px] font-bold text-[#4bdece]">{fmtPaceSec(comparePaceAvgSec)} /km</span>}
+                            {comparePaceAvgSec && <span className="text-[10px] font-bold text-[#c084fc]">{fmtPaceSec(comparePaceAvgSec)} /km</span>}
                           </div>
                         </div>
                         {paceAvgSec && comparePaceAvgSec && (() => {
                           const delta = paceAvgSec - comparePaceAvgSec
                           const isFaster = delta < 0  // main has lower sec/km = faster
                           return (
-                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${isFaster ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#ff9066]/20 text-[#ff9066]'}`}>
+                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${isFaster ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#c084fc]/20 text-[#c084fc]'}`}>
                               {isFaster ? `${fmtPaceSec(Math.abs(delta))} faster` : `${fmtPaceSec(Math.abs(delta))} slower`}
                             </div>
                           )
@@ -600,7 +600,7 @@ function RunDetailSheet({
                           {hTimeLabel && !compareDetail && <span className="text-[10px] text-[#a48b83]">{hTimeLabel}</span>}
                           <span className="text-sm font-black font-headline text-[#ff9066]">{hVal} bpm</span>
                           {hCompareVal !== null && compareValues.length > 0 && (
-                            <span className="text-sm font-black font-headline text-[#4bdece]">{hCompareVal} bpm</span>
+                            <span className="text-sm font-black font-headline text-[#c084fc]">{hCompareVal} bpm</span>
                           )}
                         </div>
                       )}
@@ -620,8 +620,8 @@ function RunDetailSheet({
                           <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
                         </linearGradient>
                         <linearGradient id="hrGradCmp" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#4bdece" stopOpacity="0.15" />
-                          <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
+                          <stop offset="0%" stopColor="#c084fc" stopOpacity="0.15" />
+                          <stop offset="100%" stopColor="#c084fc" stopOpacity="0" />
                         </linearGradient>
                       </defs>
 
@@ -635,7 +635,7 @@ function RunDetailSheet({
                       {comparePts && (
                         <>
                           <polygon points={`0,80 ${comparePts} 300,80`} fill="url(#hrGradCmp)" />
-                          <polyline points={comparePts} fill="none" stroke="#4bdece" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.7" />
+                          <polyline points={comparePts} fill="none" stroke="#c084fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.7" />
                         </>
                       )}
 
@@ -647,14 +647,14 @@ function RunDetailSheet({
                         </>
                       )}
 
-                      {/* Hover scrubber */}
-                      {mainPts && (
+                      {/* Hover scrubber — only when actively hovering */}
+                      {mainPts && chartHoveredIdx !== null && (
                         <>
                           <line x1={hX} y1={0} x2={hX} y2={82} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
                           <circle cx={hX} cy={hY} r="4" fill="#ff9066" />
                           {hCompareVal !== null && compareValues.length > 0 && (() => {
                             const cY = 80 - ((hCompareVal - yMin) / (yMax - yMin || 1)) * 68
-                            return <circle cx={hX} cy={cY} r="4" fill="#4bdece" />
+                            return <circle cx={hX} cy={cY} r="4" fill="#c084fc" />
                           })()}
                         </>
                       )}
@@ -712,16 +712,16 @@ function RunDetailSheet({
                       {mainAvg && <span className="text-[10px] font-bold text-[#ff9066]">{mainAvg} bpm</span>}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-0.5 bg-[#4bdece] rounded" />
+                      <div className="w-3 h-0.5 bg-[#c084fc] rounded" />
                       <span className="text-[10px] text-[#a48b83]">{formatDate(compareDetail.date)}</span>
-                      {compareAvg && <span className="text-[10px] font-bold text-[#4bdece]">{compareAvg} bpm</span>}
+                      {compareAvg && <span className="text-[10px] font-bold text-[#c084fc]">{compareAvg} bpm</span>}
                     </div>
                   </div>
                   {mainAvg && compareAvg && (() => {
                     const delta = compareAvg - mainAvg
                     const better = delta > 0 // compare is higher = current is lower = better
                     return (
-                      <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${better ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#ff9066]/20 text-[#ff9066]'}`}>
+                      <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${better ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#c084fc]/20 text-[#c084fc]'}`}>
                         {better ? `${delta} bpm lower` : `${Math.abs(delta)} bpm higher`}
                       </div>
                     )
