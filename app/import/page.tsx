@@ -38,17 +38,23 @@ function attr(xml: string, name: string): string {
   return m?.[1] ?? ''
 }
 
-/** Extract a numeric value from a WorkoutStatistics child element by HK type */
+/** Extract a numeric value from a WorkoutStatistics child element by HK type.
+ * Uses the LAST match because interval workouts repeat WorkoutStatistics per
+ * WorkoutActivity sub-element, with the overall totals at the end. */
 function statValue(xml: string, statType: string, valueAttr = 'sum'): number | null {
-  const m = xml.match(new RegExp(`<WorkoutStatistics[^>]*type="${statType}"[^>]*/>`))
-  if (!m) return null
-  const v = parseFloat(attr(m[0], valueAttr))
+  const re = new RegExp(`<WorkoutStatistics[^>]*type="${statType}"[^>]*/>`, 'g')
+  let m: RegExpExecArray | null, last: RegExpExecArray | null = null
+  while ((m = re.exec(xml)) !== null) last = m
+  if (!last) return null
+  const v = parseFloat(attr(last[0], valueAttr))
   return isNaN(v) || v === 0 ? null : v
 }
 
 function statUnit(xml: string, statType: string): string {
-  const m = xml.match(new RegExp(`<WorkoutStatistics[^>]*type="${statType}"[^>]*/>`))
-  return m ? attr(m[0], 'unit') : ''
+  const re = new RegExp(`<WorkoutStatistics[^>]*type="${statType}"[^>]*/>`, 'g')
+  let m: RegExpExecArray | null, last: RegExpExecArray | null = null
+  while ((m = re.exec(xml)) !== null) last = m
+  return last ? attr(last[0], 'unit') : ''
 }
 
 function toSeconds(str: string | null): number | null {
@@ -98,7 +104,9 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   if (distKm < 0.5 && !(type in SUPPORTED) && durationMin < 5) return null
 
   // Detect indoor runs via metadata
-  const isIndoor = /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
+  // Apple Watch uses "HKIndoorWorkout"; some older exports use "HKMetadataKeyIndoorWorkout"
+  const isIndoor = /MetadataEntry[^>]*key="HKIndoorWorkout"[^>]*value="1"/.test(xml) ||
+    /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
   const activity = SUPPORTED[type] ?? (isIndoor ? 'Indoor run' : 'Outdoor run')
 
   // Calories
@@ -106,9 +114,11 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   if (caloriesRaw === 0) caloriesRaw = statValue(xml, 'HKQuantityTypeIdentifierActiveEnergyBurned') ?? 0
   const calories = caloriesRaw > 0 ? Math.round(caloriesRaw) : null
 
-  // HR: avg, min, max from WorkoutStatistics
-  const hrMatch = xml.match(/WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*average="([^"]*)"/)
-  const avgHr = hrMatch ? Math.round(parseFloat(hrMatch[1])) || null : null
+  // HR: avg, min, max from WorkoutStatistics (last match = overall total, not per-interval)
+  const hrRe = /WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*average="([^"]*)"/g
+  let hrM: RegExpExecArray | null, lastHrM: RegExpExecArray | null = null
+  while ((hrM = hrRe.exec(xml)) !== null) lastHrM = hrM
+  const avgHr = lastHrM ? Math.round(parseFloat(lastHrM[1])) || null : null
   const hrMinRaw = statValue(xml, 'HKQuantityTypeIdentifierHeartRate', 'minimum')
   const hrMaxRaw = statValue(xml, 'HKQuantityTypeIdentifierHeartRate', 'maximum')
   const hrMin = hrMinRaw ? Math.round(hrMinRaw) : null
