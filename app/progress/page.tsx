@@ -4,12 +4,30 @@ import BottomNav from '@/components/BottomNav'
 
 type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number }
 type CardioEntry = {
+  cardio_id: number
   date: string
   activity: string
   distance: string | null
   duration: string | null
   pace: string | null
   calories: number | null
+  heart_rate: number | null
+}
+
+type HrSample = { time_offset_sec: number; hr_bpm: number }
+
+type RunDetail = {
+  cardio_id: number
+  activity: string
+  date: string
+  distance: string | null
+  duration: string | null
+  pace: string | null
+  calories: number | null
+  heart_rate: number | null
+  hr_min: number | null
+  hr_max: number | null
+  hrSamples: HrSample[]
 }
 type CalendarDay = {
   date: string
@@ -59,6 +77,320 @@ function trendPercent(values: number[], lowerIsBetter = false): number | null {
   return lowerIsBetter ? -pct : pct
 }
 
+// ── Run Detail Sheet ──────────────────────────────────────────────────────────
+function RunDetailSheet({
+  runId,
+  allCardio,
+  onClose,
+}: {
+  runId: number
+  allCardio: CardioEntry[]
+  onClose: () => void
+}) {
+  const [detail, setDetail] = useState<RunDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [compareId, setCompareId] = useState<number | null>(null)
+  const [compareDetail, setCompareDetail] = useState<RunDetail | null>(null)
+  const [showComparePicker, setShowComparePicker] = useState(false)
+  const [chartHoveredIdx, setChartHoveredIdx] = useState<number | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/run/${runId}`).then(r => r.json()).then(d => { setDetail(d); setLoading(false) })
+  }, [runId])
+
+  useEffect(() => {
+    if (!compareId) { setCompareDetail(null); return }
+    fetch(`/api/run/${compareId}`).then(r => r.json()).then(setCompareDetail)
+  }, [compareId])
+
+  // Normalize HR curve to N evenly-spaced points by % completion
+  function normalizeSamples(samples: HrSample[], n = 120): number[] {
+    if (samples.length < 2) return samples.map(s => s.hr_bpm)
+    const maxT = samples[samples.length - 1].time_offset_sec
+    return Array.from({ length: n }, (_, i) => {
+      const target = (i / (n - 1)) * maxT
+      let j = samples.findIndex(s => s.time_offset_sec >= target)
+      if (j <= 0) return samples[Math.max(0, j)].hr_bpm
+      const a = samples[j - 1], b = samples[j]
+      const t = (target - a.time_offset_sec) / (b.time_offset_sec - a.time_offset_sec)
+      return Math.round(a.hr_bpm + t * (b.hr_bpm - a.hr_bpm))
+    })
+  }
+
+  function buildPts(values: number[], yMin: number, yMax: number): string {
+    const range = yMax - yMin || 1
+    return values.map((v, i) => {
+      const x = ((i / Math.max(values.length - 1, 1)) * 300).toFixed(1)
+      const y = (80 - ((v - yMin) / range) * 68).toFixed(1)
+      return `${x},${y}`
+    }).join(' ')
+  }
+
+  const handlePointer = useCallback((e: React.PointerEvent<SVGSVGElement>, n: number) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setChartHoveredIdx(Math.max(0, Math.min(n - 1, Math.round(((e.clientX - rect.left) / rect.width) * (n - 1)))))
+  }, [])
+
+  if (loading) {
+    return (
+      <>
+        <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
+        <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-[#4bdece] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </>
+    )
+  }
+
+  if (!detail) return null
+
+  const hasHr = detail.hrSamples.length > 1
+  const hasCompareHr = compareDetail && compareDetail.hrSamples.length > 1
+
+  // Build chart data
+  const mainValues = hasHr ? normalizeSamples(detail.hrSamples) : []
+  const compareValues = hasCompareHr ? normalizeSamples(compareDetail!.hrSamples) : []
+
+  const allValues = [...mainValues, ...compareValues]
+  const yMin = allValues.length > 0 ? Math.max(40, Math.min(...allValues) - 8) : 60
+  const yMax = allValues.length > 0 ? Math.min(220, Math.max(...allValues) + 8) : 200
+
+  const mainPts = mainValues.length > 1 ? buildPts(mainValues, yMin, yMax) : null
+  const comparePts = compareValues.length > 1 ? buildPts(compareValues, yMin, yMax) : null
+
+  const mainAvg = hasHr ? Math.round(mainValues.reduce((a, b) => a + b, 0) / mainValues.length) : (detail.heart_rate ?? null)
+  const compareAvg = compareValues.length > 0 ? Math.round(compareValues.reduce((a, b) => a + b, 0) / compareValues.length) : (compareDetail?.heart_rate ?? null)
+
+  const hIdx = chartHoveredIdx ?? Math.floor((mainValues.length - 1) / 2)
+  const hVal = mainValues[hIdx]
+  const hCompareVal = compareValues.length > 0 ? compareValues[Math.round((hIdx / (mainValues.length - 1)) * (compareValues.length - 1))] : null
+  const hX = mainValues.length > 1 ? (hIdx / (mainValues.length - 1)) * 300 : 150
+  const hY = hVal !== undefined ? 80 - ((hVal - yMin) / (yMax - yMin || 1)) * 68 : 40
+
+  // Similar-pace runs for comparison picker (same activity, ±45s pace)
+  const detailPaceSec = toSeconds(detail.pace)
+  const similarRuns = allCardio.filter(r => {
+    if (!r.cardio_id || r.cardio_id === runId) return false
+    if (r.activity !== detail.activity) return false
+    if (!detailPaceSec) return true
+    const rPace = toSeconds(r.pace)
+    return rPace ? Math.abs(rPace - detailPaceSec) <= 45 : false
+  })
+
+  const durationLabel = detail.duration ?? ''
+  const distLabel = detail.distance ? `${parseFloat(detail.distance).toFixed(2)} km` : ''
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-[#201f1f] flex items-start justify-between shrink-0">
+          <div>
+            <p className="font-label text-[10px] uppercase tracking-widest text-[#4bdece] mb-1">{detail.activity}</p>
+            <h2 className="font-headline text-xl font-black text-[#e5e2e1]">{formatDate(detail.date)}</h2>
+            <div className="flex gap-3 mt-2 flex-wrap">
+              {distLabel && <span className="text-sm font-bold text-[#e5e2e1]">{distLabel}</span>}
+              {durationLabel && <span className="text-sm text-[#a48b83]">{durationLabel}</span>}
+              {detail.pace && <span className="text-sm text-[#a48b83]">{detail.pace} /km</span>}
+              {detail.calories && <span className="text-sm text-[#a48b83]">{detail.calories} kcal</span>}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1">
+            <span className="material-symbols-outlined text-[#a48b83]">close</span>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-32 md:pb-8">
+          {/* HR badges */}
+          {(detail.heart_rate || detail.hr_min || detail.hr_max) && (
+            <div className="flex gap-2 mt-4 flex-wrap">
+              {mainAvg && (
+                <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+                  <span className="text-xl font-black font-headline text-[#ff9066]">{mainAvg}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">avg bpm</span>
+                </div>
+              )}
+              {detail.hr_min && (
+                <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+                  <span className="text-xl font-black font-headline text-[#e5e2e1]">{detail.hr_min}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">min bpm</span>
+                </div>
+              )}
+              {detail.hr_max && (
+                <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+                  <span className="text-xl font-black font-headline text-[#e5e2e1]">{detail.hr_max}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">max bpm</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* HR Chart */}
+          {hasHr ? (
+            <div className="mt-5 bg-[#131313] rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                  {compareDetail ? 'HR comparison (% completion)' : 'Heart rate over time'}
+                </p>
+                {chartHoveredIdx !== null && hVal !== undefined && (
+                  <span className="text-sm font-black font-headline text-[#ff9066]">{hVal} bpm</span>
+                )}
+              </div>
+
+              <svg
+                className="w-full h-36"
+                viewBox="0 0 300 90"
+                preserveAspectRatio="none"
+                style={{ touchAction: 'none' }}
+                onPointerMove={e => handlePointer(e, mainValues.length)}
+                onPointerLeave={() => setChartHoveredIdx(null)}
+              >
+                <defs>
+                  <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ff9066" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="hrGradCmp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4bdece" stopOpacity="0.15" />
+                    <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Avg HR dashed line for main run */}
+                {mainAvg && (() => {
+                  const avgY = 80 - ((mainAvg - yMin) / (yMax - yMin || 1)) * 68
+                  return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke="#ff9066" strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.4" />
+                })()}
+
+                {/* Compare run fill + line */}
+                {comparePts && (
+                  <>
+                    <polygon points={`0,80 ${comparePts} 300,80`} fill="url(#hrGradCmp)" />
+                    <polyline points={comparePts} fill="none" stroke="#4bdece" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.7" />
+                  </>
+                )}
+
+                {/* Main run fill + line */}
+                {mainPts && (
+                  <>
+                    <polygon points={`0,80 ${mainPts} 300,80`} fill="url(#hrGrad)" />
+                    <polyline points={mainPts} fill="none" stroke="#ff9066" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </>
+                )}
+
+                {/* Hover scrubber */}
+                {mainPts && (
+                  <>
+                    <line x1={hX} y1={0} x2={hX} y2={90} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
+                    <circle cx={hX} cy={hY} r="4" fill="#ff9066" />
+                    {hCompareVal !== null && compareValues.length > 0 && (() => {
+                      const cY = 80 - ((hCompareVal - yMin) / (yMax - yMin || 1)) * 68
+                      return <circle cx={hX} cy={cY} r="4" fill="#4bdece" />
+                    })()}
+                  </>
+                )}
+
+                {/* Y axis labels */}
+                <text x={3} y={14} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{yMax}</text>
+                <text x={3} y={79} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{yMin}</text>
+              </svg>
+
+              {/* Legend when comparing */}
+              {compareDetail && (
+                <div className="flex items-center justify-between mt-3">
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 bg-[#ff9066] rounded" />
+                      <span className="text-[10px] text-[#a48b83]">{formatDate(detail.date)}</span>
+                      {mainAvg && <span className="text-[10px] font-bold text-[#ff9066]">{mainAvg} bpm</span>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 bg-[#4bdece] rounded" />
+                      <span className="text-[10px] text-[#a48b83]">{formatDate(compareDetail.date)}</span>
+                      {compareAvg && <span className="text-[10px] font-bold text-[#4bdece]">{compareAvg} bpm</span>}
+                    </div>
+                  </div>
+                  {mainAvg && compareAvg && (() => {
+                    const delta = compareAvg - mainAvg
+                    const better = delta > 0 // compare is higher = current is lower = better
+                    return (
+                      <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${better ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#ff9066]/20 text-[#ff9066]'}`}>
+                        {better ? `${delta} bpm lower` : `${Math.abs(delta)} bpm higher`}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 bg-[#131313] rounded-2xl p-5 text-center">
+              <span className="material-symbols-outlined text-3xl text-[#353534]">monitor_heart</span>
+              <p className="text-sm text-[#a48b83] mt-2">No HR data — re-import from Apple Health to get your full heart rate curve</p>
+            </div>
+          )}
+
+          {/* Compare button */}
+          <div className="mt-4">
+            {!showComparePicker && !compareDetail && (
+              <button
+                onClick={() => setShowComparePicker(true)}
+                className="w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base text-[#4bdece]">compare_arrows</span>
+                Compare with another run
+              </button>
+            )}
+
+            {compareDetail && (
+              <button
+                onClick={() => { setCompareId(null); setCompareDetail(null) }}
+                className="w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#a48b83] text-sm hover:bg-[#201f1f] transition-colors"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+                Remove comparison
+              </button>
+            )}
+
+            {showComparePicker && !compareDetail && (
+              <div className="bg-[#131313] rounded-2xl border border-[#201f1f] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#201f1f]">
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                    {similarRuns.length > 0 ? `Similar pace runs (±45s)` : 'All runs'}
+                  </p>
+                  <button onClick={() => setShowComparePicker(false)}>
+                    <span className="material-symbols-outlined text-[#a48b83] text-sm">close</span>
+                  </button>
+                </div>
+                {(similarRuns.length > 0 ? similarRuns : allCardio.filter(r => r.cardio_id !== runId && r.activity === detail.activity)).slice(0, 20).map(r => (
+                  <button
+                    key={r.cardio_id}
+                    onClick={() => { setCompareId(r.cardio_id); setShowComparePicker(false) }}
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#201f1f] transition-colors text-left border-b border-[#201f1f]/50 last:border-0"
+                  >
+                    <div>
+                      <p className="text-[10px] text-[#a48b83] font-label uppercase">{formatDate(r.date)}</p>
+                      <p className="font-headline font-bold text-sm text-[#e5e2e1]">{r.distance ? `${r.distance} km` : r.activity}</p>
+                    </div>
+                    <div className="text-right">
+                      {r.pace && <p className="text-sm font-bold text-[#4bdece]">{r.pace} /km</p>}
+                      {r.heart_rate && <p className="text-xs text-[#a48b83]">avg {r.heart_rate} bpm</p>}
+                    </div>
+                  </button>
+                ))}
+                {similarRuns.length === 0 && allCardio.filter(r => r.cardio_id !== runId && r.activity === detail.activity).length === 0 && (
+                  <p className="px-4 py-4 text-sm text-[#a48b83]">No other {detail.activity} runs to compare</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function ProgressPage() {
   const [tab, setTab] = useState<'lifts' | 'cardio'>(() =>
     (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_tab') as 'lifts' | 'cardio') || 'lifts'
@@ -94,6 +426,7 @@ export default function ProgressPage() {
   const [bwInput, setBwInput] = useState('')
   const [bwSaving, setBwSaving] = useState(false)
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
 
   // Persist UI preferences to localStorage
   useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
@@ -751,7 +1084,11 @@ export default function ProgressPage() {
               sortedCardio.map((s, i) => {
                 const isFastest = !!(fastestRunEntry && s.date === fastestRunEntry.date && s.pace === fastestRunEntry.pace)
                 return (
-                  <div key={i} className={`bg-surface-container p-5 flex justify-between items-start hover:bg-surface-container-high transition-all cursor-pointer rounded-lg ${isFastest ? 'border border-[#4bdece]/30' : ''}`}>
+                  <button
+                    key={i}
+                    onClick={() => s.cardio_id && setSelectedRunId(s.cardio_id)}
+                    className={`w-full bg-surface-container p-5 flex justify-between items-start hover:bg-surface-container-high active:scale-[0.99] transition-all rounded-lg text-left ${isFastest ? 'border border-[#4bdece]/30' : ''}`}
+                  >
                     <div className="flex flex-col gap-1 flex-1 min-w-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -767,9 +1104,9 @@ export default function ProgressPage() {
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{s.activity}</p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
-                      {s.calories && <p className="text-xs text-on-surface-variant">{s.calories} kcal</p>}
+                      {s.heart_rate && <p className="text-xs text-[#ff9066]">♥ {s.heart_rate} avg</p>}
                     </div>
-                  </div>
+                  </button>
                 )
               })
             ) : (
@@ -900,6 +1237,14 @@ export default function ProgressPage() {
       </section>
 
       <BottomNav />
+
+      {selectedRunId !== null && (
+        <RunDetailSheet
+          runId={selectedRunId}
+          allCardio={cardioHistory as CardioEntry[]}
+          onClose={() => setSelectedRunId(null)}
+        />
+      )}
     </main>
   )
 }

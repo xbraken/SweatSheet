@@ -12,6 +12,11 @@ type WorkoutPayload = {
   pace: string | null
   calories: number | null
   heartRate: number | null
+  hrMin?: number | null
+  hrMax?: number | null
+  startedAt?: string | null
+  endedAt?: string | null
+  hrSamples?: Array<{ offsetSec: number; bpm: number }>
 }
 
 export async function POST(req: NextRequest) {
@@ -40,8 +45,8 @@ export async function POST(req: NextRequest) {
       })
       const blockId = blockRes.rows[0].id as number
 
-      await db.execute({
-        sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace, calories, heart_rate, imported_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      const cardioRes = await db.execute({
+        sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace, calories, heart_rate, hr_min, hr_max, started_at, ended_at, imported_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
         args: [
           blockId,
           w.activity,
@@ -50,9 +55,24 @@ export async function POST(req: NextRequest) {
           w.pace || null,
           w.calories || null,
           w.heartRate || null,
+          w.hrMin || null,
+          w.hrMax || null,
+          w.startedAt || null,
+          w.endedAt || null,
           'apple_health',
         ],
       })
+      const cardioId = cardioRes.rows[0].id as number
+
+      // Batch insert HR samples if present
+      if (w.hrSamples && w.hrSamples.length > 0) {
+        await db.batch(
+          w.hrSamples.map(s => ({
+            sql: 'INSERT INTO cardio_hr_samples (cardio_id, time_offset_sec, hr_bpm) VALUES (?, ?, ?)',
+            args: [cardioId, s.offsetSec, s.bpm],
+          }))
+        )
+      }
       count++
     } catch { /* skip failed rows, continue */ }
   }

@@ -11,7 +11,12 @@ type ParsedWorkout = {
   pace: string | null
   calories: number | null
   heartRate: number | null
+  hrMin: number | null
+  hrMax: number | null
+  startedAt: string
+  endedAt: string
   sourceName: string
+  hrSamples: Array<{ offsetSec: number; bpm: number }>
 }
 
 type WorkoutRow = ParsedWorkout & {
@@ -56,7 +61,9 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   const type = attr(xml, 'workoutActivityType')
   if (!(type in SUPPORTED)) return null
 
-  const startDate = attr(xml, 'startDate').split(' ')[0]
+  const startedAt = attr(xml, 'startDate') // full timestamp e.g. "2024-01-15 08:30:00 +0000"
+  const endedAt = attr(xml, 'endDate')
+  const startDate = startedAt.split(' ')[0]
   if (!startDate) return null
 
   // Detect indoor runs via metadata
@@ -67,7 +74,6 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   const durationMin = parseFloat(attr(xml, 'duration')) || 0
 
   // Distance: top-level attribute first, fall back to WorkoutStatistics
-  // (indoor runs store distance via accelerometer in WorkoutStatistics, not totalDistance)
   let rawDist = parseFloat(attr(xml, 'totalDistance')) || 0
   let distUnit = attr(xml, 'totalDistanceUnit')
   if (rawDist === 0) {
@@ -79,13 +85,19 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   }
   const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
 
-  // Calories: top-level attribute first, fall back to WorkoutStatistics active energy
+  // Calories
   let caloriesRaw = parseFloat(attr(xml, 'totalEnergyBurned')) || 0
   if (caloriesRaw === 0) caloriesRaw = statValue(xml, 'HKQuantityTypeIdentifierActiveEnergyBurned') ?? 0
   const calories = caloriesRaw > 0 ? Math.round(caloriesRaw) : null
 
+  // HR: avg, min, max from WorkoutStatistics
   const hrMatch = xml.match(/WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*average="([^"]*)"/)
   const avgHr = hrMatch ? Math.round(parseFloat(hrMatch[1])) || null : null
+  const hrMinRaw = statValue(xml, 'HKQuantityTypeIdentifierHeartRate', 'minimum')
+  const hrMaxRaw = statValue(xml, 'HKQuantityTypeIdentifierHeartRate', 'maximum')
+  const hrMin = hrMinRaw ? Math.round(hrMinRaw) : null
+  const hrMax = hrMaxRaw ? Math.round(hrMaxRaw) : null
+
   const sourceName = attr(xml, 'sourceName') || 'Unknown'
 
   const totalSec = Math.round(durationMin * 60)
@@ -109,8 +121,26 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
     pace,
     calories,
     heartRate: avgHr,
+    hrMin,
+    hrMax,
+    startedAt,
+    endedAt,
     sourceName,
+    hrSamples: [], // populated in streamParseAppleHealth after matching HR records
   }
+}
+
+/** Parse a single HKQuantityTypeIdentifierHeartRate Record element */
+function parseHrRecord(xml: string): { ts: number; bpm: number } | null {
+  // Only Apple Watch HR (filters out iPhone passive sensing)
+  const source = attr(xml, 'sourceName').toLowerCase()
+  if (!source.includes('watch')) return null
+  const dateStr = attr(xml, 'startDate')
+  const value = parseFloat(attr(xml, 'value'))
+  if (!dateStr || isNaN(value) || value <= 0) return null
+  const ts = new Date(dateStr).getTime()
+  if (isNaN(ts)) return null
+  return { ts, bpm: Math.round(value) }
 }
 
 /** Stream-parse the XML in 512 KB chunks — never loads the full file into memory */
@@ -119,6 +149,7 @@ async function streamParseAppleHealth(
   onProgress: (pct: number) => void,
 ): Promise<ParsedWorkout[]> {
   const workouts: ParsedWorkout[] = []
+  const hrRecords: Array<{ ts: number; bpm: number }> = []
   const decoder = new TextDecoder('utf-8')
   const reader = file.stream().getReader()
   let buffer = ''
@@ -133,15 +164,36 @@ async function streamParseAppleHealth(
       onProgress(bytesRead / file.size)
       buffer += decoder.decode(value, { stream: true })
 
-      // Extract every complete <Workout …>…</Workout> block from the buffer
       let searchFrom = 0
       while (true) {
-        const start = buffer.indexOf('<Workout ', searchFrom)
-        if (start === -1) break
+        const wIdx = buffer.indexOf('<Workout ', searchFrom)
+        const hrIdx = buffer.indexOf('<Record type="HKQuantityTypeIdentifierHeartRate"', searchFrom)
 
+        if (wIdx === -1 && hrIdx === -1) break
+
+        // Process whichever element starts earlier in the buffer
+        if (hrIdx !== -1 && (wIdx === -1 || hrIdx < wIdx)) {
+          // HR record — find the end of this element
+          const gtPos = buffer.indexOf('>', hrIdx)
+          if (gtPos === -1) { buffer = buffer.slice(hrIdx); searchFrom = 0; break }
+          let hrEnd: number
+          if (buffer[gtPos - 1] === '/') {
+            hrEnd = gtPos + 1 // self-closing <Record ... />
+          } else {
+            const closeTag = buffer.indexOf('</Record>', gtPos)
+            if (closeTag === -1) { buffer = buffer.slice(hrIdx); searchFrom = 0; break }
+            hrEnd = closeTag + 9
+          }
+          const hr = parseHrRecord(buffer.slice(hrIdx, hrEnd))
+          if (hr) hrRecords.push(hr)
+          searchFrom = hrEnd
+          continue
+        }
+
+        // Workout block
+        const start = wIdx
         const end = buffer.indexOf('</Workout>', start)
         if (end === -1) {
-          // Block not yet complete — keep from start onwards and wait for more data
           buffer = buffer.slice(start)
           searchFrom = 0
           break
@@ -153,12 +205,29 @@ async function streamParseAppleHealth(
         searchFrom = end + '</Workout>'.length
       }
 
-      // Trim fully-processed content; if no pending Workout tag, keep only a small tail
+      // Trim fully-processed content
       if (searchFrom > 0) buffer = buffer.slice(searchFrom)
-      if (!buffer.includes('<Workout ') && buffer.length > 2000) buffer = buffer.slice(-500)
+      const hasPending = buffer.includes('<Workout ') || buffer.includes('<Record type="HKQuantityTypeIdentifierHeartRate"')
+      if (!hasPending && buffer.length > 2000) buffer = buffer.slice(-2000)
     }
   } finally {
     reader.releaseLock()
+  }
+
+  // Match collected HR records to their workouts by timestamp
+  for (const workout of workouts) {
+    const startTs = new Date(workout.startedAt).getTime()
+    const endTs = new Date(workout.endedAt).getTime()
+    if (!startTs || !endTs) continue
+    workout.hrSamples = hrRecords
+      .filter(r => r.ts >= startTs && r.ts <= endTs)
+      .map(r => ({ offsetSec: Math.round((r.ts - startTs) / 1000), bpm: r.bpm }))
+      .sort((a, b) => a.offsetSec - b.offsetSec)
+    // Fill min/max from samples if WorkoutStatistics didn't have them
+    if (workout.hrSamples.length > 0) {
+      if (!workout.hrMin) workout.hrMin = Math.min(...workout.hrSamples.map(s => s.bpm))
+      if (!workout.hrMax) workout.hrMax = Math.max(...workout.hrSamples.map(s => s.bpm))
+    }
   }
 
   return workouts.sort((a, b) => b.date.localeCompare(a.date))

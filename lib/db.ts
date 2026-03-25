@@ -75,5 +75,19 @@ export async function initDb() {
   try {
     await db.execute(`ALTER TABLE users ADD COLUMN unit_pref TEXT NOT NULL DEFAULT 'metric'`)
   } catch { /* column already exists */ }
+
+  // HR detail columns for cardio rows
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN hr_min INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN hr_max INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN started_at TEXT`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN ended_at TEXT`) } catch { /* exists */ }
+
+  // HR samples over time (one row per ~5s reading during a workout)
+  await db.execute(`CREATE TABLE IF NOT EXISTS cardio_hr_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cardio_id INTEGER NOT NULL REFERENCES cardio(id) ON DELETE CASCADE,
+    time_offset_sec INTEGER NOT NULL,
+    hr_bpm INTEGER NOT NULL
+  )`)
 }
 
