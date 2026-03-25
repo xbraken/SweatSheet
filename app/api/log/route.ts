@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db, initDb } from '@/lib/db'
+import { getSession } from '@/lib/auth'
+
+await initDb()
+
+/** GET — return today's logged blocks for the log page */
+export async function GET() {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const today = new Date().toISOString().split('T')[0]
+
+  const liftRes = await db.execute({
+    sql: `SELECT b.id as block_id, st.exercise,
+            COUNT(st.id) as set_count,
+            MAX(st.weight) as max_weight
+          FROM blocks b
+          JOIN sessions s ON b.session_id = s.id
+          JOIN sets st ON st.block_id = b.id
+          WHERE s.user_id = ? AND s.date = ? AND b.type = 'lift'
+          GROUP BY b.id, st.exercise
+          ORDER BY b.id DESC`,
+    args: [session.userId, today],
+  })
+
+  const cardioRes = await db.execute({
+    sql: `SELECT b.id as block_id, c.activity, c.distance, c.duration, c.pace
+          FROM blocks b
+          JOIN sessions s ON b.session_id = s.id
+          JOIN cardio c ON c.block_id = b.id
+          WHERE s.user_id = ? AND s.date = ?
+          ORDER BY b.id DESC`,
+    args: [session.userId, today],
+  })
+
+  return NextResponse.json({ lifts: liftRes.rows, cardio: cardioRes.rows })
+}
+
+/** POST — save one exercise or cardio block, reusing today's session */
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json()
+  const today = new Date().toISOString().split('T')[0]
+
+  try {
+    // Find or create today's session
+    let sessionId: number
+    const existing = await db.execute({
+      sql: 'SELECT id FROM sessions WHERE user_id = ? AND date = ? LIMIT 1',
+      args: [session.userId, today],
+    })
+    if (existing.rows.length > 0) {
+      sessionId = existing.rows[0].id as number
+    } else {
+      const created = await db.execute({
+        sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
+        args: [session.userId, today],
+      })
+      sessionId = created.rows[0].id as number
+    }
+
+    // Get next position
+    const posRes = await db.execute({
+      sql: 'SELECT COUNT(*) as cnt FROM blocks WHERE session_id = ?',
+      args: [sessionId],
+    })
+    const position = posRes.rows[0].cnt as number
+
+    if (body.type === 'lift') {
+      const { exercise, sets } = body
+      const doneSets = sets.filter((s: { done: boolean }) => s.done)
+      if (!exercise || doneSets.length === 0) {
+        return NextResponse.json({ error: 'No completed sets' }, { status: 400 })
+      }
+
+      const blockRes = await db.execute({
+        sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
+        args: [sessionId, 'lift', position],
+      })
+      const blockId = blockRes.rows[0].id as number
+
+      for (let j = 0; j < doneSets.length; j++) {
+        const s = doneSets[j]
+        await db.execute({
+          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position) VALUES (?, ?, ?, ?, ?)',
+          args: [blockId, exercise, s.weight, s.reps, j],
+        })
+      }
+
+      // PR detection
+      const maxNew = Math.max(...doneSets.map((s: { weight: number }) => s.weight))
+      const prevMax = await db.execute({
+        sql: `SELECT MAX(st.weight) as max_w FROM sets st
+              JOIN blocks b ON st.block_id = b.id
+              JOIN sessions s ON b.session_id = s.id
+              WHERE st.exercise = ? AND s.user_id = ? AND b.id != ?`,
+        args: [exercise, session.userId, blockId],
+      })
+      const prev = prevMax.rows[0].max_w as number | null
+      const isPr = prev === null || maxNew > prev
+
+      return NextResponse.json({ ok: true, blockId, isPr, exercise, weight: maxNew })
+    } else {
+      // Cardio
+      const { activity, distance, time, pace } = body
+      const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'cardio' : 'run'
+
+      const blockRes = await db.execute({
+        sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
+        args: [sessionId, blockType, position],
+      })
+      const blockId = blockRes.rows[0].id as number
+
+      await db.execute({
+        sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace) VALUES (?, ?, ?, ?, ?)',
+        args: [blockId, activity, distance || null, time || null, pace || null],
+      })
+
+      return NextResponse.json({ ok: true, blockId })
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+/** DELETE — remove a block (and its sets/cardio) from today */
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { blockId } = await req.json()
+  if (!blockId) return NextResponse.json({ error: 'blockId required' }, { status: 400 })
+
+  // Verify block belongs to this user
+  const check = await db.execute({
+    sql: `SELECT b.id FROM blocks b
+          JOIN sessions s ON b.session_id = s.id
+          WHERE b.id = ? AND s.user_id = ?`,
+    args: [blockId, session.userId],
+  })
+  if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  await db.execute({ sql: 'DELETE FROM sets WHERE block_id = ?', args: [blockId] })
+  await db.execute({ sql: 'DELETE FROM cardio WHERE block_id = ?', args: [blockId] })
+  await db.execute({ sql: 'DELETE FROM blocks WHERE id = ?', args: [blockId] })
+
+  return NextResponse.json({ ok: true })
+}

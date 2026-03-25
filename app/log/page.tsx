@@ -1,15 +1,13 @@
 'use client'
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
 import { EXERCISES, CATEGORIES, type ExerciseCategory } from '@/lib/exercises'
 
 type SetRow = { id: number; weight: number; reps: number; done: boolean }
-type LiftBlock = { id: number; type: 'lift'; exercise: string; sets: SetRow[] }
-type CardioBlock = { id: number; type: 'cardio'; activity: string; distance: string; time: string; pace: string }
-type Block = LiftBlock | CardioBlock
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
+type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number }
+type LoggedCardio = { block_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 
 const REST_OPTIONS = [
   { label: 'Off', value: 0 },
@@ -35,7 +33,7 @@ function calcPace(distStr: string, timeStr: string): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// ── Inline Rest Timer Button ──────────────────────────────────────────────────
+// ── Rest Timer Button ─────────────────────────────────────────────────────────
 function RestButton({ seconds, total, onSkip }: { seconds: number; total: number; onSkip: () => void }) {
   const elapsed = ((total - seconds) / total) * 100
   const m = Math.floor(seconds / 60)
@@ -45,110 +43,35 @@ function RestButton({ seconds, total, onSkip }: { seconds: number; total: number
       onClick={onSkip}
       className="relative w-full py-3.5 rounded-xl font-headline font-bold text-sm overflow-hidden flex items-center justify-center gap-2 text-[#a48b83] border border-[#353534]"
     >
-      {/* growing fill */}
       <span
         className="absolute inset-0 bg-[#ff9066]/20"
         style={{ transform: `scaleX(${elapsed / 100})`, transformOrigin: 'left', transition: 'transform 1s linear' }}
       />
-      <span className="material-symbols-outlined text-base text-[#ff9066]">timer</span>
-      <span className="relative">
-        Resting {m}:{String(s).padStart(2, '0')} — tap to skip
-      </span>
+      <span className="material-symbols-outlined text-base text-[#ff9066] relative">timer</span>
+      <span className="relative">Resting {m}:{String(s).padStart(2, '0')} — tap to skip</span>
     </button>
   )
 }
 
 // ── PR Toast ──────────────────────────────────────────────────────────────────
-function PrToast({ prs, onDone }: { prs: { exercise: string; weight: number }[]; onDone: () => void }) {
+function PrToast({ exercise, weight, onDone }: { exercise: string; weight: number; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 3500)
     return () => clearTimeout(t)
   }, [onDone])
   return (
-    <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center">
-      {prs.map((pr, i) => (
-        <div key={i} className="bg-[#ff9066] text-[#752805] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 font-headline font-bold text-sm">
-          <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
-          New PR! {pr.exercise} — {pr.weight} kg
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Add Block Sheet ───────────────────────────────────────────────────────────
-function AddBlockSheet({ onAdd, onClose }: {
-  onAdd: (type: 'lift' | 'run' | 'cycle' | 'walk') => void
-  onClose: () => void
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-28 md:pb-6 shadow-2xl">
-        <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
-        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Add to session</p>
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={() => { onAdd('lift'); onClose() }}
-            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-[#ff9066]/10 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[#ff9066] text-2xl">fitness_center</span>
-            </div>
-            <div>
-              <p className="font-headline font-bold text-[#e5e2e1]">Lift exercise</p>
-              <p className="text-xs text-[#a48b83] mt-0.5">Track sets, weight and reps</p>
-            </div>
-          </button>
-          <button
-            onClick={() => { onAdd('run'); onClose() }}
-            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-[#4bdece]/10 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[#4bdece] text-2xl">directions_run</span>
-            </div>
-            <div>
-              <p className="font-headline font-bold text-[#e5e2e1]">Run</p>
-              <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
-            </div>
-          </button>
-          <button
-            onClick={() => { onAdd('cycle'); onClose() }}
-            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-[#4bdece]/10 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[#4bdece] text-2xl">directions_bike</span>
-            </div>
-            <div>
-              <p className="font-headline font-bold text-[#e5e2e1]">Cycle</p>
-              <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
-            </div>
-          </button>
-          <button
-            onClick={() => { onAdd('walk'); onClose() }}
-            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-[#4bdece]/10 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[#4bdece] text-2xl">directions_walk</span>
-            </div>
-            <div>
-              <p className="font-headline font-bold text-[#e5e2e1]">Walk</p>
-              <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
-            </div>
-          </button>
-        </div>
+    <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50">
+      <div className="bg-[#ff9066] text-[#752805] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 font-headline font-bold text-sm">
+        <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
+        New PR! {exercise} — {weight} kg
       </div>
-    </>
+    </div>
   )
 }
 
 // ── Exercise Picker Sheet ─────────────────────────────────────────────────────
 function ExercisePicker({
-  hints,
-  starred,
-  onSelect,
-  onToggleStar,
-  onClose,
+  hints, starred, onSelect, onToggleStar, onClose,
 }: {
   hints: ExerciseHint[]
   starred: Set<string>
@@ -158,9 +81,6 @@ function ExercisePicker({
 }) {
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState<ExerciseCategory | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => { inputRef.current?.focus() }, [])
 
   const hintMap = useMemo(() => {
     const m = new Map<string, ExerciseHint>()
@@ -176,14 +96,8 @@ function ExercisePicker({
     return list
   }, [q, filterCat])
 
-  const starredExercises = useMemo(
-    () => filtered.filter(e => starred.has(e.name)),
-    [filtered, starred]
-  )
-  const unstarredExercises = useMemo(
-    () => filtered.filter(e => !starred.has(e.name)),
-    [filtered, starred]
-  )
+  const starredList = useMemo(() => filtered.filter(e => starred.has(e.name)), [filtered, starred])
+  const unstarredList = useMemo(() => filtered.filter(e => !starred.has(e.name)), [filtered, starred])
 
   const renderRow = (name: string) => {
     const hint = hintMap.get(name)
@@ -194,25 +108,14 @@ function ExercisePicker({
           onClick={() => onSelect(name, hint)}
           className="flex-1 flex items-center justify-between py-3 px-4 hover:bg-[#2a2a2a] active:bg-[#353534] transition-colors text-left rounded-xl"
         >
-          <div>
-            <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
-            {hint && (
-              <span className="ml-2 text-[10px] text-[#a48b83]">
-                {hint.last_weight} kg × {hint.last_reps}
-              </span>
-            )}
-          </div>
+          <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
+          {hint && <span className="text-[10px] text-[#a48b83]">{hint.last_weight} kg × {hint.last_reps}</span>}
         </button>
-        <button
-          onClick={() => onToggleStar(name)}
-          className="p-2 shrink-0"
-        >
+        <button onClick={() => onToggleStar(name)} className="p-2 shrink-0">
           <span
             className={`material-symbols-outlined text-lg ${isStarred ? 'text-[#ff9066]' : 'text-[#56423c]'}`}
             style={{ fontVariationSettings: isStarred ? "'FILL' 1" : "'FILL' 0" }}
-          >
-            star
-          </span>
+          >star</span>
         </button>
       </div>
     )
@@ -222,82 +125,55 @@ function ExercisePicker({
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-[#131313] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="px-5 pt-5 pb-3 border-b border-[#201f1f]">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-headline text-lg font-bold">Choose exercise</h2>
-            <button onClick={onClose}>
-              <span className="material-symbols-outlined text-[#a48b83]">close</span>
-            </button>
+            <button onClick={onClose}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
           </div>
-          {/* Search */}
           <div className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-3 py-2.5">
             <span className="material-symbols-outlined text-[#a48b83] text-lg">search</span>
             <input
-              ref={inputRef}
+              autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search exercises…"
               className="flex-1 bg-transparent outline-none text-sm text-[#e5e2e1] placeholder:text-[#56423c]"
             />
-            {search && (
-              <button onClick={() => setSearch('')}>
-                <span className="material-symbols-outlined text-[#a48b83] text-sm">close</span>
-              </button>
-            )}
+            {search && <button onClick={() => setSearch('')}><span className="material-symbols-outlined text-[#a48b83] text-sm">close</span></button>}
           </div>
-          {/* Category filter */}
           <div className="flex gap-1.5 mt-3 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setFilterCat(null)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
-                !filterCat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'
-              }`}
-            >
-              All
-            </button>
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${!filterCat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
+            >All</button>
             {CATEGORIES.map(cat => (
               <button
                 key={cat}
                 onClick={() => setFilterCat(filterCat === cat ? null : cat)}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
-                  filterCat === cat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'
-                }`}
-              >
-                {cat}
-              </button>
+                className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${filterCat === cat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
+              >{cat}</button>
             ))}
           </div>
         </div>
-
-        {/* List */}
         <div className="flex-1 overflow-y-auto px-2 pb-32 md:pb-8">
-          {starredExercises.length > 0 && (
+          {starredList.length > 0 && (
             <>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#ff9066] px-4 pt-4 pb-1">
-                Starred
-              </p>
-              {starredExercises.map(e => renderRow(e.name))}
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#ff9066] px-4 pt-4 pb-1">Starred</p>
+              {starredList.map(e => renderRow(e.name))}
             </>
           )}
-          {unstarredExercises.length > 0 && (
+          {unstarredList.length > 0 && (
             <>
-              {starredExercises.length > 0 && (
-                <div className="mx-4 my-2 border-t border-[#201f1f]" />
-              )}
-              {!search && !filterCat ? (
-                // Group by category when no search/filter
-                CATEGORIES.filter(cat => unstarredExercises.some(e => e.category === cat)).map(cat => (
-                  <div key={cat}>
-                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-4 pt-4 pb-1">
-                      {cat}
-                    </p>
-                    {unstarredExercises.filter(e => e.category === cat).map(e => renderRow(e.name))}
-                  </div>
-                ))
-              ) : (
-                unstarredExercises.map(e => renderRow(e.name))
-              )}
+              {starredList.length > 0 && <div className="mx-4 my-2 border-t border-[#201f1f]" />}
+              {!search && !filterCat
+                ? CATEGORIES.filter(cat => unstarredList.some(e => e.category === cat)).map(cat => (
+                    <div key={cat}>
+                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-4 pt-4 pb-1">{cat}</p>
+                      {unstarredList.filter(e => e.category === cat).map(e => renderRow(e.name))}
+                    </div>
+                  ))
+                : unstarredList.map(e => renderRow(e.name))
+              }
             </>
           )}
           {filtered.length === 0 && (
@@ -312,23 +188,78 @@ function ExercisePicker({
   )
 }
 
+// ── Cardio type picker sheet ──────────────────────────────────────────────────
+function CardioPicker({ onSelect, onClose }: {
+  onSelect: (activity: string) => void
+  onClose: () => void
+}) {
+  const options = [
+    { label: 'Outdoor run', icon: 'directions_run' },
+    { label: 'Cycling', icon: 'directions_bike' },
+    { label: 'Walking', icon: 'directions_walk' },
+    { label: 'Indoor run', icon: 'directions_run' },
+  ]
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-28 md:pb-6 shadow-2xl">
+        <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
+        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
+        <div className="flex flex-col gap-3">
+          {options.map(o => (
+            <button
+              key={o.label}
+              onClick={() => { onSelect(o.label); onClose() }}
+              className="flex items-center gap-4 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#4bdece]/10 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[#4bdece]">{o.icon}</span>
+              </div>
+              <span className="font-headline font-bold text-[#e5e2e1]">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
+type View =
+  | { type: 'list' }
+  | { type: 'lift'; exercise: string }
+  | { type: 'cardio'; activity: string }
+
 export default function LogPage() {
-  const router = useRouter()
-  const [blocks, setBlocks] = useState<Block[]>([])
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [hints, setHints] = useState<ExerciseHint[]>([])
-  const [restingBlockId, setRestingBlockId] = useState<number | null>(null)
+  const [view, setView] = useState<View>({ type: 'list' })
+
+  // Today's logged exercises
+  const [loggedLifts, setLoggedLifts] = useState<LoggedLift[]>([])
+  const [loggedCardio, setLoggedCardio] = useState<LoggedCardio[]>([])
+  const [loadingToday, setLoadingToday] = useState(true)
+
+  // Exercise picker / cardio picker
+  const [showExPicker, setShowExPicker] = useState(false)
+  const [showCardioPicker, setShowCardioPicker] = useState(false)
+
+  // Lift logging state
+  const [sets, setSets] = useState<SetRow[]>([{ id: 1, weight: 60, reps: 8, done: false }])
+  const [restingId, setRestingId] = useState<number | null>(null)
   const [restRemaining, setRestRemaining] = useState(0)
   const [restDuration, setRestDuration] = useState(90)
-  const [showAddSheet, setShowAddSheet] = useState(false)
-  const [prs, setPrs] = useState<{ exercise: string; weight: number }[]>([])
-  const [showPrs, setShowPrs] = useState(false)
-  const [loadingLast, setLoadingLast] = useState(false)
+
+  // Cardio logging state
+  const [cardioDistance, setCardioDistance] = useState('')
+  const [cardioTime, setCardioTime] = useState('')
+  const cardioPace = useMemo(() => calcPace(cardioDistance, cardioTime), [cardioDistance, cardioTime])
+
+  // Hints + stars
+  const [hints, setHints] = useState<ExerciseHint[]>([])
   const [starred, setStarred] = useState<Set<string>>(new Set())
-  const [pickerBlockId, setPickerBlockId] = useState<number | null>(null)
+
+  // Saving
+  const [saving, setSaving] = useState(false)
+  const [pr, setPr] = useState<{ exercise: string; weight: number } | null>(null)
 
   // Load rest duration from localStorage
   useEffect(() => {
@@ -341,21 +272,32 @@ export default function LogPage() {
     localStorage.setItem('ss_rest_duration', String(v))
   }
 
-  // Countdown tick
-  useEffect(() => {
-    if (restingBlockId === null) return
-    if (restRemaining <= 0) { setRestingBlockId(null); return }
-    const t = setTimeout(() => setRestRemaining(r => r - 1), 1000)
-    return () => clearTimeout(t)
-  }, [restingBlockId, restRemaining])
+  // Fetch today's log
+  const refreshToday = useCallback(() => {
+    fetch('/api/log').then(r => r.json()).then(data => {
+      setLoggedLifts(data.lifts ?? [])
+      setLoggedCardio(data.cardio ?? [])
+      setLoadingToday(false)
+    }).catch(() => setLoadingToday(false))
+  }, [])
 
-  // Fetch exercise hints + starred
+  useEffect(() => { refreshToday() }, [refreshToday])
+
+  // Fetch hints + starred
   useEffect(() => {
     fetch('/api/exercises').then(r => r.json()).then(data => {
-      if (data.history && Array.isArray(data.history)) setHints(data.history)
-      if (data.starred && Array.isArray(data.starred)) setStarred(new Set(data.starred))
+      if (data.history) setHints(data.history)
+      if (data.starred) setStarred(new Set(data.starred))
     }).catch(() => {})
   }, [])
+
+  // Rest countdown
+  useEffect(() => {
+    if (restingId === null) return
+    if (restRemaining <= 0) { setRestingId(null); return }
+    const t = setTimeout(() => setRestRemaining(r => r - 1), 1000)
+    return () => clearTimeout(t)
+  }, [restingId, restRemaining])
 
   const toggleStar = useCallback((exercise: string) => {
     setStarred(prev => {
@@ -363,414 +305,362 @@ export default function LogPage() {
       const isStarred = next.has(exercise)
       if (isStarred) {
         next.delete(exercise)
-        fetch('/api/exercises/starred', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ exercise }),
-        })
+        fetch('/api/exercises/starred', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exercise }) })
       } else {
         next.add(exercise)
-        fetch('/api/exercises/starred', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ exercise }),
-        })
+        fetch('/api/exercises/starred', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exercise }) })
       }
       return next
     })
   }, [])
 
-  const updateSet = (blockId: number, setId: number, field: 'weight' | 'reps', delta: number) => {
-    setBlocks(prev => prev.map(b => b.type === 'lift' && b.id === blockId
-      ? { ...b, sets: b.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s) }
-      : b))
+  // Start logging a lift exercise
+  const startLift = (name: string, hint?: ExerciseHint) => {
+    setSets([{ id: Date.now(), weight: hint?.last_weight ?? 60, reps: hint?.last_reps ?? 8, done: false }])
+    setRestingId(null)
+    setView({ type: 'lift', exercise: name })
+    setShowExPicker(false)
   }
 
-  const toggleSet = (blockId: number, setId: number) => {
-    setBlocks(prev => prev.map(b => {
-      if (b.type !== 'lift' || b.id !== blockId) return b
-      const updated = b.sets.map(s => s.id === setId ? { ...s, done: !s.done } : s)
+  // Start logging cardio
+  const startCardio = (activity: string) => {
+    setCardioDistance('')
+    setCardioTime('')
+    setView({ type: 'cardio', activity })
+  }
+
+  // Toggle set done/undone + auto-queue next
+  const toggleSet = (setId: number) => {
+    setSets(prev => {
+      const updated = prev.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
       if (justDone) {
-        if (restDuration > 0) {
-          setRestingBlockId(blockId)
-          setRestRemaining(restDuration)
-        }
-        // Auto-queue next set with same weight/reps
+        if (restDuration > 0) { setRestingId(setId); setRestRemaining(restDuration) }
         const loggedSet = updated.find(s => s.id === setId)!
-        const hasNextPending = updated.some(s => !s.done)
-        if (!hasNextPending) {
+        if (!updated.some(s => !s.done)) {
           updated.push({ id: Date.now(), weight: loggedSet.weight, reps: loggedSet.reps, done: false })
         }
       }
-      return { ...b, sets: updated }
-    }))
-  }
-
-  const addSet = (blockId: number) => {
-    setBlocks(prev => prev.map(b => {
-      if (b.type !== 'lift' || b.id !== blockId) return b
-      const last = b.sets[b.sets.length - 1]
-      return { ...b, sets: [...b.sets, { id: Date.now(), weight: last?.weight ?? 60, reps: last?.reps ?? 8, done: false }] }
-    }))
-  }
-
-  const updateCardio = useCallback((blockId: number, field: 'distance' | 'time', value: string) => {
-    setBlocks(prev => prev.map(b => {
-      if (b.type !== 'cardio' || b.id !== blockId) return b
-      const updated = { ...b, [field]: value }
-      updated.pace = calcPace(
-        field === 'distance' ? value : b.distance,
-        field === 'time' ? value : b.time,
-      )
       return updated
-    }))
-  }, [])
-
-  const handleAddBlock = (type: 'lift' | 'run' | 'cycle' | 'walk') => {
-    if (type === 'lift') {
-      const id = Date.now()
-      setBlocks(prev => [...prev, {
-        id, type: 'lift', exercise: '',
-        sets: [{ id: id + 1, weight: 60, reps: 8, done: false }],
-      }])
-      setPickerBlockId(id) // immediately open picker
-    } else {
-      const activityMap = { run: 'Outdoor run', cycle: 'Cycling', walk: 'Walking' } as const
-      setBlocks(prev => [...prev, {
-        id: Date.now(), type: 'cardio',
-        activity: activityMap[type],
-        distance: '', time: '', pace: '',
-      }])
-    }
+    })
   }
 
-  const repeatLast = async () => {
-    setLoadingLast(true)
-    try {
-      const res = await fetch('/api/sessions/last')
-      const data = await res.json()
-      if (!data?.blocks) return
-      const newBlocks: Block[] = data.blocks.map((b: { type: string; exercise: string; sets: { weight: number; reps: number }[]; activity: string; distance: string; time: string }) => ({
-        id: Date.now() + Math.random(),
-        ...b,
-        ...(b.type === 'lift' ? {
-          sets: b.sets.map((s: { weight: number; reps: number }) => ({ id: Date.now() + Math.random(), ...s, done: false })),
-        } : { pace: calcPace(b.distance, b.time) }),
-      }))
-      setBlocks(newBlocks)
-    } finally {
-      setLoadingLast(false)
-    }
+  const updateSet = (setId: number, field: 'weight' | 'reps', delta: number) => {
+    setSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s))
   }
 
-  const finishSession = async () => {
-    if (blocks.length === 0) return
+  // Save lift
+  const saveLift = async () => {
+    if (view.type !== 'lift') return
+    const doneSets = sets.filter(s => s.done)
+    if (doneSets.length === 0) { setView({ type: 'list' }); return }
     setSaving(true)
-    setSaveError(null)
     try {
-      const res = await fetch('/api/sessions', {
+      const res = await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blocks, notes: notes.trim() || null }),
+        body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to save session')
-      }
       const data = await res.json()
-      if (data.prs?.length > 0) {
-        setPrs(data.prs)
-        setShowPrs(true)
-        setTimeout(() => router.push('/'), 3600)
-      } else {
-        router.push('/')
-      }
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Failed to save')
+      if (data.isPr) setPr({ exercise: data.exercise, weight: data.weight })
+      refreshToday()
+      setView({ type: 'list' })
+    } finally {
       setSaving(false)
     }
   }
 
-  return (
-    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
+  // Save cardio
+  const saveCardio = async () => {
+    if (view.type !== 'cardio') return
+    setSaving(true)
+    try {
+      await fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'cardio', activity: view.activity, distance: cardioDistance, time: cardioTime, pace: cardioPace }),
+      })
+      refreshToday()
+      setView({ type: 'list' })
+    } finally {
+      setSaving(false)
+    }
+  }
 
-      {showPrs && prs.length > 0 && <PrToast prs={prs} onDone={() => setShowPrs(false)} />}
-      {showAddSheet && <AddBlockSheet onAdd={handleAddBlock} onClose={() => setShowAddSheet(false)} />}
-      {pickerBlockId !== null && (
-        <ExercisePicker
-          hints={hints}
-          starred={starred}
-          onToggleStar={toggleStar}
-          onSelect={(name, hint) => {
-            setBlocks(prev => prev.map(b => {
-              if (b.id !== pickerBlockId || b.type !== 'lift') return b
-              return {
-                ...b,
-                exercise: name,
-                sets: hint
-                  ? b.sets.map((s, i) => i === 0 ? { ...s, weight: hint.last_weight, reps: hint.last_reps } : s)
-                  : b.sets,
-              }
-            }))
-            setPickerBlockId(null)
-          }}
-          onClose={() => setPickerBlockId(null)}
-        />
-      )}
+  // Delete a logged block
+  const deleteBlock = async (blockId: number) => {
+    await fetch('/api/log', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blockId }),
+    })
+    refreshToday()
+  }
 
-      {/* Top bar */}
-      <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
-        <div className="flex items-center">
-          <span className="font-label text-[#dcc1b8] text-sm uppercase tracking-widest">Session</span>
-        </div>
-        {/* Rest duration picker */}
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
-          <div className="flex gap-1">
-            {REST_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setAndSaveRestDuration(opt.value)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
-                  restDuration === opt.value
-                    ? 'bg-[#ff9066]/20 text-[#ff9066]'
-                    : 'text-[#a48b83]/60 hover:text-[#a48b83]'
-                }`}
-              >
-                {opt.label}
-              </button>
+  // ── List view ───────────────────────────────────────────────────────────────
+  if (view.type === 'list') {
+    return (
+      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col px-4 pt-6">
+        {pr && <PrToast exercise={pr.exercise} weight={pr.weight} onDone={() => setPr(null)} />}
+        {showExPicker && (
+          <ExercisePicker
+            hints={hints} starred={starred} onToggleStar={toggleStar}
+            onSelect={startLift}
+            onClose={() => setShowExPicker(false)}
+          />
+        )}
+        {showCardioPicker && (
+          <CardioPicker onSelect={startCardio} onClose={() => setShowCardioPicker(false)} />
+        )}
+
+        <header className="mb-6">
+          <p className="font-label text-[#a48b83] text-xs uppercase tracking-widest mb-1">Today</p>
+          <h1 className="font-headline text-2xl font-black text-[#e5e2e1]">Log</h1>
+        </header>
+
+        {/* Today's logged exercises */}
+        {loadingToday ? (
+          <div className="flex justify-center py-12">
+            <div className="w-5 h-5 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (loggedLifts.length === 0 && loggedCardio.length === 0) ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center flex-1">
+            <span className="material-symbols-outlined text-5xl text-[#353534] mb-4">fitness_center</span>
+            <p className="font-headline font-bold text-lg text-[#dcc1b8]">Nothing logged yet</p>
+            <p className="text-sm text-[#a48b83] mt-1">Add a lift or cardio below</p>
+          </div>
+        ) : (
+          <div className="space-y-3 mb-6">
+            {loggedLifts.map(l => (
+              <div key={l.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
+                  <div>
+                    <p className="font-headline font-bold text-[#e5e2e1]">{l.exercise}</p>
+                    <p className="text-xs text-[#a48b83]">{l.set_count} sets · {l.max_weight} kg peak</p>
+                  </div>
+                </div>
+                <button onClick={() => deleteBlock(l.block_id)}>
+                  <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                </button>
+              </div>
+            ))}
+            {loggedCardio.map(c => (
+              <div key={c.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#4bdece]">
+                    {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : 'directions_run'}
+                  </span>
+                  <div>
+                    <p className="font-headline font-bold text-[#e5e2e1]">{c.activity}</p>
+                    <p className="text-xs text-[#a48b83]">
+                      {c.distance ? `${c.distance} km` : ''}{c.distance && c.duration ? ' · ' : ''}{c.duration ?? ''}
+                      {c.pace ? ` · ${c.pace}/km` : ''}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => deleteBlock(c.block_id)}>
+                  <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                </button>
+              </div>
             ))}
           </div>
+        )}
+
+        {/* Add buttons */}
+        <div className="flex flex-col gap-3 mt-auto">
+          <button
+            onClick={() => setShowExPicker(true)}
+            className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40"
+          >
+            <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
+            <span className="font-headline font-bold text-[#dcc1b8]">Log exercise</span>
+          </button>
+          <button
+            onClick={() => setShowCardioPicker(true)}
+            className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#4bdece]/40"
+          >
+            <span className="material-symbols-outlined text-[#4bdece]">directions_run</span>
+            <span className="font-headline font-bold text-[#dcc1b8]">Log cardio</span>
+          </button>
+        </div>
+
+        <BottomNav />
+      </main>
+    )
+  }
+
+  // ── Lift logging view ───────────────────────────────────────────────────────
+  if (view.type === 'lift') {
+    const activeIdx = sets.findIndex(s => !s.done)
+    const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
+
+    return (
+      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
+        {/* Header */}
+        <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setView({ type: 'list' })} className="flex items-center gap-1 text-[#a48b83]">
+              <span className="material-symbols-outlined text-lg">arrow_back</span>
+              <span className="text-sm font-bold">Back</span>
+            </button>
+            <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+            <div className="w-16" />
+          </div>
+          {/* Rest timer config */}
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
+            <div className="flex gap-1">
+              {REST_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setAndSaveRestDuration(opt.value)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
+                    restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
+                  }`}
+                >{opt.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-grow px-4 pt-6 space-y-2">
+          {/* Done sets */}
+          {sets.filter(s => s.done).map((set, i) => (
+            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1">
+              <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
+              <div className="flex-1 flex gap-6">
+                <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
+                <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
+              </div>
+              <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+              </button>
+            </div>
+          ))}
+
+          {/* Active set */}
+          {activeSet && (
+            <div className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20">
+              {restingId !== null ? (
+                <RestButton seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
+              ) : (
+                <>
+                  <div className="flex items-center gap-1 mb-4">
+                    <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
+                    <div className="flex-1 flex gap-3">
+                      <div className="flex-1">
+                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight kg</p>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => updateSet(activeSet.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                            <span className="material-symbols-outlined text-sm">remove</span>
+                          </button>
+                          <span className="font-headline text-2xl font-black w-12 text-center">{activeSet.weight}</span>
+                          <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                            <span className="material-symbols-outlined text-sm">add</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => updateSet(activeSet.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                            <span className="material-symbols-outlined text-sm">remove</span>
+                          </button>
+                          <span className="font-headline text-2xl font-black w-10 text-center">{activeSet.reps}</span>
+                          <button onClick={() => updateSet(activeSet.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                            <span className="material-symbols-outlined text-sm">add</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleSet(activeSet.id)}
+                    className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    Log set
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Save */}
+        <div className="px-4 pb-8 pt-6">
+          <button
+            onClick={saveLift}
+            disabled={saving || sets.every(s => !s.done)}
+            className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+          >
+            {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+
+        <BottomNav />
+      </main>
+    )
+  }
+
+  // ── Cardio logging view ─────────────────────────────────────────────────────
+  return (
+    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
+      <div className="sticky top-0 z-40 px-4 py-4 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setView({ type: 'list' })} className="flex items-center gap-1 text-[#a48b83]">
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+            <span className="text-sm font-bold">Back</span>
+          </button>
+          <h2 className="font-headline font-bold text-[#e5e2e1]">{view.activity}</h2>
+          <div className="w-16" />
         </div>
       </div>
 
-      {saveError && (
-        <div className="mx-4 mt-3 px-4 py-3 bg-red-900/40 border border-red-500/30 rounded-xl text-red-300 text-sm">
-          {saveError}
-        </div>
-      )}
-
-      <div className="flex-grow px-4 pt-6 space-y-6">
-        {blocks.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <span className="material-symbols-outlined text-5xl text-[#353534] mb-4">fitness_center</span>
-            <p className="font-headline font-bold text-lg text-[#dcc1b8]">Start your session</p>
-            <p className="text-sm text-[#a48b83] mt-1 mb-6">Add a lift or cardio block below</p>
-            <button
-              onClick={repeatLast}
-              disabled={loadingLast}
-              className="flex items-center gap-2 px-5 py-3 bg-[#201f1f] rounded-xl text-sm font-bold text-[#dcc1b8] hover:bg-[#2a2a2a] transition-colors disabled:opacity-40"
-            >
-              <span className="material-symbols-outlined text-base text-[#ff9066]">replay</span>
-              {loadingLast ? 'Loading…' : 'Repeat last session'}
-            </button>
-          </div>
-        )}
-
-        {blocks.map(block => block.type === 'lift' ? (
-          <section key={block.id} className="bg-[#201f1f] rounded-3xl p-5">
-            <div className="flex justify-between items-start mb-5">
-              {(() => {
-                const anyDone = block.sets.some(s => s.done)
-                return anyDone ? (
-                  // Locked once sets are logged
-                  <h3 className="font-headline text-xl font-bold text-[#e5e2e1] flex-1">{block.exercise}</h3>
-                ) : (
-                  <button onClick={() => setPickerBlockId(block.id)} className="flex-1 text-left">
-                    {block.exercise ? (
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-headline text-xl font-bold text-[#e5e2e1]">{block.exercise}</h3>
-                        <span className="material-symbols-outlined text-[#a48b83] text-base">edit</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 py-2 px-3 bg-[#ff9066]/10 rounded-xl border border-[#ff9066]/30">
-                        <span className="material-symbols-outlined text-[#ff9066] text-base">fitness_center</span>
-                        <span className="font-headline text-base font-bold text-[#ff9066]">Pick exercise</span>
-                      </div>
-                    )}
-                  </button>
-                )
-              })()}
-              <button onClick={() => setBlocks(prev => prev.filter(b => b.id !== block.id))} className="ml-2 flex-shrink-0">
-                <span className="material-symbols-outlined text-[#a48b83] text-lg">close</span>
-              </button>
-            </div>
-
-            {/* Don't show sets until exercise is chosen */}
-            {!block.exercise && (
-              <p className="text-xs text-[#a48b83] text-center py-4">Pick an exercise above to start logging sets</p>
-            )}
-
-            {block.exercise && <div className="space-y-2">
-              {block.sets.map((set, i) => {
-                const isActive = !set.done && block.sets.findIndex(s => !s.done) === i
-
-                if (set.done) return (
-                  <div key={set.id} className="flex items-center gap-3 opacity-40 px-1">
-                    <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
-                    <div className="flex-1 flex gap-6">
-                      <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
-                      <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
-                    </div>
-                    <button onClick={() => toggleSet(block.id, set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-                    </button>
-                  </div>
-                )
-
-                if (isActive) return (
-                  <div key={set.id} className="bg-[#2a2a2a] rounded-2xl p-4 border border-[#ff9066]/20">
-                    {restingBlockId === block.id ? (
-                      /* Resting — only show the timer, no controls */
-                      <RestButton
-                        seconds={restRemaining}
-                        total={restDuration}
-                        onSkip={() => setRestingBlockId(null)}
-                      />
-                    ) : (
-                      /* Ready — show weight/reps + log button */
-                      <>
-                        <div className="flex items-center gap-1 mb-4">
-                          <span className="font-headline text-lg font-black text-[#ff9066] w-6">{i + 1}</span>
-                          <div className="flex-1 flex gap-3">
-                            <div className="flex-1">
-                              <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight kg</p>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => updateSet(block.id, set.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                                  <span className="material-symbols-outlined text-sm">remove</span>
-                                </button>
-                                <span className="font-headline text-2xl font-black w-12 text-center">{set.weight}</span>
-                                <button onClick={() => updateSet(block.id, set.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                                  <span className="material-symbols-outlined text-sm">add</span>
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => updateSet(block.id, set.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                                  <span className="material-symbols-outlined text-sm">remove</span>
-                                </button>
-                                <span className="font-headline text-2xl font-black w-10 text-center">{set.reps}</span>
-                                <button onClick={() => updateSet(block.id, set.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                                  <span className="material-symbols-outlined text-sm">add</span>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleSet(block.id, set.id)}
-                          className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                          Log set
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )
-
-                return (
-                  <div key={set.id} className="flex items-center gap-3 opacity-25 px-1 py-0.5">
-                    <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
-                    <div className="flex-1 flex gap-6">
-                      <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
-                      <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
-                    </div>
-                    <div className="w-6 h-6 rounded-full border border-[#56423c]/50 flex-shrink-0" />
-                  </div>
-                )
-              })}
-            </div>}
-
-          </section>
-        ) : (
-          <section key={block.id} className="bg-[#201f1f] rounded-3xl p-5">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#4bdece]/10 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[#4bdece]">
-                    {block.activity === 'Cycling' ? 'directions_bike' : 'directions_run'}
-                  </span>
-                </div>
-                <span className="font-headline text-xl font-bold">{block.activity}</span>
-              </div>
-              <button onClick={() => setBlocks(prev => prev.filter(b => b.id !== block.id))}>
-                <span className="material-symbols-outlined text-[#a48b83] text-lg">close</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="bg-[#2a2a2a] rounded-2xl p-4 text-center">
-                <input
-                  type="number"
-                  value={block.distance}
-                  onChange={e => updateCardio(block.id, 'distance', e.target.value)}
-                  placeholder="0.0"
-                  className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]"
-                />
-                <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
-              </div>
-              <div className="bg-[#2a2a2a] rounded-2xl p-4 text-center">
-                <input
-                  type="text"
-                  value={block.time}
-                  onChange={e => updateCardio(block.id, 'time', e.target.value)}
-                  placeholder="00:00"
-                  className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]"
-                />
-                <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
-              </div>
-            </div>
-            {block.pace && (
-              <div className="bg-[#2a2a2a]/60 rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
-                <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Avg Pace</span>
-                <span className="font-headline font-bold text-[#4bdece]">{block.pace} /km</span>
-              </div>
-            )}
-            <Link href="/import" className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#2a2a2a] transition-colors">
-              <span className="material-symbols-outlined text-base">ios_share</span>
-              Import from Apple Health
-            </Link>
-          </section>
-        ))}
-
-        {/* Notes */}
-        {blocks.length > 0 && (
-          <div className="bg-[#201f1f] rounded-2xl p-4">
-            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-2">Session notes</p>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="How did it feel? Any injuries, PRs, observations…"
-              rows={3}
-              className="w-full bg-transparent text-sm text-[#e5e2e1] placeholder:text-[#353534] outline-none resize-none font-body"
+      <div className="flex-grow px-4 pt-6">
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
+            <input
+              type="number"
+              value={cardioDistance}
+              onChange={e => setCardioDistance(e.target.value)}
+              placeholder="0.0"
+              className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]"
             />
+            <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
+          </div>
+          <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
+            <input
+              type="text"
+              value={cardioTime}
+              onChange={e => setCardioTime(e.target.value)}
+              placeholder="00:00"
+              className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]"
+            />
+            <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
+          </div>
+        </div>
+        {cardioPace && (
+          <div className="bg-[#201f1f] rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Avg Pace</span>
+            <span className="font-headline font-bold text-[#4bdece]">{cardioPace} /km</span>
           </div>
         )}
+        <Link href="/import" className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors mt-2">
+          <span className="material-symbols-outlined text-base">ios_share</span>
+          Import from Apple Health
+        </Link>
+      </div>
 
-        {/* Add block */}
+      <div className="px-4 pb-8 pt-6">
         <button
-          onClick={() => setShowAddSheet(true)}
-          className="w-full flex items-center justify-center gap-3 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40 hover:bg-[#201f1f]/80"
+          onClick={saveCardio}
+          disabled={saving || (!cardioDistance && !cardioTime)}
+          className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
         >
-          <span className="material-symbols-outlined text-[#ff9066] text-2xl">add_circle</span>
-          <span className="font-headline font-bold text-[#dcc1b8]">Add block</span>
+          {saving ? 'Saving…' : 'Save'}
         </button>
-
-        {/* Finish session */}
-        {blocks.length > 0 && (
-          <div className="pb-8">
-            <button
-              onClick={finishSession}
-              disabled={saving || blocks.some(b => b.type === 'lift' && !b.exercise)}
-              className="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-[#752805] rounded-2xl font-headline font-bold text-base shadow-xl active:scale-95 transition-all disabled:opacity-30"
-            >
-              {saving ? 'Saving…' : 'Finish session'}
-            </button>
-          </div>
-        )}
       </div>
 
       <BottomNav />
