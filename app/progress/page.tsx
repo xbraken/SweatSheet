@@ -384,6 +384,9 @@ function RunDetailSheet({
                               : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
                           </span>
                         )}
+                        {pHovDist > 0 && (
+                          <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
+                        )}
                         <span className="text-sm font-black font-headline text-[#4bdece]">{pHovPaceLabel} /km</span>
                       </div>
                     )}
