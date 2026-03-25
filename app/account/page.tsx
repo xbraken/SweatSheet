@@ -166,7 +166,7 @@ export default function AccountPage() {
             {regenerating ? 'Regenerating…' : 'Regenerate key'}
           </button>
           <a
-            href="/SweatSheet Sync.shortcut"
+            href="/SweatSheet Sync.shortcut" download
             className="w-full py-3 rounded-xl bg-[#4bdece]/20 text-[#4bdece] text-sm font-bold font-label text-center flex items-center justify-center gap-2 hover:bg-[#4bdece]/30 transition-colors"
           >
             <span className="material-symbols-outlined text-base">download</span>
