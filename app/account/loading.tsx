@@ -2,7 +2,7 @@ import BottomNav from '@/components/BottomNav'
 
 export default function AccountLoading() {
   return (
-    <main className="px-5 pt-14 pb-32 space-y-6 animate-pulse">
+    <main className="px-5 pt-14 pb-32 md:pb-12 space-y-6 animate-pulse max-w-[390px] md:max-w-xl mx-auto">
       <div className="h-8 w-28 bg-surface-container rounded" />
 
       {/* Avatar + username */}

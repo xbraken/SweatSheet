@@ -307,7 +307,7 @@ export default function ImportPage() {
   const selectedCount = workouts.filter(w => w.selected && activeSources.has(w.sourceName)).length
 
   return (
-    <main className="w-full max-w-[390px] mx-auto px-6 pt-2 pb-32 flex flex-col gap-6 min-h-screen">
+    <main className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-6 min-h-screen">
       {/* Header */}
       <header className="flex justify-between items-center py-4">
         <div>

@@ -72,7 +72,7 @@ export default async function TodayPage() {
   const todayIdx = (now.getDay() + 6) % 7
 
   return (
-    <main className="max-w-[390px] mx-auto min-h-screen pb-32 px-6 pt-12">
+    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12">
       {/* Header */}
       <header className="mb-10 flex justify-between items-start">
         <div>
@@ -83,6 +83,9 @@ export default async function TodayPage() {
         </div>
         <a href="/account" className="material-symbols-outlined text-[#a48b83] text-2xl">account_circle</a>
       </header>
+
+      {/* Desktop: two-column layout for Today + Week */}
+      <div className="md:grid md:grid-cols-2 md:gap-8">
 
       {/* Today's session or CTA */}
       <section className="mb-10">
@@ -148,6 +151,8 @@ export default async function TodayPage() {
           })}
         </div>
       </section>
+
+      </div>{/* end two-column wrapper */}
 
       {/* Weekly summary */}
       {(weekVolume > 0 || weekDistance > 0) && (

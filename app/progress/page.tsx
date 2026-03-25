@@ -316,7 +316,7 @@ export default function ProgressPage() {
   }, [selectedCalDate, calendarMap])
 
   return (
-    <main className="w-full max-w-[390px] mx-auto px-6 pt-2 pb-32 flex flex-col gap-8">
+    <main className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-8">
       {/* Header */}
       <header className="flex justify-between items-center py-4">
         <h1 className="text-2xl font-black text-primary tracking-tighter font-headline">SweatSheet</h1>
@@ -443,6 +443,9 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {/* Desktop: chart + history side by side */}
+      <div className="md:grid md:grid-cols-2 md:gap-8">
+
       {/* Chart */}
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
@@ -467,7 +470,7 @@ export default function ProgressPage() {
             ))}
           </div>
         </div>
-        <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] relative overflow-hidden flex flex-col justify-end">
+        <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] md:aspect-[3/2] relative overflow-hidden flex flex-col justify-end">
 
           {/* Peak stat / hovered value */}
           {tab === 'lifts' && liftPts.length > 0 && (() => {
@@ -768,6 +771,8 @@ export default function ProgressPage() {
           )}
         </div>
       </section>
+
+      </div>{/* end desktop two-column */}
 
       {/* Body weight section */}
       <section className="flex flex-col gap-3">

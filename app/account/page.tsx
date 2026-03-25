@@ -44,7 +44,7 @@ export default function AccountPage() {
   )
 
   return (
-    <main className="max-w-[390px] mx-auto min-h-screen pb-32 px-6 pt-12">
+    <main className="max-w-[390px] md:max-w-xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12">
       <header className="mb-10">
         <h1 className="font-headline text-3xl font-black tracking-tight text-[#e5e2e1]">Account</h1>
         <p className="text-sm text-[#a48b83] mt-1">@{username}</p>

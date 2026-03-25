@@ -2,7 +2,7 @@ import BottomNav from '@/components/BottomNav'
 
 export default function ProgressLoading() {
   return (
-    <main className="px-5 pt-14 pb-32 space-y-5 animate-pulse">
+    <main className="px-5 pt-14 pb-32 md:pb-12 space-y-5 animate-pulse max-w-[390px] md:max-w-3xl mx-auto">
       <div className="h-8 w-32 bg-surface-container rounded" />
 
       {/* Tab pills */}

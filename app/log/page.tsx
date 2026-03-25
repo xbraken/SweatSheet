@@ -46,7 +46,7 @@ function RestTimer({ seconds, onDone }: { seconds: number; onDone: () => void })
   const m = Math.floor(remaining / 60)
   const s = remaining % 60
   return (
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 px-4 pt-safe pt-4">
+    <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] z-50 px-4 pt-safe pt-4">
       <div className="bg-[#1a1a1a] border border-[#ff9066]/30 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl">
         <div className="relative w-10 h-10 flex-shrink-0">
           <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
@@ -98,7 +98,7 @@ function AddBlockSheet({ onAdd, onClose }: {
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-28 shadow-2xl">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-28 md:pb-6 shadow-2xl">
         <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Add to session</p>
         <div className="flex flex-col gap-3">
@@ -340,7 +340,7 @@ export default function LogPage() {
   }
 
   return (
-    <main className="max-w-[390px] mx-auto min-h-screen pb-32 flex flex-col">
+    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
       {restTimer !== null && <RestTimer seconds={restDuration} onDone={() => setRestTimer(null)} />}
       {showPrs && prs.length > 0 && <PrToast prs={prs} onDone={() => setShowPrs(false)} />}
       {showAddSheet && <AddBlockSheet onAdd={handleAddBlock} onClose={() => setShowAddSheet(false)} />}

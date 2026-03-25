@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-[#0e0e0e] text-[#e5e2e1] font-body">
         <NavigationProgress />
-        <div className="mx-auto max-w-[390px] min-h-screen relative">
+        <div className="mx-auto max-w-[390px] md:max-w-none md:ml-56 min-h-screen relative">
           {children}
         </div>
       </body>

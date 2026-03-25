@@ -2,7 +2,7 @@ import BottomNav from '@/components/BottomNav'
 
 export default function HomeLoading() {
   return (
-    <main className="px-5 pt-14 pb-32 space-y-6 animate-pulse">
+    <main className="px-5 pt-14 pb-32 md:pb-12 space-y-6 animate-pulse max-w-[390px] md:max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
