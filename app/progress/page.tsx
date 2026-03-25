@@ -63,9 +63,11 @@ export default function ProgressPage() {
   const [tab, setTab] = useState<'lifts' | 'cardio'>('lifts')
   const [exercise, setExercise] = useState('')
   const [open, setOpen] = useState(false)
+  const [cardioOpen, setCardioOpen] = useState(false)
   const [exercises, setExercises] = useState<string[]>([])
   const [liftHistory, setLiftHistory] = useState<LiftEntry[]>([])
   const [cardioHistory, setCardioHistory] = useState<CardioEntry[]>([])
+  const [cardioActivity, setCardioActivity] = useState('')
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
   const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>('pace')
@@ -77,8 +79,12 @@ export default function ProgressPage() {
       .then(r => r.json())
       .then(data => {
         setExercises(data.exercises ?? [])
-        setCardioHistory(data.cardioHistory ?? [])
+        const ch = data.cardioHistory ?? []
+        setCardioHistory(ch)
         setCalendarData(data.calendarData ?? [])
+        const activities = [...new Set((ch as CardioEntry[]).map(e => e.activity))]
+        const preferred = activities.find(a => a === 'Outdoor run') ?? activities[0] ?? ''
+        setCardioActivity(preferred)
         if (data.exercises?.length > 0) {
           setExercise(data.exercises[0])
         } else {
@@ -112,9 +118,16 @@ export default function ProgressPage() {
     return 80 - ((liftPts[liftPts.length - 1] - min) / range) * 70
   }, [liftPts])
 
+  // ── Cardio activity filter ───────────────────────────────────────────────────
+  const cardioActivities = useMemo(() => [...new Set(cardioHistory.map(e => e.activity))], [cardioHistory])
+  const filteredCardioHistory = useMemo(
+    () => cardioActivity ? cardioHistory.filter(e => e.activity === cardioActivity) : cardioHistory,
+    [cardioHistory, cardioActivity]
+  )
+
   // ── Cardio chart ────────────────────────────────────────────────────────────
-  const cardioChartData = useMemo(() => [...cardioHistory].reverse(), [cardioHistory])
-  const hasPaceData = cardioHistory.some(e => e.pace)
+  const cardioChartData = useMemo(() => [...filteredCardioHistory].reverse(), [filteredCardioHistory])
+  const hasPaceData = filteredCardioHistory.some(e => e.pace)
 
   const cardioValues = useMemo((): number[] => {
     if (cardioMetric === 'pace') {
@@ -151,11 +164,11 @@ export default function ProgressPage() {
   }, [liftHistory, liftSort])
 
   const sortedCardio = useMemo(() => {
-    const arr = [...cardioHistory]
+    const arr = [...filteredCardioHistory]
     if (cardioSort === 'distance') return arr.sort((a, b) => (parseFloat(b.distance ?? '0') || 0) - (parseFloat(a.distance ?? '0') || 0))
     if (cardioSort === 'pace') return arr.sort((a, b) => (toSeconds(a.pace) ?? Infinity) - (toSeconds(b.pace) ?? Infinity))
     return arr
-  }, [cardioHistory, cardioSort])
+  }, [filteredCardioHistory, cardioSort])
 
   // ── PB / best badges ────────────────────────────────────────────────────────
   const pbDate = liftHistory.length > 0
@@ -163,10 +176,10 @@ export default function ProgressPage() {
     : null
 
   const fastestRunEntry = useMemo(() => {
-    const runs = cardioHistory.filter(e => e.pace)
+    const runs = filteredCardioHistory.filter(e => e.pace)
     if (runs.length === 0) return null
     return runs.reduce((best, e) => (toSeconds(e.pace) ?? Infinity) < (toSeconds(best.pace) ?? Infinity) ? e : best)
-  }, [cardioHistory])
+  }, [filteredCardioHistory])
 
   // ── Calendar heat-map ───────────────────────────────────────────────────────
   const calendarGrid = useMemo(() => {
@@ -263,6 +276,40 @@ export default function ProgressPage() {
             No lift data yet. Log a session to see progress.
           </p>
         )}
+
+        {tab === 'cardio' && cardioActivities.length > 1 && (
+          <div className="relative">
+            <div
+              onClick={() => setCardioOpen(o => !o)}
+              className="bg-surface-container-low p-4 flex justify-between items-center rounded-xl cursor-pointer hover:bg-surface-container-high transition-colors"
+            >
+              <div>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#4bdece] mb-1">Activity</p>
+                <h2 className="font-headline text-xl font-bold">{cardioActivity}</h2>
+              </div>
+              <span className="material-symbols-outlined text-[#4bdece]">expand_more</span>
+            </div>
+            {cardioOpen && (
+              <div className="absolute top-full left-0 right-0 bg-surface-container-high rounded-xl mt-1 z-10 border border-outline-variant/20 overflow-hidden">
+                {cardioActivities.map(a => (
+                  <button
+                    key={a}
+                    onClick={() => { setCardioActivity(a); setCardioOpen(false) }}
+                    className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors"
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'cardio' && !loading && cardioHistory.length === 0 && (
+          <p className="text-sm text-on-surface-variant text-center py-4">
+            No cardio data yet. Import or log a session to see progress.
+          </p>
+        )}
       </section>
 
       {/* Cardio metric toggle */}
@@ -353,7 +400,7 @@ export default function ProgressPage() {
             ) : (
               <div className="w-full h-32 flex items-center justify-center">
                 <p className="text-sm text-on-surface-variant/40">
-                  {cardioHistory.length === 0 ? 'No cardio data yet' : `No ${cardioMetric} data for these sessions`}
+                  {filteredCardioHistory.length === 0 ? 'No cardio data yet' : `No ${cardioMetric} data for these sessions`}
                 </p>
               </div>
             )

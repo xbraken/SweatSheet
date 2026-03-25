@@ -276,10 +276,12 @@ export default function ImportPage() {
     setImported(0)
     setPhase('importing')
 
-    const CHUNK = 50
+    const CHUNK = 25
     let done = 0
-    for (let i = 0; i < toImport.length; i += CHUNK) {
-      const chunk = toImport.slice(i, i + CHUNK)
+    const chunks: typeof toImport[] = []
+    for (let i = 0; i < toImport.length; i += CHUNK) chunks.push(toImport.slice(i, i + CHUNK))
+
+    await Promise.all(chunks.map(async chunk => {
       try {
         const res = await fetch('/api/sessions/batch', {
           method: 'POST',
@@ -292,7 +294,7 @@ export default function ImportPage() {
         done += chunk.length
       }
       setImported(done)
-    }
+    }))
 
     setPhase('done')
   }
