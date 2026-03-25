@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, initDb } from '@/lib/db'
+
+await initDb()
 
 export async function GET() {
   const result = await db.execute(`
