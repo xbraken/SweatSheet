@@ -18,55 +18,106 @@ type WorkoutRow = ParsedWorkout & {
   alreadyImported: boolean
 }
 
-function parseAppleHealthXml(xmlText: string): ParsedWorkout[] {
-  const doc = new DOMParser().parseFromString(xmlText, 'text/xml')
-  if (doc.querySelector('parsererror')) return []
+const SUPPORTED: Record<string, string> = {
+  HKWorkoutActivityTypeRunning: 'Outdoor run',
+  HKWorkoutActivityTypeCycling: 'Cycling',
+  HKWorkoutActivityTypeWalking: 'Walking',
+}
 
-  const supportedTypes: Record<string, string> = {
-    HKWorkoutActivityTypeRunning: 'Outdoor run',
-    HKWorkoutActivityTypeCycling: 'Cycling',
-    HKWorkoutActivityTypeWalking: 'Walking',
+function attr(xml: string, name: string): string {
+  const m = xml.match(new RegExp(`${name}="([^"]*)"`) )
+  return m?.[1] ?? ''
+}
+
+function processWorkoutBlock(xml: string): ParsedWorkout | null {
+  const type = attr(xml, 'workoutActivityType')
+  if (!(type in SUPPORTED)) return null
+
+  const startDate = attr(xml, 'startDate').split(' ')[0]
+  if (!startDate) return null
+
+  const durationMin = parseFloat(attr(xml, 'duration')) || 0
+  const rawDist = parseFloat(attr(xml, 'totalDistance')) || 0
+  const distUnit = attr(xml, 'totalDistanceUnit')
+  const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
+  const calories = Math.round(parseFloat(attr(xml, 'totalEnergyBurned'))) || null
+
+  const hrMatch = xml.match(/WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*average="([^"]*)"/)
+  const avgHr = hrMatch ? Math.round(parseFloat(hrMatch[1])) || null : null
+
+  const totalSec = Math.round(durationMin * 60)
+  const hh = Math.floor(totalSec / 3600)
+  const mm = Math.floor((totalSec % 3600) / 60)
+  const ss = totalSec % 60
+  const duration = hh > 0
+    ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+    : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+
+  const paceSecPerKm = distKm > 0.1 ? totalSec / distKm : null
+  const pace = paceSecPerKm
+    ? `${Math.floor(paceSecPerKm / 60)}:${String(Math.round(paceSecPerKm % 60)).padStart(2, '0')}`
+    : null
+
+  return {
+    date: startDate,
+    activity: SUPPORTED[type],
+    distance: distKm.toFixed(2),
+    duration,
+    pace,
+    calories,
+    heartRate: avgHr,
+  }
+}
+
+/** Stream-parse the XML in 512 KB chunks — never loads the full file into memory */
+async function streamParseAppleHealth(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<ParsedWorkout[]> {
+  const workouts: ParsedWorkout[] = []
+  const decoder = new TextDecoder('utf-8')
+  const reader = file.stream().getReader()
+  let buffer = ''
+  let bytesRead = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      bytesRead += value.byteLength
+      onProgress(bytesRead / file.size)
+      buffer += decoder.decode(value, { stream: true })
+
+      // Extract every complete <Workout …>…</Workout> block from the buffer
+      let searchFrom = 0
+      while (true) {
+        const start = buffer.indexOf('<Workout ', searchFrom)
+        if (start === -1) break
+
+        const end = buffer.indexOf('</Workout>', start)
+        if (end === -1) {
+          // Block not yet complete — keep from start onwards and wait for more data
+          buffer = buffer.slice(start)
+          searchFrom = 0
+          break
+        }
+
+        const block = buffer.slice(start, end + '</Workout>'.length)
+        const workout = processWorkoutBlock(block)
+        if (workout) workouts.push(workout)
+        searchFrom = end + '</Workout>'.length
+      }
+
+      // Trim fully-processed content; if no pending Workout tag, keep only a small tail
+      if (searchFrom > 0) buffer = buffer.slice(searchFrom)
+      if (!buffer.includes('<Workout ') && buffer.length > 2000) buffer = buffer.slice(-500)
+    }
+  } finally {
+    reader.releaseLock()
   }
 
-  return Array.from(doc.querySelectorAll('Workout'))
-    .filter(w => (w.getAttribute('workoutActivityType') ?? '') in supportedTypes)
-    .map(w => {
-      const type = w.getAttribute('workoutActivityType')!
-      const startDate = (w.getAttribute('startDate') ?? '').split(' ')[0]
-      const durationMin = parseFloat(w.getAttribute('duration') ?? '0')
-      const rawDist = parseFloat(w.getAttribute('totalDistance') ?? '0')
-      const distUnit = w.getAttribute('totalDistanceUnit') ?? 'km'
-      const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
-      const calories = Math.round(parseFloat(w.getAttribute('totalEnergyBurned') ?? '0')) || null
-
-      const hrStat = w.querySelector('WorkoutStatistics[type="HKQuantityTypeIdentifierHeartRate"]')
-      const avgHr = hrStat ? Math.round(parseFloat(hrStat.getAttribute('average') ?? '0')) || null : null
-
-      const totalSec = Math.round(durationMin * 60)
-      const hh = Math.floor(totalSec / 3600)
-      const mm = Math.floor((totalSec % 3600) / 60)
-      const ss = totalSec % 60
-      const durationStr = hh > 0
-        ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
-        : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
-
-      const paceSecPerKm = distKm > 0.1 ? totalSec / distKm : null
-      const paceStr = paceSecPerKm
-        ? `${Math.floor(paceSecPerKm / 60)}:${String(Math.round(paceSecPerKm % 60)).padStart(2, '0')}`
-        : null
-
-      return {
-        date: startDate,
-        activity: supportedTypes[type],
-        distance: distKm.toFixed(2),
-        duration: durationStr,
-        pace: paceStr,
-        calories,
-        heartRate: avgHr,
-      }
-    })
-    .filter(w => w.date)
-    .sort((a, b) => b.date.localeCompare(a.date)) // newest first
+  return workouts.sort((a, b) => b.date.localeCompare(a.date))
 }
 
 function formatDate(dateStr: string) {
@@ -75,11 +126,12 @@ function formatDate(dateStr: string) {
   })
 }
 
-type Phase = 'upload' | 'preview' | 'importing' | 'done'
+type Phase = 'upload' | 'parsing' | 'preview' | 'importing' | 'done'
 
 export default function ImportPage() {
   const [phase, setPhase] = useState<Phase>('upload')
   const [dragging, setDragging] = useState(false)
+  const [parseProgress, setParseProgress] = useState(0)
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([])
   const [imported, setImported] = useState(0)
   const [total, setTotal] = useState(0)
@@ -93,11 +145,21 @@ export default function ImportPage() {
       return
     }
 
-    const text = await file.text()
-    const parsed = parseAppleHealthXml(text)
+    setParseProgress(0)
+    setPhase('parsing')
+
+    let parsed: ParsedWorkout[]
+    try {
+      parsed = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
+    } catch {
+      setError('Failed to read the file. Make sure it is a valid Apple Health Export.xml.')
+      setPhase('upload')
+      return
+    }
 
     if (parsed.length === 0) {
       setError('No supported workouts found. Make sure this is your Apple Health Export.xml.')
+      setPhase('upload')
       return
     }
 
@@ -107,7 +169,7 @@ export default function ImportPage() {
       const res = await fetch('/api/sessions')
       const sessions = await res.json()
       existingDates = new Set((sessions as { date: string }[]).map(s => s.date))
-    } catch { /* silent — proceed without duplicate check */ }
+    } catch { /* proceed without duplicate check */ }
 
     setWorkouts(parsed.map(w => ({
       ...w,
@@ -130,8 +192,7 @@ export default function ImportPage() {
   }, [processFile])
 
   const toggleAll = () => {
-    const selectable = workouts.filter(w => !w.alreadyImported)
-    const allSelected = selectable.every(w => w.selected)
+    const allSelected = workouts.filter(w => !w.alreadyImported).every(w => w.selected)
     setWorkouts(prev => prev.map(w => w.alreadyImported ? w : { ...w, selected: !allSelected }))
   }
 
@@ -191,7 +252,6 @@ export default function ImportPage() {
       {/* ── Phase: Upload ──────────────────────────────────────────── */}
       {phase === 'upload' && (
         <>
-          {/* How-to steps */}
           <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-4">
             <p className="text-[10px] font-bold font-label uppercase tracking-widest text-primary-container">How to export</p>
             {[
@@ -208,7 +268,6 @@ export default function ImportPage() {
             ))}
           </section>
 
-          {/* Drop zone */}
           <div
             onDragOver={e => { e.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
@@ -230,6 +289,26 @@ export default function ImportPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Phase: Parsing ─────────────────────────────────────────── */}
+      {phase === 'parsing' && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 py-20 text-center">
+          <div className="w-16 h-16 rounded-full border-4 border-primary-container border-t-transparent animate-spin" />
+          <div>
+            <p className="font-headline font-bold text-xl">Scanning file…</p>
+            <p className="text-sm text-on-surface-variant mt-1">Large files take a few seconds</p>
+          </div>
+          <div className="w-full">
+            <div className="w-full bg-surface-container rounded-full h-2">
+              <div
+                className="bg-primary-container h-2 rounded-full transition-all duration-150"
+                style={{ width: `${parseProgress}%` }}
+              />
+            </div>
+            <p className="text-xs text-on-surface-variant mt-2">{parseProgress}%</p>
+          </div>
+        </div>
       )}
 
       {/* ── Phase: Preview ─────────────────────────────────────────── */}
@@ -262,27 +341,20 @@ export default function ImportPage() {
                       : 'bg-surface-container/60'
                 }`}
               >
-                {/* Checkbox */}
                 <div className={`w-5 h-5 rounded-md shrink-0 flex items-center justify-center border transition-all ${
-                  w.alreadyImported
-                    ? 'border-on-surface/20 bg-transparent'
-                    : w.selected
-                      ? 'bg-primary-container border-primary-container'
-                      : 'border-on-surface/30'
+                  w.alreadyImported ? 'border-on-surface/20' : w.selected ? 'bg-primary-container border-primary-container' : 'border-on-surface/30'
                 }`}>
                   {w.selected && !w.alreadyImported && (
                     <span className="material-symbols-outlined text-[#752805] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
                   )}
                 </div>
 
-                {/* Activity icon */}
                 <div className="w-8 h-8 rounded-full bg-[#4bdece]/10 flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[#4bdece] text-base">
                     {w.activity === 'Cycling' ? 'directions_bike' : w.activity === 'Walking' ? 'directions_walk' : 'directions_run'}
                   </span>
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase tracking-wide">
                     {w.alreadyImported ? 'Already imported · ' : ''}{formatDate(w.date)}
@@ -292,7 +364,6 @@ export default function ImportPage() {
                   </p>
                 </div>
 
-                {/* Stats */}
                 <div className="text-right shrink-0">
                   {w.pace && <p className="text-sm font-bold text-on-surface">{w.pace} /km</p>}
                   {w.heartRate && <p className="text-xs text-[#4bdece] font-bold">{w.heartRate} bpm</p>}
@@ -302,7 +373,6 @@ export default function ImportPage() {
             ))}
           </div>
 
-          {/* Sticky confirm button */}
           <div className="sticky bottom-24 pt-4">
             <button
               onClick={confirmImport}
@@ -321,7 +391,7 @@ export default function ImportPage() {
           <div className="w-16 h-16 rounded-full border-4 border-primary-container border-t-transparent animate-spin" />
           <div className="text-center">
             <p className="font-headline font-bold text-xl">{imported} / {total}</p>
-            <p className="text-sm text-on-surface-variant mt-1">Importing workouts…</p>
+            <p className="text-sm text-on-surface-variant mt-1">Saving to SweatSheet…</p>
           </div>
           <div className="w-full bg-surface-container rounded-full h-2">
             <div
