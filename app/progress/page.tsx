@@ -1357,8 +1357,10 @@ export default function ProgressPage() {
                   </defs>
                   <polyline points={liftSvgPts} fill="none" stroke="#ff9066" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                   <polygon points={`0,80 ${liftSvgPts} 300,80`} fill="url(#liftGrad)" />
-                  <line x1={hX} y1={0} x2={hX} y2={100} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
-                  <circle cx={hX} cy={hY} r="5" fill="#ff9066" />
+                  {hoveredIdx !== null && <>
+                    <line x1={hX} y1={0} x2={hX} y2={100} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                    <circle cx={hX} cy={hY} r="5" fill="#ff9066" />
+                  </>}
                 </svg>
               )
             })() : (
@@ -1390,8 +1392,10 @@ export default function ProgressPage() {
                 </defs>
                 <polyline points={cardioSvgPts} fill="none" stroke="#4bdece" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                 <polygon points={`0,${cardioInvert ? 10 : 80} ${cardioSvgPts} 300,${cardioInvert ? 10 : 80}`} fill="url(#cardioGrad)" />
-                <line x1={hX} y1={0} x2={hX} y2={100} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
-                <circle cx={hX} cy={hY} r="5" fill="#4bdece" />
+                {hoveredIdx !== null && <>
+                  <line x1={hX} y1={0} x2={hX} y2={100} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                  <circle cx={hX} cy={hY} r="5" fill="#4bdece" />
+                </>}
               </svg>
               )
             })() : (
