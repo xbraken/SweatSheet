@@ -373,6 +373,10 @@ export default function LogPage() {
     setSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s))
   }
 
+  const setSetField = (setId: number, field: 'weight' | 'reps', value: number) => {
+    setSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(1)) } : s))
+  }
+
   // Save lift
   const saveLift = async () => {
     if (view.type !== 'lift') return
@@ -570,7 +574,7 @@ export default function LogPage() {
                 <RestButton seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
               ) : (
                 <>
-                  <div className="flex items-center gap-1 mb-4">
+                  <div className="flex items-center gap-1 mb-2">
                     <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
                     <div className="flex-1 flex gap-3">
                       <div className="flex-1">
@@ -598,6 +602,19 @@ export default function LogPage() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                  {/* Weight slider */}
+                  <div className="mb-4 px-1">
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(200, Math.ceil(activeSet.weight / 20) * 20 + 40)}
+                      step={0.5}
+                      value={activeSet.weight}
+                      onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value))}
+                      className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                      style={{ accentColor: '#ff9066' }}
+                    />
                   </div>
                   <button
                     onClick={() => toggleSet(activeSet.id)}
