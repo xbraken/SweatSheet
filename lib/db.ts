@@ -50,9 +50,23 @@ export async function initDb() {
     imported_from TEXT
   )`)
 
+  await db.execute(`CREATE TABLE IF NOT EXISTS body_weight (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    weight_kg REAL NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, date)
+  )`)
+
   // Migrate existing sessions table to have user_id if not present
   try {
     await db.execute(`ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`)
+  } catch { /* column already exists */ }
+
+  // Migrate users table to have unit_pref if not present
+  try {
+    await db.execute(`ALTER TABLE users ADD COLUMN unit_pref TEXT NOT NULL DEFAULT 'metric'`)
   } catch { /* column already exists */ }
 }
 

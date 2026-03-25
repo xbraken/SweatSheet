@@ -83,7 +83,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ id: sessionId, date })
+    // Detect PRs: for each lift block, check if any set weight exceeds previous max
+    const prs: { exercise: string; weight: number }[] = []
+    for (const block of blocks) {
+      if (block.type !== 'lift') continue
+      const maxNew = Math.max(...block.sets.filter((s: { done: boolean }) => s.done).map((s: { weight: number }) => s.weight))
+      if (!isFinite(maxNew)) continue
+      const prevMax = await db.execute({
+        sql: `SELECT MAX(st.weight) as max_w FROM sets st
+              JOIN blocks b ON st.block_id = b.id
+              JOIN sessions s ON b.session_id = s.id
+              WHERE st.exercise = ? AND s.user_id = ? AND s.id != ?`,
+        args: [block.exercise, session.userId, sessionId],
+      })
+      const prev = prevMax.rows[0].max_w as number | null
+      if (prev === null || maxNew > prev) {
+        prs.push({ exercise: block.exercise, weight: maxNew })
+      }
+    }
+
+    return NextResponse.json({ id: sessionId, date, prs })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     console.error('POST /api/sessions error:', message)

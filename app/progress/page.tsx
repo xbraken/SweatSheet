@@ -77,6 +77,17 @@ export default function ProgressPage() {
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>('all')
+  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume'>('weight')
+  const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
+  const [bwInput, setBwInput] = useState('')
+  const [bwSaving, setBwSaving] = useState(false)
+  const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch('/api/bodyweight').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setBodyWeightLog([...data].reverse())
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetch('/api/progress')
@@ -126,8 +137,11 @@ export default function ProgressPage() {
     return rangeCutoff ? arr.filter(e => e.date >= rangeCutoff) : arr
   }, [liftHistory, rangeCutoff])
   const liftChartPts = useMemo(() =>
-    liftChartData.map(e => ({ date: e.date, value: Number(e.max_weight) })),
-    [liftChartData]
+    liftChartData.map(e => ({
+      date: e.date,
+      value: liftMetric === 'weight' ? Number(e.max_weight) : Number(e.volume),
+    })),
+    [liftChartData, liftMetric]
   )
   const liftPts = liftChartPts.map(p => p.value)
   const liftSvgPts = liftPts.length > 1 ? buildSvgPoints(liftPts) : null
@@ -362,6 +376,23 @@ export default function ProgressPage() {
         )}
       </section>
 
+      {/* Lift metric toggle */}
+      {tab === 'lifts' && liftHistory.length > 0 && (
+        <div className="flex gap-2">
+          {(['weight', 'volume'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => { setLiftMetric(m); setHoveredIdx(null) }}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+                liftMetric === m ? 'bg-primary-container text-[#752805]' : 'bg-surface-container text-on-surface-variant'
+              }`}
+            >
+              {m === 'weight' ? 'Max weight' : 'Volume'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Cardio metric toggle */}
       {tab === 'cardio' && hasPaceData && (
         <div className="flex gap-2">
@@ -383,7 +414,9 @@ export default function ProgressPage() {
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h3 className="font-headline text-sm font-bold text-on-surface-variant">
-            {tab === 'lifts' ? 'Weight trend' : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
+            {tab === 'lifts'
+              ? liftMetric === 'weight' ? 'Max weight trend' : 'Volume trend'
+              : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
           </h3>
           <div className="flex gap-1">
             {(['week', 'month', 'year', 'all'] as const).map(r => (
@@ -409,9 +442,11 @@ export default function ProgressPage() {
             const pt = liftChartPts[idx]
             return (
               <div className="absolute top-6 right-6 flex flex-col items-end">
-                <span className="text-3xl font-black font-headline text-primary-container leading-none">{pt?.value}</span>
+                <span className="text-3xl font-black font-headline text-primary-container leading-none">
+                  {liftMetric === 'volume' ? Math.round(pt?.value ?? 0).toLocaleString() : pt?.value}
+                </span>
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
-                  {hoveredIdx !== null ? formatDate(pt.date) : 'kg peak'}
+                  {hoveredIdx !== null ? formatDate(pt.date) : liftMetric === 'weight' ? 'kg peak' : 'kg vol peak'}
                 </span>
               </div>
             )
@@ -699,6 +734,108 @@ export default function ProgressPage() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Body weight section */}
+      <section className="flex flex-col gap-3">
+        <h3 className="font-headline text-sm font-bold text-on-surface-variant uppercase tracking-widest">Body weight</h3>
+        {/* Log today */}
+        <div className="bg-surface-container rounded-xl p-4 flex items-center gap-3">
+          <input
+            type="number"
+            step="0.1"
+            value={bwInput}
+            onChange={e => setBwInput(e.target.value)}
+            placeholder="e.g. 75.5"
+            className="flex-1 bg-transparent font-headline text-xl font-bold outline-none placeholder:text-on-surface-variant/30"
+          />
+          <span className="text-sm text-on-surface-variant font-bold">kg</span>
+          <button
+            disabled={!bwInput || bwSaving}
+            onClick={async () => {
+              setBwSaving(true)
+              const today = new Date().toISOString().split('T')[0]
+              await fetch('/api/bodyweight', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: today, weight_kg: parseFloat(bwInput) }),
+              })
+              const res = await fetch('/api/bodyweight')
+              const data = await res.json()
+              if (Array.isArray(data)) setBodyWeightLog([...data].reverse())
+              setBwInput('')
+              setBwSaving(false)
+            }}
+            className="px-4 py-2 bg-primary-container/20 text-primary-container rounded-xl text-sm font-bold font-label disabled:opacity-30 transition-colors"
+          >
+            {bwSaving ? '…' : 'Log'}
+          </button>
+        </div>
+
+        {/* Chart */}
+        {bodyWeightLog.length > 1 && (() => {
+          const vals = bodyWeightLog.map(e => e.weight_kg)
+          const svgPts = buildSvgPoints(vals)
+          const hIdx = bwHoveredIdx ?? vals.length - 1
+          const hX = (hIdx / Math.max(vals.length - 1, 1)) * 300
+          const hY = ptY(vals, vals[hIdx], false)
+          return (
+            <div className="bg-surface-container rounded-xl p-4 relative">
+              <div className="absolute top-4 right-4 flex flex-col items-end">
+                <span className="text-2xl font-black font-headline text-primary-container leading-none">{vals[hIdx].toFixed(1)}</span>
+                <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
+                  {bwHoveredIdx !== null ? formatDate(bodyWeightLog[hIdx].date) : 'kg latest'}
+                </span>
+              </div>
+              <svg
+                className="w-full h-28"
+                viewBox="0 0 300 100" preserveAspectRatio="none"
+                style={{ touchAction: 'none' }}
+                onPointerMove={e => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const x = (e.clientX - rect.left) / rect.width
+                  setBwHoveredIdx(Math.max(0, Math.min(vals.length - 1, Math.round(x * (vals.length - 1)))))
+                }}
+                onPointerLeave={() => setBwHoveredIdx(null)}
+              >
+                <defs>
+                  <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ff9066" stopOpacity="0.15" />
+                    <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <polyline points={svgPts} fill="none" stroke="#ff9066" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <polygon points={`0,80 ${svgPts} 300,80`} fill="url(#bwGrad)" />
+                <line x1={hX} y1={0} x2={hX} y2={100} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                <circle cx={hX} cy={hY} r="4" fill="#ff9066" />
+              </svg>
+            </div>
+          )
+        })()}
+
+        {/* Log list */}
+        {bodyWeightLog.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {[...bodyWeightLog].reverse().slice(0, 10).map((entry, i) => (
+              <div key={i} className="bg-surface-container rounded-lg px-4 py-3 flex justify-between items-center">
+                <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">{formatDate(entry.date)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-headline font-bold">{entry.weight_kg.toFixed(1)} <span className="text-xs font-normal text-on-surface-variant">kg</span></span>
+                  <button onClick={async () => {
+                    await fetch('/api/bodyweight', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: entry.date }) })
+                    setBodyWeightLog(prev => prev.filter(e => e.date !== entry.date))
+                  }} className="text-on-surface-variant/40 hover:text-red-400 transition-colors">
+                    <span className="material-symbols-outlined text-base">close</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {bodyWeightLog.length === 0 && (
+          <p className="text-sm text-on-surface-variant/40 text-center py-2">Log your weight above to start tracking</p>
+        )}
       </section>
 
       {/* Motivational strip */}

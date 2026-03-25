@@ -19,7 +19,7 @@ async function getTodayData(userId: number) {
     return d.toISOString().split('T')[0]
   })
 
-  const [todaySession, weekSessions] = await Promise.all([
+  const [todaySession, weekSessions, weekStats] = await Promise.all([
     db.execute({
       sql: `SELECT s.id, s.date,
         (SELECT COUNT(*) FROM blocks b WHERE b.session_id = s.id AND b.type = 'lift') as lift_blocks,
@@ -32,12 +32,27 @@ async function getTodayData(userId: number) {
       sql: `SELECT DISTINCT date FROM sessions WHERE date >= ? AND date <= ? AND user_id = ? ORDER BY date`,
       args: [weekDates[0], weekDates[6], userId],
     }),
+    db.execute({
+      sql: `SELECT
+        COALESCE(SUM(st.weight * st.reps), 0) as total_volume,
+        COALESCE(SUM(c.distance), 0) as total_distance
+        FROM sessions s
+        LEFT JOIN blocks b ON b.session_id = s.id
+        LEFT JOIN sets st ON st.block_id = b.id
+        LEFT JOIN cardio c ON c.block_id = b.id
+        WHERE s.date >= ? AND s.date <= ? AND s.user_id = ?`,
+      args: [weekDates[0], weekDates[6], userId],
+    }),
   ])
 
+  const ws = weekStats.rows[0]
   return {
     today: todaySession.rows[0] ?? null,
     completedDates: weekSessions.rows.map(r => r.date as string),
     weekDates,
+    weekVolume: Number(ws?.total_volume ?? 0),
+    weekDistance: Number(ws?.total_distance ?? 0),
+    sessionCount: weekSessions.rows.length,
   }
 }
 
@@ -51,7 +66,7 @@ export default async function TodayPage() {
   const hour = now.getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  const { today, completedDates, weekDates } = await getTodayData(session.userId)
+  const { today, completedDates, weekDates, weekVolume, weekDistance, sessionCount } = await getTodayData(session.userId)
 
   const week = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const todayIdx = (now.getDay() + 6) % 7
@@ -66,7 +81,7 @@ export default async function TodayPage() {
             {greeting}, {session.username}.
           </h1>
         </div>
-        <LogoutButton />
+        <a href="/account" className="material-symbols-outlined text-[#a48b83] text-2xl">account_circle</a>
       </header>
 
       {/* Today's session or CTA */}
@@ -133,6 +148,28 @@ export default async function TodayPage() {
           })}
         </div>
       </section>
+
+      {/* Weekly summary */}
+      {(weekVolume > 0 || weekDistance > 0) && (
+        <section className="mb-10 grid grid-cols-3 gap-3">
+          <div className="bg-[#201f1f] rounded-xl p-3 flex flex-col items-center">
+            <span className="font-headline font-black text-lg text-[#e5e2e1]">{sessionCount}</span>
+            <span className="font-label text-[9px] uppercase tracking-widest text-[#a48b83] mt-0.5">Sessions</span>
+          </div>
+          {weekVolume > 0 && (
+            <div className="bg-[#201f1f] rounded-xl p-3 flex flex-col items-center">
+              <span className="font-headline font-black text-lg text-[#ff9066]">{(weekVolume / 1000).toFixed(1)}t</span>
+              <span className="font-label text-[9px] uppercase tracking-widest text-[#a48b83] mt-0.5">Volume</span>
+            </div>
+          )}
+          {weekDistance > 0 && (
+            <div className="bg-[#201f1f] rounded-xl p-3 flex flex-col items-center">
+              <span className="font-headline font-black text-lg text-[#4bdece]">{weekDistance.toFixed(1)}</span>
+              <span className="font-label text-[9px] uppercase tracking-widest text-[#a48b83] mt-0.5">km run</span>
+            </div>
+          )}
+        </section>
+      )}
 
       <BottomNav />
     </main>
