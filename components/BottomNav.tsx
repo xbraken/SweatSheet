@@ -20,7 +20,7 @@ export default function BottomNav() {
           <Link
             key={tab.href}
             href={tab.href}
-            className={`flex flex-col items-center justify-center transition-all ${active ? 'text-[#ff9066] scale-110' : 'text-[#e5e2e1]/40'}`}
+            className={`flex flex-col items-center justify-center transition-all active:scale-90 ${active ? 'text-[#ff9066] scale-110' : 'text-[#e5e2e1]/40'}`}
           >
             <span
               className="material-symbols-outlined mb-1 text-[22px]"

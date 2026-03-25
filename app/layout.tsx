@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import NavigationProgress from '@/components/NavigationProgress'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
       </head>
       <body className="bg-[#0e0e0e] text-[#e5e2e1] font-body">
+        <NavigationProgress />
         <div className="mx-auto max-w-[390px] min-h-screen relative">
           {children}
         </div>
