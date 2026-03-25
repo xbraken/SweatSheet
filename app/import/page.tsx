@@ -191,9 +191,8 @@ function parseDistRecord(xml: string): { ts: number; dist: number } | null {
 async function collectWorkouts(
   file: File,
   onProgress: (pct: number) => void,
-): Promise<{ workouts: ParsedWorkout[], skippedTypes: Map<string, number> }> {
+): Promise<ParsedWorkout[]> {
   const workouts: ParsedWorkout[] = []
-  const skippedTypes = new Map<string, number>()
   const decoder = new TextDecoder('utf-8')
   const reader = file.stream().getReader()
   let buffer = ''
@@ -213,19 +212,14 @@ async function collectWorkouts(
         if (end === -1) { buffer = buffer.slice(start); searchFrom = 0; break }
         const block = buffer.slice(start, end + '</Workout>'.length)
         const workout = processWorkoutBlock(block)
-        if (workout) {
-          workouts.push(workout)
-        } else {
-          const t = attr(block, 'workoutActivityType')
-          if (t) skippedTypes.set(t, (skippedTypes.get(t) ?? 0) + 1)
-        }
+        if (workout) workouts.push(workout)
         searchFrom = end + '</Workout>'.length
       }
       if (searchFrom > 0) buffer = buffer.slice(searchFrom)
       if (!buffer.includes('<Workout ') && buffer.length > 2000) buffer = buffer.slice(-500)
     }
   } finally { reader.releaseLock() }
-  return { workouts, skippedTypes }
+  return workouts
 }
 
 /** Pass 2: stream through the file collecting HR and distance samples for each workout window */
@@ -339,9 +333,9 @@ async function collectSamples(
 async function streamParseAppleHealth(
   file: File,
   onProgress: (pct: number) => void,
-): Promise<{ workouts: ParsedWorkout[], skippedTypes: Map<string, number> }> {
+): Promise<ParsedWorkout[]> {
   // Pass 1: collect workouts (progress 0–60%)
-  const { workouts: rawWorkouts, skippedTypes } = await collectWorkouts(file, pct => onProgress(pct * 0.6))
+  const rawWorkouts = await collectWorkouts(file, pct => onProgress(pct * 0.6))
 
   const workouts = rawWorkouts
 
@@ -355,7 +349,7 @@ async function streamParseAppleHealth(
     await collectSamples(file, windows, pct => onProgress(0.6 + pct * 0.4))
   }
 
-  return { workouts: workouts.sort((a, b) => b.date.localeCompare(a.date)), skippedTypes }
+  return workouts.sort((a, b) => b.date.localeCompare(a.date))
 }
 
 // ── Shortcut JSON import ──────────────────────────────────────────────────────
@@ -530,7 +524,6 @@ export default function ImportPage() {
   const [duplicates, setDuplicates] = useState(0)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [skippedTypes, setSkippedTypes] = useState<Map<string, number>>(new Map())
   const fileRef = useRef<HTMLInputElement>(null)
 
   const processFile = useCallback(async (file: File) => {
@@ -553,9 +546,7 @@ export default function ImportPage() {
         parsed = parseShortcutJSON(json)
         setParseProgress(100)
       } else {
-        const result = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
-        parsed = result.workouts
-        setSkippedTypes(result.skippedTypes)
+        parsed = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
       }
     } catch {
       setError(isJson
@@ -776,9 +767,6 @@ export default function ImportPage() {
             <div>
               <h2 className="font-headline font-bold text-lg">{workouts.length} workouts found</h2>
               <p className="text-xs text-on-surface-variant">{workouts.filter(w => w.alreadyImported).length} already in SweatSheet</p>
-              {skippedTypes.size > 0 && (
-                <p className="text-xs text-yellow-400 mt-1">Skipped types: {[...skippedTypes.entries()].map(([t, n]) => `${t} (${n})`).join(', ')}</p>
-              )}
             </div>
             <button
               onClick={toggleAll}
