@@ -143,107 +143,124 @@ function parseHrRecord(xml: string): { ts: number; bpm: number } | null {
   return { ts, bpm: Math.round(value) }
 }
 
-/** Stream-parse the XML in 512 KB chunks — never loads the full file into memory */
-async function streamParseAppleHealth(
+/** Pass 1: collect workouts — original logic, completely unchanged */
+async function collectWorkouts(
   file: File,
   onProgress: (pct: number) => void,
 ): Promise<ParsedWorkout[]> {
   const workouts: ParsedWorkout[] = []
-  const hrRecords: Array<{ ts: number; bpm: number }> = []
   const decoder = new TextDecoder('utf-8')
   const reader = file.stream().getReader()
   let buffer = ''
   let bytesRead = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytesRead += value.byteLength
+      onProgress(bytesRead / file.size)
+      buffer += decoder.decode(value, { stream: true })
+      let searchFrom = 0
+      while (true) {
+        const start = buffer.indexOf('<Workout ', searchFrom)
+        if (start === -1) break
+        const end = buffer.indexOf('</Workout>', start)
+        if (end === -1) { buffer = buffer.slice(start); searchFrom = 0; break }
+        const block = buffer.slice(start, end + '</Workout>'.length)
+        const workout = processWorkoutBlock(block)
+        if (workout) workouts.push(workout)
+        searchFrom = end + '</Workout>'.length
+      }
+      if (searchFrom > 0) buffer = buffer.slice(searchFrom)
+      if (!buffer.includes('<Workout ') && buffer.length > 2000) buffer = buffer.slice(-500)
+    }
+  } finally { reader.releaseLock() }
+  return workouts
+}
+
+/** Pass 2: stream through the file again collecting HR samples for each workout window */
+async function collectHrSamples(
+  file: File,
+  windows: Array<{ startTs: number; endTs: number; workout: ParsedWorkout }>,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  const decoder = new TextDecoder('utf-8')
+  const reader = file.stream().getReader()
+  let buffer = ''
+  let bytesRead = 0
+  // Map from startTs → samples array (windows are sorted by startTs)
+  const samplesMap = new Map<number, Array<{ offsetSec: number; bpm: number }>>()
+  for (const w of windows) samplesMap.set(w.startTs, [])
 
   try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-
       bytesRead += value.byteLength
       onProgress(bytesRead / file.size)
       buffer += decoder.decode(value, { stream: true })
 
       let searchFrom = 0
       while (true) {
-        const wIdx = buffer.indexOf('<Workout ', searchFrom)
-        const hrIdx = buffer.indexOf('<Record type="HKQuantityTypeIdentifierHeartRate"', searchFrom)
-
-        if (wIdx === -1 && hrIdx === -1) break
-
-        // Process whichever element starts earlier in the buffer
-        if (hrIdx !== -1 && (wIdx === -1 || hrIdx < wIdx)) {
-          // HR record — find the end of this element
-          const gtPos = buffer.indexOf('>', hrIdx)
-          if (gtPos === -1) { buffer = buffer.slice(hrIdx); searchFrom = 0; break }
-          let hrEnd: number
-          if (buffer[gtPos - 1] === '/') {
-            hrEnd = gtPos + 1 // self-closing <Record ... />
-          } else {
-            const closeTag = buffer.indexOf('</Record>', gtPos)
-            if (closeTag === -1) { buffer = buffer.slice(hrIdx); searchFrom = 0; break }
-            hrEnd = closeTag + 9
+        const idx = buffer.indexOf('<Record type="HKQuantityTypeIdentifierHeartRate"', searchFrom)
+        if (idx === -1) break
+        const gtPos = buffer.indexOf('>', idx)
+        if (gtPos === -1) { buffer = buffer.slice(idx); searchFrom = 0; break }
+        let end: number
+        if (buffer[gtPos - 1] === '/') {
+          end = gtPos + 1
+        } else {
+          const closeTag = buffer.indexOf('</Record>', gtPos)
+          if (closeTag === -1) { buffer = buffer.slice(idx); searchFrom = 0; break }
+          end = closeTag + 9
+        }
+        const hr = parseHrRecord(buffer.slice(idx, end))
+        if (hr) {
+          for (const w of windows) {
+            if (hr.ts < w.startTs) break // windows sorted, so no later window can match either
+            if (hr.ts <= w.endTs) {
+              samplesMap.get(w.startTs)!.push({
+                offsetSec: Math.round((hr.ts - w.startTs) / 1000),
+                bpm: hr.bpm,
+              })
+            }
           }
-          const hr = parseHrRecord(buffer.slice(hrIdx, hrEnd))
-          if (hr) hrRecords.push(hr)
-          searchFrom = hrEnd
-          continue
         }
-
-        // Workout block
-        const start = wIdx
-        const end = buffer.indexOf('</Workout>', start)
-        if (end === -1) {
-          buffer = buffer.slice(start)
-          searchFrom = 0
-          break
-        }
-
-        const block = buffer.slice(start, end + '</Workout>'.length)
-        const workout = processWorkoutBlock(block)
-        if (workout) workouts.push(workout)
-        searchFrom = end + '</Workout>'.length
+        searchFrom = end
       }
-
-      // Trim fully-processed content
       if (searchFrom > 0) buffer = buffer.slice(searchFrom)
-      const hasPending = buffer.includes('<Workout ') || buffer.includes('<Record type="HKQuantityTypeIdentifierHeartRate"')
-      if (!hasPending && buffer.length > 2000) buffer = buffer.slice(-2000)
+      if (!buffer.includes('<Record type="HKQuantityTypeIdentifierHeartRate"') && buffer.length > 2000) {
+        buffer = buffer.slice(-500)
+      }
     }
-  } finally {
-    reader.releaseLock()
-  }
+  } finally { reader.releaseLock() }
 
-  // Sort once by timestamp, then binary-search for each workout's window
-  // (avoids O(workouts × hrRecords) filter which freezes on large exports)
-  hrRecords.sort((a, b) => a.ts - b.ts)
-
-  for (const workout of workouts) {
-    const startTs = new Date(workout.startedAt).getTime()
-    const endTs = new Date(workout.endedAt).getTime()
-    if (!startTs || !endTs) continue
-
-    // Binary search for first record >= startTs
-    let lo = 0, hi = hrRecords.length
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1
-      if (hrRecords[mid].ts < startTs) lo = mid + 1
-      else hi = mid
-    }
-
-    const samples: Array<{ offsetSec: number; bpm: number }> = []
-    let hrMin = Infinity, hrMax = -Infinity
-    for (let i = lo; i < hrRecords.length && hrRecords[i].ts <= endTs; i++) {
-      const bpm = hrRecords[i].bpm
-      samples.push({ offsetSec: Math.round((hrRecords[i].ts - startTs) / 1000), bpm })
-      if (bpm < hrMin) hrMin = bpm
-      if (bpm > hrMax) hrMax = bpm
-    }
-    workout.hrSamples = samples
+  for (const w of windows) {
+    const samples = samplesMap.get(w.startTs) ?? []
+    w.workout.hrSamples = samples
     if (samples.length > 0) {
-      if (!workout.hrMin) workout.hrMin = hrMin
-      if (!workout.hrMax) workout.hrMax = hrMax
+      if (!w.workout.hrMin) w.workout.hrMin = Math.min(...samples.map(s => s.bpm))
+      if (!w.workout.hrMax) w.workout.hrMax = Math.max(...samples.map(s => s.bpm))
     }
+  }
+}
+
+/** Stream-parse the XML in two passes — workouts first, then HR samples */
+async function streamParseAppleHealth(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<ParsedWorkout[]> {
+  // Pass 1: collect workouts (progress 0–60%)
+  const workouts = await collectWorkouts(file, pct => onProgress(pct * 0.6))
+
+  // Pass 2: collect HR samples for each workout (progress 60–100%)
+  const windows = workouts
+    .map(w => ({ startTs: new Date(w.startedAt).getTime(), endTs: new Date(w.endedAt).getTime(), workout: w }))
+    .filter(w => !isNaN(w.startTs) && !isNaN(w.endTs) && w.endTs > w.startTs)
+    .sort((a, b) => a.startTs - b.startTs)
+
+  if (windows.length > 0) {
+    await collectHrSamples(file, windows, pct => onProgress(0.6 + pct * 0.4))
   }
 
   return workouts.sort((a, b) => b.date.localeCompare(a.date))
