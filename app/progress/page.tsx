@@ -170,7 +170,8 @@ function RunDetailSheet({
     return Array.from({ length: n }, (_, i) => {
       const target = (i / (n - 1)) * maxT
       let j = samples.findIndex(s => s.time_offset_sec >= target)
-      if (j <= 0) return samples[Math.max(0, j)].hr_bpm
+      if (j < 0) return samples[samples.length - 1].hr_bpm
+      if (j === 0) return samples[0].hr_bpm
       const a = samples[j - 1], b = samples[j]
       const t = (target - a.time_offset_sec) / (b.time_offset_sec - a.time_offset_sec)
       return Math.round(a.hr_bpm + t * (b.hr_bpm - a.hr_bpm))
@@ -237,25 +238,37 @@ function RunDetailSheet({
   const paceValuesAll = hasPace ? normalizePaceSamples(distSamples, PACE_N) : []
   const validPaceValues = paceValuesAll.filter(v => v > 0)
   const paceAvgSec = detail.pace ? (toSeconds(detail.pace) ?? null) : null
-  const paceMinSec = validPaceValues.length > 0 ? Math.min(...validPaceValues) : null  // fastest
-  const paceMaxSec = validPaceValues.length > 0 ? Math.max(...validPaceValues) : null  // slowest (for display)
-  // Use 95th-percentile as the slowest axis bound to ignore GPS outlier spikes
-  const pace95th = validPaceValues.length > 0
-    ? [...validPaceValues].sort((a, b) => a - b)[Math.floor(validPaceValues.length * 0.95)]
-    : null
+  const paceMinSec = validPaceValues.length > 0 ? Math.min(...validPaceValues) : null  // fastest (main run)
+  const paceMaxSec = validPaceValues.length > 0 ? Math.max(...validPaceValues) : null  // slowest (main run, for display)
 
-  const pYMin = paceMinSec !== null ? Math.max(30, paceMinSec - 15) : 200
-  const pYMax = pace95th !== null ? Math.min(900, pace95th + 30) : 600
+  // Compare pace data
+  const compareDist: DistanceSample[] = compareDetail?.distanceSamples ?? []
+  const hasComparePace = compareDist.length > 3
+  const comparePaceValuesAll = hasComparePace ? normalizePaceSamples(compareDist, PACE_N) : []
+  const compareValidPaceValues = comparePaceValuesAll.filter(v => v > 0)
+  const comparePaceAvgSec = compareDetail?.pace ? (toSeconds(compareDetail.pace) ?? null) : null
 
-  const pacePts = paceValuesAll.length > 1
-    ? paceValuesAll.map((v, i) => {
-        const x = ((i / Math.max(paceValuesAll.length - 1, 1)) * 300).toFixed(1)
-        // Clamp to axis range so GPS noise never pushes the line off-screen
+  // Combined y-axis bounds (95th percentile to handle outliers from either run)
+  const allValidPaceForAxis = compareDetail && hasComparePace
+    ? [...validPaceValues, ...compareValidPaceValues]
+    : validPaceValues
+  const allPaceSorted = [...allValidPaceForAxis].sort((a, b) => a - b)
+  const pYMin = allPaceSorted.length > 0 ? Math.max(30, allPaceSorted[0] - 15) : 200
+  const pYMax = allPaceSorted.length > 0
+    ? Math.min(900, allPaceSorted[Math.floor(allPaceSorted.length * 0.95)] + 30)
+    : 600
+
+  const buildPacePts = (values: number[]) => values.length > 1
+    ? values.map((v, i) => {
+        const x = ((i / Math.max(values.length - 1, 1)) * 300).toFixed(1)
         const pv = Math.min(pYMax, Math.max(pYMin, v > 0 ? v : pYMax))
         const y = (10 + ((pv - pYMin) / (pYMax - pYMin || 1)) * 68).toFixed(1)  // inverted: fast=high
         return `${x},${y}`
       }).join(' ')
     : null
+
+  const pacePts = buildPacePts(paceValuesAll)
+  const comparePacePts = buildPacePts(comparePaceValuesAll)
 
   const pHovIdx = paceHoveredIdx ?? Math.floor((PACE_N - 1) / 2)
   const pHovPace = paceValuesAll[pHovIdx] ?? 0
@@ -265,6 +278,7 @@ function RunDetailSheet({
   const pHovTimeSec = hasPace
     ? Math.round((pHovIdx / (PACE_N - 1)) * paceMaxT)
     : null
+  const pHovComparePace = comparePaceValuesAll.length > 0 ? (comparePaceValuesAll[pHovIdx] ?? 0) : 0
 
   // ── Best segments ──────────────────────────────────────────────────────────
   const best5KSec = hasPace ? findBestSegment(distSamples, 5.0) : null
@@ -351,28 +365,46 @@ function RunDetailSheet({
                 for (let t = interval; t < maxT - interval * 0.4; t += interval) ticks.push(t)
 
                 const pHovPaceLabel = pHovPace > 0 ? fmtPaceSec(pHovPace) : null
+                const inCompare = compareDetail && hasComparePace
+                const mainColor = inCompare ? '#ff9066' : '#4bdece'
+                const cmpColor = '#4bdece'
 
                 return (
                   <>
-                    {/* Header row: avg pace left, range right */}
+                    {/* Header row */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">Pace over time</p>
+                        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">
+                          {inCompare ? 'Pace comparison (% completion)' : 'Pace over time'}
+                        </p>
                         {paceAvgSec && (
-                          <span className="text-lg font-black font-headline text-[#4bdece]">{fmtPaceSec(paceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span></span>
+                          <span className="text-lg font-black font-headline" style={{ color: mainColor }}>
+                            {fmtPaceSec(paceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span>
+                          </span>
                         )}
                       </div>
                       <div className="text-right">
-                        {paceMinSec && paceMaxSec && (
-                          <>
-                            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">Range</p>
-                            <p className="text-xs text-[#4bdece]">
-                              <span className="font-black">{fmtPaceSec(paceMinSec)}</span>
-                              <span className="text-[#a48b83] mx-1">→</span>
-                              <span className="font-black">{fmtPaceSec(paceMaxSec)}</span>
-                              <span className="text-[#a48b83] ml-1">/km</span>
-                            </p>
-                          </>
+                        {inCompare ? (
+                          comparePaceAvgSec && (
+                            <>
+                              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">{formatDate(compareDetail!.date)}</p>
+                              <span className="text-lg font-black font-headline text-[#4bdece]">
+                                {fmtPaceSec(comparePaceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span>
+                              </span>
+                            </>
+                          )
+                        ) : (
+                          paceMinSec && paceMaxSec && (
+                            <>
+                              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">Range</p>
+                              <p className="text-xs text-[#4bdece]">
+                                <span className="font-black">{fmtPaceSec(paceMinSec)}</span>
+                                <span className="text-[#a48b83] mx-1">→</span>
+                                <span className="font-black">{fmtPaceSec(paceMaxSec)}</span>
+                                <span className="text-[#a48b83] ml-1">/km</span>
+                              </p>
+                            </>
+                          )
                         )}
                       </div>
                     </div>
@@ -381,17 +413,20 @@ function RunDetailSheet({
                     <div className="flex items-center justify-end gap-2 mb-2 h-5">
                       {paceHoveredIdx !== null && pHovPaceLabel && (
                         <>
-                          {pHovTimeSec !== null && (
+                          {!inCompare && pHovTimeSec !== null && (
                             <span className="text-[10px] text-[#a48b83]">
                               {pHovTimeSec >= 3600
                                 ? `${Math.floor(pHovTimeSec / 3600)}:${String(Math.floor((pHovTimeSec % 3600) / 60)).padStart(2, '0')}:${String(pHovTimeSec % 60).padStart(2, '0')}`
                                 : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
                             </span>
                           )}
-                          {pHovDist > 0 && (
+                          {!inCompare && pHovDist > 0 && (
                             <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
                           )}
-                          <span className="text-sm font-black font-headline text-[#4bdece]">{pHovPaceLabel} /km</span>
+                          <span className="text-sm font-black font-headline" style={{ color: mainColor }}>{pHovPaceLabel} /km</span>
+                          {inCompare && pHovComparePace > 0 && (
+                            <span className="text-sm font-black font-headline text-[#4bdece]">{fmtPaceSec(pHovComparePace)} /km</span>
+                          )}
                         </>
                       )}
                     </div>
@@ -409,30 +444,46 @@ function RunDetailSheet({
                     >
                       <defs>
                         <linearGradient id="paceGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#4bdece" stopOpacity="0.22" />
-                          <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
+                          <stop offset="0%" stopColor={mainColor} stopOpacity="0.22" />
+                          <stop offset="100%" stopColor={mainColor} stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="paceGradCmp" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={cmpColor} stopOpacity="0.15" />
+                          <stop offset="100%" stopColor={cmpColor} stopOpacity="0" />
                         </linearGradient>
                       </defs>
 
                       {/* Avg pace dashed line */}
                       {paceAvgSec && (() => {
                         const avgY = 10 + ((paceAvgSec - pYMin) / (pYMax - pYMin || 1)) * 68
-                        return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke="#4bdece" strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.35" />
+                        return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke={mainColor} strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.35" />
                       })()}
 
-                      {/* Fill + line */}
+                      {/* Compare pace fill + line */}
+                      {inCompare && comparePacePts && (
+                        <>
+                          <polygon points={`0,78 ${comparePacePts} 300,78`} fill="url(#paceGradCmp)" />
+                          <polyline points={comparePacePts} fill="none" stroke={cmpColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.7" />
+                        </>
+                      )}
+
+                      {/* Main pace fill + line */}
                       {pacePts && (
                         <>
                           <polygon points={`0,78 ${pacePts} 300,78`} fill="url(#paceGrad)" />
-                          <polyline points={pacePts} fill="none" stroke="#4bdece" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                          <polyline points={pacePts} fill="none" stroke={mainColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                         </>
                       )}
 
                       {/* Hover scrubber */}
                       {pacePts && (
                         <>
-                          <line x1={pHovX} y1={0} x2={pHovX} y2={82} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
-                          <circle cx={pHovX} cy={pHovY} r="4" fill="#4bdece" />
+                          <line x1={pHovX} y1={0} x2={pHovX} y2={82} stroke={mainColor} strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
+                          <circle cx={pHovX} cy={pHovY} r="4" fill={mainColor} />
+                          {inCompare && pHovComparePace > 0 && (() => {
+                            const cY = 10 + ((Math.min(pYMax, Math.max(pYMin, pHovComparePace)) - pYMin) / (pYMax - pYMin || 1)) * 68
+                            return <circle cx={pHovX} cy={cY} r="4" fill={cmpColor} />
+                          })()}
                         </>
                       )}
 
@@ -443,24 +494,61 @@ function RunDetailSheet({
                       {/* X axis baseline */}
                       <line x1={0} y1={82} x2={300} y2={82} stroke="#2a2a2a" strokeWidth="0.5" />
 
-                      {/* X axis time labels */}
-                      <text x={2} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="start">0:00</text>
-                      {ticks.map(t => {
-                        const x = (t / maxT) * 300
-                        const h = Math.floor(t / 3600)
-                        const m = Math.floor((t % 3600) / 60)
-                        const s = t % 60
-                        const label = h > 0 ? `${h}:${String(m).padStart(2,'0')}` : s === 0 ? `${m}m` : `${m}:${String(s).padStart(2,'0')}`
-                        return <text key={t} x={x} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="middle">{label}</text>
-                      })}
-                      {maxT > 0 && (() => {
-                        const h = Math.floor(maxT / 3600)
-                        const m = Math.floor((maxT % 3600) / 60)
-                        const s = maxT % 60
-                        const endLabel = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`
-                        return <text x={298} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="end">{endLabel}</text>
-                      })()}
+                      {/* X axis labels */}
+                      {inCompare ? (
+                        [0, 50, 100].map(pct => {
+                          const x = pct === 0 ? 2 : pct === 100 ? 298 : 150
+                          const anchor = pct === 0 ? 'start' : pct === 100 ? 'end' : 'middle'
+                          return <text key={pct} x={x} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor={anchor}>{pct}%</text>
+                        })
+                      ) : (
+                        <>
+                          <text x={2} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="start">0:00</text>
+                          {ticks.map(t => {
+                            const x = (t / maxT) * 300
+                            const h = Math.floor(t / 3600)
+                            const m = Math.floor((t % 3600) / 60)
+                            const s = t % 60
+                            const label = h > 0 ? `${h}:${String(m).padStart(2,'0')}` : s === 0 ? `${m}m` : `${m}:${String(s).padStart(2,'0')}`
+                            return <text key={t} x={x} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="middle">{label}</text>
+                          })}
+                          {maxT > 0 && (() => {
+                            const h = Math.floor(maxT / 3600)
+                            const m = Math.floor((maxT % 3600) / 60)
+                            const s = maxT % 60
+                            const endLabel = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`
+                            return <text x={298} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="end">{endLabel}</text>
+                          })()}
+                        </>
+                      )}
                     </svg>
+
+                    {/* Pace legend when comparing */}
+                    {inCompare && (
+                      <div className="flex items-center justify-between mt-3">
+                        <div className="flex gap-4">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-0.5 rounded" style={{ backgroundColor: mainColor }} />
+                            <span className="text-[10px] text-[#a48b83]">{formatDate(detail.date)}</span>
+                            {paceAvgSec && <span className="text-[10px] font-bold" style={{ color: mainColor }}>{fmtPaceSec(paceAvgSec)} /km</span>}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-0.5 bg-[#4bdece] rounded" />
+                            <span className="text-[10px] text-[#a48b83]">{formatDate(compareDetail!.date)}</span>
+                            {comparePaceAvgSec && <span className="text-[10px] font-bold text-[#4bdece]">{fmtPaceSec(comparePaceAvgSec)} /km</span>}
+                          </div>
+                        </div>
+                        {paceAvgSec && comparePaceAvgSec && (() => {
+                          const delta = paceAvgSec - comparePaceAvgSec
+                          const isFaster = delta < 0  // main has lower sec/km = faster
+                          return (
+                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${isFaster ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#ff9066]/20 text-[#ff9066]'}`}>
+                              {isFaster ? `${fmtPaceSec(Math.abs(delta))} faster` : `${fmtPaceSec(Math.abs(delta))} slower`}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
                   </>
                 )
               })()}
