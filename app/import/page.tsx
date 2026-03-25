@@ -214,19 +214,35 @@ async function streamParseAppleHealth(
     reader.releaseLock()
   }
 
-  // Match collected HR records to their workouts by timestamp
+  // Sort once by timestamp, then binary-search for each workout's window
+  // (avoids O(workouts × hrRecords) filter which freezes on large exports)
+  hrRecords.sort((a, b) => a.ts - b.ts)
+
   for (const workout of workouts) {
     const startTs = new Date(workout.startedAt).getTime()
     const endTs = new Date(workout.endedAt).getTime()
     if (!startTs || !endTs) continue
-    workout.hrSamples = hrRecords
-      .filter(r => r.ts >= startTs && r.ts <= endTs)
-      .map(r => ({ offsetSec: Math.round((r.ts - startTs) / 1000), bpm: r.bpm }))
-      .sort((a, b) => a.offsetSec - b.offsetSec)
-    // Fill min/max from samples if WorkoutStatistics didn't have them
-    if (workout.hrSamples.length > 0) {
-      if (!workout.hrMin) workout.hrMin = Math.min(...workout.hrSamples.map(s => s.bpm))
-      if (!workout.hrMax) workout.hrMax = Math.max(...workout.hrSamples.map(s => s.bpm))
+
+    // Binary search for first record >= startTs
+    let lo = 0, hi = hrRecords.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (hrRecords[mid].ts < startTs) lo = mid + 1
+      else hi = mid
+    }
+
+    const samples: Array<{ offsetSec: number; bpm: number }> = []
+    let hrMin = Infinity, hrMax = -Infinity
+    for (let i = lo; i < hrRecords.length && hrRecords[i].ts <= endTs; i++) {
+      const bpm = hrRecords[i].bpm
+      samples.push({ offsetSec: Math.round((hrRecords[i].ts - startTs) / 1000), bpm })
+      if (bpm < hrMin) hrMin = bpm
+      if (bpm > hrMax) hrMax = bpm
+    }
+    workout.hrSamples = samples
+    if (samples.length > 0) {
+      if (!workout.hrMin) workout.hrMin = hrMin
+      if (!workout.hrMax) workout.hrMax = hrMax
     }
   }
 
