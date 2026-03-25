@@ -685,22 +685,6 @@ export default function LogPage() {
               })}
             </div>}
 
-            {block.exercise && block.sets.some(s => s.done) && (
-              <button
-                onClick={() => {
-                  // Remove the last pending (auto-queued) set, then mark block done
-                  setBlocks(prev => prev.map(b => {
-                    if (b.id !== block.id || b.type !== 'lift') return b
-                    const sets = b.sets.filter(s => s.done)
-                    return { ...b, sets }
-                  }))
-                  setRestingBlockId(null)
-                }}
-                className="w-full mt-4 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors"
-              >
-                Done with exercise
-              </button>
-            )}
           </section>
         ) : (
           <section key={block.id} className="bg-[#201f1f] rounded-3xl p-5">
