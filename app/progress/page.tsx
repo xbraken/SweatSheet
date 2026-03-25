@@ -1348,6 +1348,7 @@ export default function ProgressPage() {
                   style={{ touchAction: 'none' }}
                   onPointerMove={e => handleChartPointer(e, liftPts.length)}
                   onPointerLeave={() => setHoveredIdx(null)}
+                  onPointerCancel={() => setHoveredIdx(null)}
                 >
                   <defs>
                     <linearGradient id="liftGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1383,6 +1384,7 @@ export default function ProgressPage() {
                 style={{ touchAction: 'none' }}
                 onPointerMove={e => handleChartPointer(e, cardioChartPts.length)}
                 onPointerLeave={() => setHoveredIdx(null)}
+                onPointerCancel={() => setHoveredIdx(null)}
               >
                 <defs>
                   <linearGradient id="cardioGrad" x1="0" y1="0" x2="0" y2="1">
