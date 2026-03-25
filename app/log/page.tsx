@@ -391,9 +391,17 @@ export default function LogPage() {
       if (b.type !== 'lift' || b.id !== blockId) return b
       const updated = b.sets.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
-      if (justDone && restDuration > 0) {
-        setRestingBlockId(blockId)
-        setRestRemaining(restDuration)
+      if (justDone) {
+        if (restDuration > 0) {
+          setRestingBlockId(blockId)
+          setRestRemaining(restDuration)
+        }
+        // Auto-queue next set with same weight/reps
+        const loggedSet = updated.find(s => s.id === setId)!
+        const hasNextPending = updated.some(s => !s.done)
+        if (!hasNextPending) {
+          updated.push({ id: Date.now(), weight: loggedSet.weight, reps: loggedSet.reps, done: false })
+        }
       }
       return { ...b, sets: updated }
     }))
