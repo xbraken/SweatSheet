@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       })
       const sessionId = sessionRes.rows[0].id as number
 
-      const blockType = w.activity === 'Cycling' ? 'cycle' : 'run'
+      const blockType = w.activity === 'Cycling' ? 'cycle' : w.activity === 'Walking' ? 'cardio' : 'run'
       const blockRes = await db.execute({
         sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, 0) RETURNING id',
         args: [sessionId, blockType],

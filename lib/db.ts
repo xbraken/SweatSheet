@@ -59,6 +59,13 @@ export async function initDb() {
     UNIQUE(user_id, date)
   )`)
 
+  await db.execute(`CREATE TABLE IF NOT EXISTS starred_exercises (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise TEXT NOT NULL,
+    UNIQUE(user_id, exercise)
+  )`)
+
   // Migrate existing sessions table to have user_id if not present
   try {
     await db.execute(`ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`)

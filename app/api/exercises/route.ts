@@ -8,8 +8,8 @@ export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Return exercises with their most recent weight/reps for prefill
-  const result = await db.execute({
+  // Last-used weight/reps per exercise for prefill
+  const historyRes = await db.execute({
     sql: `SELECT st.exercise,
             st.weight as last_weight,
             st.reps as last_reps
@@ -23,5 +23,14 @@ export async function GET() {
     args: [session.userId],
   })
 
-  return NextResponse.json(result.rows)
+  // Starred exercises
+  const starredRes = await db.execute({
+    sql: 'SELECT exercise FROM starred_exercises WHERE user_id = ?',
+    args: [session.userId],
+  })
+
+  return NextResponse.json({
+    history: historyRes.rows,
+    starred: starredRes.rows.map(r => r.exercise as string),
+  })
 }

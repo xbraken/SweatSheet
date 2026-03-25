@@ -10,6 +10,8 @@ export default function AccountPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [invalidExercises, setInvalidExercises] = useState<{ exercise: string; set_count: number }[]>([])
+  const [cleaning, setCleaning] = useState(false)
 
   useEffect(() => {
     fetch('/api/account').then(r => r.json()).then(data => {
@@ -17,6 +19,10 @@ export default function AccountPage() {
       setUnitPref(data.unit_pref === 'imperial' ? 'imperial' : 'metric')
       setLoading(false)
     }).catch(() => setLoading(false))
+
+    fetch('/api/exercises/cleanup').then(r => r.json()).then(data => {
+      if (data.invalid) setInvalidExercises(data.invalid)
+    }).catch(() => {})
   }, [])
 
   async function savePrefs() {
@@ -81,6 +87,39 @@ export default function AccountPage() {
           {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save preferences'}
         </button>
       </section>
+
+      {/* Data cleanup */}
+      {invalidExercises.length > 0 && (
+        <section className="flex flex-col gap-3 mb-8">
+          <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Data cleanup</h3>
+          <div className="bg-[#201f1f] rounded-2xl p-5">
+            <p className="text-sm text-[#a48b83] mb-3">
+              {invalidExercises.length} exercise{invalidExercises.length > 1 ? 's' : ''} in your history don&apos;t match the exercise list:
+            </p>
+            <div className="flex flex-col gap-1.5 mb-4">
+              {invalidExercises.map(e => (
+                <div key={e.exercise} className="flex justify-between items-center px-3 py-2 bg-[#2a2a2a] rounded-lg text-sm">
+                  <span className="text-[#e5e2e1]">{e.exercise || '(empty name)'}</span>
+                  <span className="text-[#a48b83] text-xs">{e.set_count} sets</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={async () => {
+                if (!confirm(`Remove ${invalidExercises.length} exercise(s) and their sets? This can't be undone.`)) return
+                setCleaning(true)
+                await fetch('/api/exercises/cleanup', { method: 'DELETE' })
+                setInvalidExercises([])
+                setCleaning(false)
+              }}
+              disabled={cleaning}
+              className="w-full py-3 bg-[#ff9066]/20 text-[#ff9066] rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
+            >
+              {cleaning ? 'Cleaning…' : 'Remove invalid exercises'}
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Danger zone */}
       <section className="flex flex-col gap-3">

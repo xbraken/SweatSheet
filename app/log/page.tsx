@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
+import { EXERCISES, CATEGORIES, type ExerciseCategory } from '@/lib/exercises'
 
 type SetRow = { id: number; weight: number; reps: number; done: boolean }
 type LiftBlock = { id: number; type: 'lift'; exercise: string; sets: SetRow[] }
@@ -156,54 +157,173 @@ function AddBlockSheet({ onAdd, onClose }: {
   )
 }
 
-// ── Exercise Autocomplete Input ───────────────────────────────────────────────
-function ExerciseInput({
-  value, hints, onChange, onSelect,
+// ── Exercise Picker Sheet ─────────────────────────────────────────────────────
+function ExercisePicker({
+  hints,
+  starred,
+  onSelect,
+  onToggleStar,
+  onClose,
 }: {
-  value: string
   hints: ExerciseHint[]
-  onChange: (v: string) => void
-  onSelect: (h: ExerciseHint) => void
+  starred: Set<string>
+  onSelect: (name: string, hint?: ExerciseHint) => void
+  onToggleStar: (name: string) => void
+  onClose: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [search, setSearch] = useState('')
+  const [filterCat, setFilterCat] = useState<ExerciseCategory | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const filtered = hints.filter(h =>
-    h.exercise.toLowerCase().includes(value.toLowerCase()) && h.exercise !== value
-  ).slice(0, 6)
+  useEffect(() => { inputRef.current?.focus() }, [])
 
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  const hintMap = useMemo(() => {
+    const m = new Map<string, ExerciseHint>()
+    for (const h of hints) m.set(h.exercise, h)
+    return m
+  }, [hints])
+
+  const q = search.toLowerCase()
+  const filtered = useMemo(() => {
+    let list = EXERCISES
+    if (filterCat) list = list.filter(e => e.category === filterCat)
+    if (q) list = list.filter(e => e.name.toLowerCase().includes(q))
+    return list
+  }, [q, filterCat])
+
+  const starredExercises = useMemo(
+    () => filtered.filter(e => starred.has(e.name)),
+    [filtered, starred]
+  )
+  const unstarredExercises = useMemo(
+    () => filtered.filter(e => !starred.has(e.name)),
+    [filtered, starred]
+  )
+
+  const renderRow = (name: string) => {
+    const hint = hintMap.get(name)
+    const isStarred = starred.has(name)
+    return (
+      <div key={name} className="flex items-center">
+        <button
+          onClick={() => onSelect(name, hint)}
+          className="flex-1 flex items-center justify-between py-3 px-4 hover:bg-[#2a2a2a] active:bg-[#353534] transition-colors text-left rounded-xl"
+        >
+          <div>
+            <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
+            {hint && (
+              <span className="ml-2 text-[10px] text-[#a48b83]">
+                {hint.last_weight} kg × {hint.last_reps}
+              </span>
+            )}
+          </div>
+        </button>
+        <button
+          onClick={() => onToggleStar(name)}
+          className="p-2 shrink-0"
+        >
+          <span
+            className={`material-symbols-outlined text-lg ${isStarred ? 'text-[#ff9066]' : 'text-[#56423c]'}`}
+            style={{ fontVariationSettings: isStarred ? "'FILL' 1" : "'FILL' 0" }}
+          >
+            star
+          </span>
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div ref={ref} className="relative flex-1">
-      <input
-        value={value}
-        onChange={e => { onChange(e.target.value); setOpen(true) }}
-        onFocus={() => setOpen(true)}
-        className="font-headline text-xl font-bold text-[#e5e2e1] bg-transparent outline-none w-full"
-        placeholder="Exercise name"
-      />
-      {open && filtered.length > 0 && (
-        <div className="absolute top-full left-0 right-0 bg-[#1e1e1e] border border-[#353534] rounded-xl mt-1 z-20 overflow-hidden shadow-xl">
-          {filtered.map(h => (
-            <button
-              key={h.exercise}
-              onMouseDown={e => { e.preventDefault(); onSelect(h); setOpen(false) }}
-              className="w-full px-4 py-2.5 flex justify-between items-center hover:bg-[#2a2a2a] transition-colors text-left"
-            >
-              <span className="font-body text-[#e5e2e1] text-sm">{h.exercise}</span>
-              <span className="text-[10px] text-[#a48b83]">{h.last_weight} kg × {h.last_reps}</span>
+    <>
+      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-[#131313] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 border-b border-[#201f1f]">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-headline text-lg font-bold">Choose exercise</h2>
+            <button onClick={onClose}>
+              <span className="material-symbols-outlined text-[#a48b83]">close</span>
             </button>
-          ))}
+          </div>
+          {/* Search */}
+          <div className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-3 py-2.5">
+            <span className="material-symbols-outlined text-[#a48b83] text-lg">search</span>
+            <input
+              ref={inputRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search exercises…"
+              className="flex-1 bg-transparent outline-none text-sm text-[#e5e2e1] placeholder:text-[#56423c]"
+            />
+            {search && (
+              <button onClick={() => setSearch('')}>
+                <span className="material-symbols-outlined text-[#a48b83] text-sm">close</span>
+              </button>
+            )}
+          </div>
+          {/* Category filter */}
+          <div className="flex gap-1.5 mt-3 overflow-x-auto no-scrollbar">
+            <button
+              onClick={() => setFilterCat(null)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
+                !filterCat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'
+              }`}
+            >
+              All
+            </button>
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setFilterCat(filterCat === cat ? null : cat)}
+                className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
+                  filterCat === cat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-2 pb-32 md:pb-8">
+          {starredExercises.length > 0 && (
+            <>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#ff9066] px-4 pt-4 pb-1">
+                Starred
+              </p>
+              {starredExercises.map(e => renderRow(e.name))}
+            </>
+          )}
+          {unstarredExercises.length > 0 && (
+            <>
+              {starredExercises.length > 0 && (
+                <div className="mx-4 my-2 border-t border-[#201f1f]" />
+              )}
+              {!search && !filterCat ? (
+                // Group by category when no search/filter
+                CATEGORIES.filter(cat => unstarredExercises.some(e => e.category === cat)).map(cat => (
+                  <div key={cat}>
+                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-4 pt-4 pb-1">
+                      {cat}
+                    </p>
+                    {unstarredExercises.filter(e => e.category === cat).map(e => renderRow(e.name))}
+                  </div>
+                ))
+              ) : (
+                unstarredExercises.map(e => renderRow(e.name))
+              )}
+            </>
+          )}
+          {filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <span className="material-symbols-outlined text-4xl text-[#353534] mb-3">search_off</span>
+              <p className="text-sm text-[#a48b83]">No exercises match &ldquo;{search}&rdquo;</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -221,6 +341,8 @@ export default function LogPage() {
   const [prs, setPrs] = useState<{ exercise: string; weight: number }[]>([])
   const [showPrs, setShowPrs] = useState(false)
   const [loadingLast, setLoadingLast] = useState(false)
+  const [starred, setStarred] = useState<Set<string>>(new Set())
+  const [pickerBlockId, setPickerBlockId] = useState<number | null>(null)
 
   // Load rest duration from localStorage
   useEffect(() => {
@@ -233,11 +355,35 @@ export default function LogPage() {
     localStorage.setItem('ss_rest_duration', String(v))
   }
 
-  // Fetch exercise hints
+  // Fetch exercise hints + starred
   useEffect(() => {
     fetch('/api/exercises').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setHints(data)
+      if (data.history && Array.isArray(data.history)) setHints(data.history)
+      if (data.starred && Array.isArray(data.starred)) setStarred(new Set(data.starred))
     }).catch(() => {})
+  }, [])
+
+  const toggleStar = useCallback((exercise: string) => {
+    setStarred(prev => {
+      const next = new Set(prev)
+      const isStarred = next.has(exercise)
+      if (isStarred) {
+        next.delete(exercise)
+        fetch('/api/exercises/starred', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exercise }),
+        })
+      } else {
+        next.add(exercise)
+        fetch('/api/exercises/starred', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exercise }),
+        })
+      }
+      return next
+    })
   }, [])
 
   const updateSet = (blockId: number, setId: number, field: 'weight' | 'reps', delta: number) => {
@@ -344,6 +490,27 @@ export default function LogPage() {
       {restTimer !== null && <RestTimer seconds={restDuration} onDone={() => setRestTimer(null)} />}
       {showPrs && prs.length > 0 && <PrToast prs={prs} onDone={() => setShowPrs(false)} />}
       {showAddSheet && <AddBlockSheet onAdd={handleAddBlock} onClose={() => setShowAddSheet(false)} />}
+      {pickerBlockId !== null && (
+        <ExercisePicker
+          hints={hints}
+          starred={starred}
+          onToggleStar={toggleStar}
+          onSelect={(name, hint) => {
+            setBlocks(prev => prev.map(b => {
+              if (b.id !== pickerBlockId || b.type !== 'lift') return b
+              return {
+                ...b,
+                exercise: name,
+                sets: hint
+                  ? b.sets.map((s, i) => i === 0 ? { ...s, weight: hint.last_weight, reps: hint.last_reps } : s)
+                  : b.sets,
+              }
+            }))
+            setPickerBlockId(null)
+          }}
+          onClose={() => setPickerBlockId(null)}
+        />
+      )}
 
       {/* Top bar */}
       <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
@@ -404,19 +571,16 @@ export default function LogPage() {
         {blocks.map(block => block.type === 'lift' ? (
           <section key={block.id} className="bg-[#201f1f] rounded-3xl p-5">
             <div className="flex justify-between items-start mb-5">
-              <ExerciseInput
-                value={block.exercise}
-                hints={hints}
-                onChange={v => setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, exercise: v } : b))}
-                onSelect={h => setBlocks(prev => prev.map(b => {
-                  if (b.id !== block.id || b.type !== 'lift') return b
-                  return {
-                    ...b,
-                    exercise: h.exercise,
-                    sets: b.sets.map((s, i) => i === 0 ? { ...s, weight: h.last_weight, reps: h.last_reps } : s),
-                  }
-                }))}
-              />
+              <button
+                onClick={() => setPickerBlockId(block.id)}
+                className="flex-1 text-left"
+              >
+                {block.exercise ? (
+                  <h3 className="font-headline text-xl font-bold text-[#e5e2e1]">{block.exercise}</h3>
+                ) : (
+                  <span className="font-headline text-xl font-bold text-[#56423c]">Tap to pick exercise</span>
+                )}
+              </button>
               <button onClick={() => setBlocks(prev => prev.filter(b => b.id !== block.id))} className="ml-2 flex-shrink-0">
                 <span className="material-symbols-outlined text-[#a48b83] text-lg">close</span>
               </button>
