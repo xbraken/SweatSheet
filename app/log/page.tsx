@@ -521,15 +521,8 @@ export default function LogPage() {
 
       {/* Top bar */}
       <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
-        <div className="flex justify-between items-center">
+        <div className="flex items-center">
           <span className="font-label text-[#dcc1b8] text-sm uppercase tracking-widest">Session</span>
-          <button
-            onClick={finishSession}
-            disabled={saving || blocks.length === 0 || blocks.some(b => b.type === 'lift' && !b.exercise)}
-            className="bg-gradient-to-br from-primary to-primary-container text-[#752805] px-6 py-2.5 rounded-xl font-body font-bold text-sm shadow-xl active:scale-95 transition-all disabled:opacity-30"
-          >
-            {saving ? 'Saving…' : 'Finish'}
-          </button>
         </div>
         {/* Rest duration picker */}
         <div className="flex items-center gap-2">
@@ -692,9 +685,20 @@ export default function LogPage() {
               })}
             </div>}
 
-            {block.exercise && (
-              <button onClick={() => addSet(block.id)} className="w-full mt-4 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors">
-                + Add set
+            {block.exercise && block.sets.some(s => s.done) && (
+              <button
+                onClick={() => {
+                  // Remove the last pending (auto-queued) set, then mark block done
+                  setBlocks(prev => prev.map(b => {
+                    if (b.id !== block.id || b.type !== 'lift') return b
+                    const sets = b.sets.filter(s => s.done)
+                    return { ...b, sets }
+                  }))
+                  setRestingBlockId(null)
+                }}
+                className="w-full mt-4 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors"
+              >
+                Done with exercise
               </button>
             )}
           </section>
@@ -762,16 +766,27 @@ export default function LogPage() {
           </div>
         )}
 
-        {/* Single add button */}
-        <div className="pb-8">
-          <button
-            onClick={() => setShowAddSheet(true)}
-            className="w-full flex items-center justify-center gap-3 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40 hover:bg-[#201f1f]/80"
-          >
-            <span className="material-symbols-outlined text-[#ff9066] text-2xl">add_circle</span>
-            <span className="font-headline font-bold text-[#dcc1b8]">Add block</span>
-          </button>
-        </div>
+        {/* Add block */}
+        <button
+          onClick={() => setShowAddSheet(true)}
+          className="w-full flex items-center justify-center gap-3 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40 hover:bg-[#201f1f]/80"
+        >
+          <span className="material-symbols-outlined text-[#ff9066] text-2xl">add_circle</span>
+          <span className="font-headline font-bold text-[#dcc1b8]">Add block</span>
+        </button>
+
+        {/* Finish session */}
+        {blocks.length > 0 && (
+          <div className="pb-8">
+            <button
+              onClick={finishSession}
+              disabled={saving || blocks.some(b => b.type === 'lift' && !b.exercise)}
+              className="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-[#752805] rounded-2xl font-headline font-bold text-base shadow-xl active:scale-95 transition-all disabled:opacity-30"
+            >
+              {saving ? 'Saving…' : 'Finish session'}
+            </button>
+          </div>
+        )}
       </div>
 
       <BottomNav />
