@@ -146,7 +146,7 @@ export default function UploadPage() {
                 </div>
                 <div className="w-full py-4 rounded-lg flex justify-center items-center gap-2">
                   <span className="font-label text-xs font-bold uppercase tracking-widest text-primary-container">
-                    {saved ? 'Saved!' : saving ? 'Saving...'}
+                    {saved ? 'Saved!' : saving ? 'Saving...' : ''}
                   </span>
                   {saved && <span className="material-symbols-outlined text-sm text-primary-container">check</span>}
                 </div>
