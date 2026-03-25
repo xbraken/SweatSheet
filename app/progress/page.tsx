@@ -76,6 +76,7 @@ export default function ProgressPage() {
   const [calMonthOffset, setCalMonthOffset] = useState(0)
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+  const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>('all')
 
   useEffect(() => {
     fetch('/api/progress')
@@ -110,8 +111,20 @@ export default function ProgressPage() {
       .finally(() => setLoading(false))
   }, [exercise])
 
+  // ── Chart range cutoff ───────────────────────────────────────────────────────
+  const rangeCutoff = useMemo(() => {
+    const d = new Date()
+    if (chartRange === 'week') { d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0] }
+    if (chartRange === 'month') { d.setMonth(d.getMonth() - 1); return d.toISOString().split('T')[0] }
+    if (chartRange === 'year') { d.setFullYear(d.getFullYear() - 1); return d.toISOString().split('T')[0] }
+    return null
+  }, [chartRange])
+
   // ── Lift chart ──────────────────────────────────────────────────────────────
-  const liftChartData = useMemo(() => [...liftHistory].reverse(), [liftHistory])
+  const liftChartData = useMemo(() => {
+    const arr = [...liftHistory].reverse()
+    return rangeCutoff ? arr.filter(e => e.date >= rangeCutoff) : arr
+  }, [liftHistory, rangeCutoff])
   const liftChartPts = useMemo(() =>
     liftChartData.map(e => ({ date: e.date, value: Number(e.max_weight) })),
     [liftChartData]
@@ -128,7 +141,10 @@ export default function ProgressPage() {
   )
 
   // ── Cardio chart ────────────────────────────────────────────────────────────
-  const cardioChartData = useMemo(() => [...filteredCardioHistory].reverse(), [filteredCardioHistory])
+  const cardioChartData = useMemo(() => {
+    const arr = [...filteredCardioHistory].reverse()
+    return rangeCutoff ? arr.filter(e => e.date >= rangeCutoff) : arr
+  }, [filteredCardioHistory, rangeCutoff])
   const hasPaceData = filteredCardioHistory.some(e => e.pace)
 
   const cardioChartPts = useMemo(() => {
@@ -144,6 +160,7 @@ export default function ProgressPage() {
   const cardioInvert = cardioMetric === 'pace'
   const cardioSvgPts = cardioValues.length > 1 ? buildSvgPoints(cardioValues, cardioInvert) : null
   const cardioTrend = useMemo(() => trendPercent(cardioValues, cardioInvert), [cardioValues, cardioInvert])
+  const liftTrend = useMemo(() => trendPercent(liftPts), [liftPts])
 
   const peakCardioValue = useMemo(() => {
     if (cardioValues.length === 0) return null
@@ -364,9 +381,26 @@ export default function ProgressPage() {
 
       {/* Chart */}
       <section className="flex flex-col gap-3">
-        <h3 className="font-headline text-sm font-bold text-on-surface-variant">
-          {tab === 'lifts' ? 'Weight trend' : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-headline text-sm font-bold text-on-surface-variant">
+            {tab === 'lifts' ? 'Weight trend' : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
+          </h3>
+          <div className="flex gap-1">
+            {(['week', 'month', 'year', 'all'] as const).map(r => (
+              <button
+                key={r}
+                onClick={() => { setChartRange(r); setHoveredIdx(null) }}
+                className={`px-2 py-1 rounded-full text-[10px] font-bold font-label uppercase tracking-widest transition-colors ${
+                  chartRange === r
+                    ? tab === 'lifts' ? 'bg-primary-container/30 text-primary-container' : 'bg-[#4bdece]/20 text-[#4bdece]'
+                    : 'text-on-surface-variant/40'
+                }`}
+              >
+                {r === 'week' ? '7D' : r === 'month' ? '1M' : r === 'year' ? '1Y' : 'All'}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] relative overflow-hidden flex flex-col justify-end">
 
           {/* Peak stat / hovered value */}
@@ -399,7 +433,15 @@ export default function ProgressPage() {
           })()}
 
           {/* Trend badge */}
-          {cardioTrend !== null && tab === 'cardio' && (
+          {tab === 'lifts' && liftTrend !== null && (
+            <div className={`absolute top-6 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
+              liftTrend >= 0 ? 'bg-primary-container/20 text-primary-container' : 'bg-red-500/20 text-red-400'
+            }`}>
+              <span className="material-symbols-outlined text-[12px]">{liftTrend >= 0 ? 'trending_up' : 'trending_down'}</span>
+              {Math.abs(liftTrend).toFixed(0)}% {liftTrend >= 0 ? 'stronger' : 'weaker'}
+            </div>
+          )}
+          {tab === 'cardio' && cardioTrend !== null && (
             <div className={`absolute top-6 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
               cardioTrend >= 0 ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-red-500/20 text-red-400'
             }`}>
