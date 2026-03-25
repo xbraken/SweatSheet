@@ -374,22 +374,24 @@ function RunDetailSheet({
                       </div>
                     </div>
 
-                    {/* Hover readout */}
-                    {paceHoveredIdx !== null && pHovPaceLabel && (
-                      <div className="flex items-center justify-end gap-2 mb-2">
-                        {pHovTimeSec !== null && (
-                          <span className="text-[10px] text-[#a48b83]">
-                            {pHovTimeSec >= 3600
-                              ? `${Math.floor(pHovTimeSec / 3600)}:${String(Math.floor((pHovTimeSec % 3600) / 60)).padStart(2, '0')}:${String(pHovTimeSec % 60).padStart(2, '0')}`
-                              : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
-                          </span>
-                        )}
-                        {pHovDist > 0 && (
-                          <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
-                        )}
-                        <span className="text-sm font-black font-headline text-[#4bdece]">{pHovPaceLabel} /km</span>
-                      </div>
-                    )}
+                    {/* Hover readout — fixed height to prevent chart jumping */}
+                    <div className="flex items-center justify-end gap-2 mb-2 h-5">
+                      {paceHoveredIdx !== null && pHovPaceLabel && (
+                        <>
+                          {pHovTimeSec !== null && (
+                            <span className="text-[10px] text-[#a48b83]">
+                              {pHovTimeSec >= 3600
+                                ? `${Math.floor(pHovTimeSec / 3600)}:${String(Math.floor((pHovTimeSec % 3600) / 60)).padStart(2, '0')}:${String(pHovTimeSec % 60).padStart(2, '0')}`
+                                : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
+                            </span>
+                          )}
+                          {pHovDist > 0 && (
+                            <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
+                          )}
+                          <span className="text-sm font-black font-headline text-[#4bdece]">{pHovPaceLabel} /km</span>
+                        </>
+                      )}
+                    </div>
 
                     <svg
                       className="w-full h-40"

@@ -608,7 +608,7 @@ export default function LogPage() {
                     <input
                       type="range"
                       min={0}
-                      max={Math.max(200, Math.ceil(activeSet.weight / 20) * 20 + 40)}
+                      max={300}
                       step={0.5}
                       value={activeSet.weight}
                       onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value))}
