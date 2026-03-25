@@ -658,6 +658,30 @@ export default function ProgressPage() {
     return runs.reduce((best, e) => (toSeconds(e.pace) ?? Infinity) < (toSeconds(best.pace) ?? Infinity) ? e : best)
   }, [filteredCardioHistory])
 
+  // Personal records: fastest run in each distance bracket (uses all history, not range-filtered)
+  const raceRecords = useMemo(() => {
+    const BRACKETS = [
+      { label: '5K',       target: 5.0,     tol: 0.4 },
+      { label: '10K',      target: 10.0,    tol: 0.8 },
+      { label: 'Half',     target: 21.0975, tol: 1.5 },
+      { label: 'Marathon', target: 42.195,  tol: 2.0 },
+    ]
+    const runs = cardioHistory.filter(e =>
+      e.activity.toLowerCase().includes('run') && e.distance && e.duration
+    )
+    return BRACKETS.flatMap(b => {
+      const matching = runs.filter(e => {
+        const d = parseFloat(e.distance ?? '')
+        return !isNaN(d) && Math.abs(d - b.target) <= b.tol
+      })
+      if (matching.length === 0) return []
+      const fastest = matching.reduce((best, e) =>
+        (toSeconds(e.duration) ?? Infinity) < (toSeconds(best.duration) ?? Infinity) ? e : best
+      )
+      return [{ label: b.label, entry: fastest, count: matching.length }]
+    })
+  }, [cardioHistory])
+
   // ── Calendar heat-map ───────────────────────────────────────────────────────
   const calMonthDate = useMemo(() => {
     const d = new Date()
@@ -838,6 +862,24 @@ export default function ProgressPage() {
               }`}
             >
               {m === 'pace' ? 'Pace' : 'Distance'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Personal records row */}
+      {tab === 'cardio' && raceRecords.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
+          {raceRecords.map(({ label, entry, count }) => (
+            <button
+              key={label}
+              onClick={() => entry.cardio_id && setSelectedRunId(entry.cardio_id)}
+              className="bg-[#131313] rounded-xl px-4 py-3 flex flex-col gap-0.5 shrink-0 active:scale-[0.97] transition-transform text-left min-w-[80px]"
+            >
+              <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#4bdece]">{label}</span>
+              <span className="text-lg font-black font-headline text-[#e5e2e1] leading-tight">{entry.duration}</span>
+              <span className="text-[9px] text-[#a48b83]">{formatDate(entry.date)}</span>
+              {count > 1 && <span className="text-[8px] text-[#5a5a5a]">{count} runs</span>}
             </button>
           ))}
         </div>
