@@ -37,7 +37,7 @@ function calcPace(distStr: string, timeStr: string): string {
 
 // ── Inline Rest Timer Button ──────────────────────────────────────────────────
 function RestButton({ seconds, total, onSkip }: { seconds: number; total: number; onSkip: () => void }) {
-  const pct = (seconds / total) * 100
+  const elapsed = ((total - seconds) / total) * 100
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return (
@@ -45,10 +45,10 @@ function RestButton({ seconds, total, onSkip }: { seconds: number; total: number
       onClick={onSkip}
       className="relative w-full py-3.5 rounded-xl font-headline font-bold text-sm overflow-hidden flex items-center justify-center gap-2 text-[#a48b83] border border-[#353534]"
     >
-      {/* shrinking fill */}
+      {/* growing fill */}
       <span
-        className="absolute inset-0 bg-[#ff9066]/15 origin-left transition-none"
-        style={{ transform: `scaleX(${pct / 100})`, transformOrigin: 'left' }}
+        className="absolute inset-0 bg-[#ff9066]/20"
+        style={{ transform: `scaleX(${elapsed / 100})`, transformOrigin: 'left', transition: 'transform 1s linear' }}
       />
       <span className="material-symbols-outlined text-base text-[#ff9066]">timer</span>
       <span className="relative">
