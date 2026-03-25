@@ -60,7 +60,9 @@ function trendPercent(values: number[], lowerIsBetter = false): number | null {
 }
 
 export default function ProgressPage() {
-  const [tab, setTab] = useState<'lifts' | 'cardio'>('lifts')
+  const [tab, setTab] = useState<'lifts' | 'cardio'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_tab') as 'lifts' | 'cardio') || 'lifts'
+  )
   const [exercise, setExercise] = useState('')
   const [open, setOpen] = useState(false)
   const [cardioOpen, setCardioOpen] = useState(false)
@@ -70,18 +72,38 @@ export default function ProgressPage() {
   const [cardioActivity, setCardioActivity] = useState('')
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
-  const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>('pace')
-  const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>('date')
-  const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>('date')
+  const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_cardio_metric') as 'pace' | 'distance') || 'pace'
+  )
+  const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_lift_sort') as 'date' | 'weight' | 'volume') || 'date'
+  )
+  const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_cardio_sort') as 'date' | 'distance' | 'pace') || 'date'
+  )
   const [calMonthOffset, setCalMonthOffset] = useState(0)
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-  const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>('all')
-  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume'>('weight')
+  const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_range') as 'week' | 'month' | 'year' | 'all') || 'all'
+  )
+  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_lift_metric') as 'weight' | 'volume') || 'weight'
+  )
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
   const [bwSaving, setBwSaving] = useState(false)
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
+
+  // Persist UI preferences to localStorage
+  useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
+  useEffect(() => { localStorage.setItem('ss_prog_cardio_metric', cardioMetric) }, [cardioMetric])
+  useEffect(() => { localStorage.setItem('ss_prog_lift_sort', liftSort) }, [liftSort])
+  useEffect(() => { localStorage.setItem('ss_prog_cardio_sort', cardioSort) }, [cardioSort])
+  useEffect(() => { localStorage.setItem('ss_prog_range', chartRange) }, [chartRange])
+  useEffect(() => { localStorage.setItem('ss_prog_lift_metric', liftMetric) }, [liftMetric])
+  useEffect(() => { if (exercise) localStorage.setItem('ss_prog_exercise', exercise) }, [exercise])
+  useEffect(() => { if (cardioActivity) localStorage.setItem('ss_prog_cardio_activity', cardioActivity) }, [cardioActivity])
 
   useEffect(() => {
     fetch('/api/bodyweight').then(r => r.json()).then(data => {
@@ -97,11 +119,22 @@ export default function ProgressPage() {
         const ch = data.cardioHistory ?? []
         setCardioHistory(ch)
         setCalendarData(data.calendarData ?? [])
+
+        // Restore saved cardio activity if still valid, else pick default
         const activities = [...new Set((ch as CardioEntry[]).map(e => e.activity))]
-        const preferred = activities.find(a => a === 'Outdoor run') ?? activities[0] ?? ''
-        setCardioActivity(preferred)
-        if (data.exercises?.length > 0) {
-          setExercise(data.exercises[0])
+        const savedActivity = localStorage.getItem('ss_prog_cardio_activity')
+        const restoredActivity = savedActivity && activities.includes(savedActivity)
+          ? savedActivity
+          : (activities.find(a => a === 'Outdoor run') ?? activities[0] ?? '')
+        setCardioActivity(restoredActivity)
+
+        // Restore saved exercise if still valid, else pick first
+        const savedExercise = localStorage.getItem('ss_prog_exercise')
+        const restoredExercise = savedExercise && (data.exercises ?? []).includes(savedExercise)
+          ? savedExercise
+          : data.exercises?.[0] ?? ''
+        if (restoredExercise) {
+          setExercise(restoredExercise)
         } else {
           setLoading(false)
         }
