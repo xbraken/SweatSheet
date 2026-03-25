@@ -28,6 +28,7 @@ type WorkoutRow = ParsedWorkout & {
 const SUPPORTED: Record<string, string> = {
   HKWorkoutActivityTypeRunning: 'Outdoor run',
   HKWorkoutActivityTypeHighIntensityIntervalTraining: 'Indoor run',
+  HKWorkoutActivityTypeOther: 'Indoor run', // custom workout presets on Apple Watch
   HKWorkoutActivityTypeCycling: 'Cycling',
   HKWorkoutActivityTypeWalking: 'Walking',
 }
@@ -86,6 +87,9 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
     if (rawDist > 0) distUnit = statUnit(xml, distStatType)
   }
   const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
+
+  // Skip non-cardio "Other/Custom" workouts (strength training, yoga, etc.) that have no distance
+  if (type === 'HKWorkoutActivityTypeOther' && distKm < 0.5) return null
 
   // Calories
   let caloriesRaw = parseFloat(attr(xml, 'totalEnergyBurned')) || 0
@@ -371,6 +375,9 @@ const SHORTCUT_ACTIVITY: Record<string, string> = {
   hkworkoutactivitytypecycling: 'Cycling',
   hkworkoutactivitytypewalking: 'Walking',
   hkworkoutactivitytypehighintensityintervaltraining: 'Indoor run',
+  hkworkoutactivitytypeother: 'Indoor run',
+  other: 'Indoor run',
+  custom: 'Indoor run',
 }
 
 // Accept many possible field-name spellings so the Shortcut is flexible
