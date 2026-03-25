@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import BottomNav from '@/components/BottomNav'
 
 type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number }
@@ -75,6 +75,7 @@ export default function ProgressPage() {
   const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>('date')
   const [calMonthOffset, setCalMonthOffset] = useState(0)
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/progress')
@@ -111,14 +112,13 @@ export default function ProgressPage() {
 
   // ── Lift chart ──────────────────────────────────────────────────────────────
   const liftChartData = useMemo(() => [...liftHistory].reverse(), [liftHistory])
-  const liftPts = liftChartData.map(e => Number(e.max_weight))
+  const liftChartPts = useMemo(() =>
+    liftChartData.map(e => ({ date: e.date, value: Number(e.max_weight) })),
+    [liftChartData]
+  )
+  const liftPts = liftChartPts.map(p => p.value)
   const liftSvgPts = liftPts.length > 1 ? buildSvgPoints(liftPts) : null
   const peakWeight = liftHistory.length > 0 ? Math.max(...liftHistory.map(e => Number(e.max_weight))) : null
-  const liftLastY = useMemo(() => {
-    if (liftPts.length < 2) return 80
-    const max = Math.max(...liftPts); const min = Math.min(...liftPts); const range = max - min || 1
-    return 80 - ((liftPts[liftPts.length - 1] - min) / range) * 70
-  }, [liftPts])
 
   // ── Cardio activity filter ───────────────────────────────────────────────────
   const cardioActivities = useMemo(() => [...new Set(cardioHistory.map(e => e.activity))], [cardioHistory])
@@ -131,22 +131,19 @@ export default function ProgressPage() {
   const cardioChartData = useMemo(() => [...filteredCardioHistory].reverse(), [filteredCardioHistory])
   const hasPaceData = filteredCardioHistory.some(e => e.pace)
 
-  const cardioValues = useMemo((): number[] => {
-    if (cardioMetric === 'pace') {
-      return cardioChartData.map(e => toSeconds(e.pace)).filter((v): v is number => v !== null)
+  const cardioChartPts = useMemo(() => {
+    const pts: Array<{ date: string; value: number; raw: CardioEntry }> = []
+    for (const e of cardioChartData) {
+      const v = cardioMetric === 'pace' ? toSeconds(e.pace) : (e.distance ? parseFloat(e.distance) : null)
+      if (v !== null && !isNaN(v)) pts.push({ date: e.date, value: v, raw: e })
     }
-    return cardioChartData.map(e => e.distance ? parseFloat(e.distance) : null).filter((v): v is number => v !== null && !isNaN(v))
+    return pts
   }, [cardioChartData, cardioMetric])
+  const cardioValues = useMemo(() => cardioChartPts.map(p => p.value), [cardioChartPts])
 
   const cardioInvert = cardioMetric === 'pace'
   const cardioSvgPts = cardioValues.length > 1 ? buildSvgPoints(cardioValues, cardioInvert) : null
   const cardioTrend = useMemo(() => trendPercent(cardioValues, cardioInvert), [cardioValues, cardioInvert])
-  const cardioLastY = useMemo(() => {
-    if (cardioValues.length < 2) return cardioInvert ? 10 : 80
-    const max = Math.max(...cardioValues); const min = Math.min(...cardioValues); const range = max - min || 1
-    const norm = (cardioValues[cardioValues.length - 1] - min) / range
-    return cardioInvert ? 10 + norm * 70 : 80 - norm * 70
-  }, [cardioValues, cardioInvert])
 
   const peakCardioValue = useMemo(() => {
     if (cardioValues.length === 0) return null
@@ -156,6 +153,20 @@ export default function ProgressPage() {
     }
     return Math.max(...cardioValues).toFixed(1)
   }, [cardioValues, cardioMetric])
+
+  /** Compute SVG y coordinate (viewBox 0–100) for a value in a dataset */
+  function ptY(values: number[], value: number, invert: boolean): number {
+    const max = Math.max(...values), min = Math.min(...values), range = max - min || 1
+    const norm = (value - min) / range
+    return invert ? 10 + norm * 70 : 80 - norm * 70
+  }
+
+  const handleChartPointer = useCallback((e: React.PointerEvent<SVGSVGElement>, n: number) => {
+    if (n < 2) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    setHoveredIdx(Math.max(0, Math.min(n - 1, Math.round(x * (n - 1)))))
+  }, [])
 
   // ── Sorting ─────────────────────────────────────────────────────────────────
   const sortedLifts = useMemo(() => {
@@ -358,21 +369,34 @@ export default function ProgressPage() {
         </h3>
         <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] relative overflow-hidden flex flex-col justify-end">
 
-          {/* Peak stat */}
-          {tab === 'lifts' && peakWeight !== null && (
-            <div className="absolute top-6 right-6 flex flex-col items-end">
-              <span className="text-3xl font-black font-headline text-primary-container leading-none">{peakWeight}</span>
-              <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">kg peak</span>
-            </div>
-          )}
-          {tab === 'cardio' && peakCardioValue !== null && (
-            <div className="absolute top-6 right-6 flex flex-col items-end">
-              <span className="text-3xl font-black font-headline text-[#4bdece] leading-none">{peakCardioValue}</span>
-              <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
-                {cardioMetric === 'pace' ? 'best pace' : 'km peak'}
-              </span>
-            </div>
-          )}
+          {/* Peak stat / hovered value */}
+          {tab === 'lifts' && liftPts.length > 0 && (() => {
+            const idx = hoveredIdx ?? liftPts.length - 1
+            const pt = liftChartPts[idx]
+            return (
+              <div className="absolute top-6 right-6 flex flex-col items-end">
+                <span className="text-3xl font-black font-headline text-primary-container leading-none">{pt?.value}</span>
+                <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
+                  {hoveredIdx !== null ? formatDate(pt.date) : 'kg peak'}
+                </span>
+              </div>
+            )
+          })()}
+          {tab === 'cardio' && cardioChartPts.length > 0 && (() => {
+            const idx = hoveredIdx ?? cardioChartPts.length - 1
+            const pt = cardioChartPts[idx]
+            const display = cardioMetric === 'pace'
+              ? `${Math.floor(pt.value / 60)}:${String(Math.round(pt.value % 60)).padStart(2, '0')}`
+              : pt.value.toFixed(1)
+            return (
+              <div className="absolute top-6 right-6 flex flex-col items-end">
+                <span className="text-3xl font-black font-headline text-[#4bdece] leading-none">{display}</span>
+                <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
+                  {hoveredIdx !== null ? formatDate(pt.date) : cardioMetric === 'pace' ? 'best pace' : 'km peak'}
+                </span>
+              </div>
+            )
+          })()}
 
           {/* Trend badge */}
           {cardioTrend !== null && tab === 'cardio' && (
@@ -386,19 +410,31 @@ export default function ProgressPage() {
 
           {/* Lift SVG */}
           {tab === 'lifts' && (
-            liftSvgPts ? (
-              <svg className="w-full h-32 drop-shadow-[0_0_8px_rgba(255,144,102,0.4)]" viewBox="0 0 300 100" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="liftGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ff9066" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <polyline points={liftSvgPts} fill="none" stroke="#ff9066" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <polygon points={`0,80 ${liftSvgPts} 300,80`} fill="url(#liftGrad)" />
-                <circle cx={300} cy={liftLastY} r="5" fill="#ff9066" />
-              </svg>
-            ) : (
+            liftSvgPts ? (() => {
+              const hIdx = hoveredIdx ?? liftPts.length - 1
+              const hX = (hIdx / Math.max(liftPts.length - 1, 1)) * 300
+              const hY = ptY(liftPts, liftPts[hIdx], false)
+              return (
+                <svg
+                  className="w-full h-32 drop-shadow-[0_0_8px_rgba(255,144,102,0.4)]"
+                  viewBox="0 0 300 100" preserveAspectRatio="none"
+                  style={{ touchAction: 'none' }}
+                  onPointerMove={e => handleChartPointer(e, liftPts.length)}
+                  onPointerLeave={() => setHoveredIdx(null)}
+                >
+                  <defs>
+                    <linearGradient id="liftGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ff9066" stopOpacity="0.2" />
+                      <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <polyline points={liftSvgPts} fill="none" stroke="#ff9066" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <polygon points={`0,80 ${liftSvgPts} 300,80`} fill="url(#liftGrad)" />
+                  <line x1={hX} y1={0} x2={hX} y2={100} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                  <circle cx={hX} cy={hY} r="5" fill="#ff9066" />
+                </svg>
+              )
+            })() : (
               <div className="w-full h-32 flex items-center justify-center">
                 <p className="text-sm text-on-surface-variant/40">Log more sessions to see your trend</p>
               </div>
@@ -407,8 +443,18 @@ export default function ProgressPage() {
 
           {/* Cardio SVG */}
           {tab === 'cardio' && (
-            cardioSvgPts ? (
-              <svg className="w-full h-32 drop-shadow-[0_0_8px_rgba(75,222,206,0.3)]" viewBox="0 0 300 100" preserveAspectRatio="none">
+            cardioSvgPts ? (() => {
+              const hIdx = hoveredIdx ?? cardioChartPts.length - 1
+              const hX = (hIdx / Math.max(cardioChartPts.length - 1, 1)) * 300
+              const hY = ptY(cardioValues, cardioValues[hIdx], cardioInvert)
+              return (
+              <svg
+                className="w-full h-32 drop-shadow-[0_0_8px_rgba(75,222,206,0.3)]"
+                viewBox="0 0 300 100" preserveAspectRatio="none"
+                style={{ touchAction: 'none' }}
+                onPointerMove={e => handleChartPointer(e, cardioChartPts.length)}
+                onPointerLeave={() => setHoveredIdx(null)}
+              >
                 <defs>
                   <linearGradient id="cardioGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#4bdece" stopOpacity="0.2" />
@@ -417,9 +463,11 @@ export default function ProgressPage() {
                 </defs>
                 <polyline points={cardioSvgPts} fill="none" stroke="#4bdece" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                 <polygon points={`0,${cardioInvert ? 10 : 80} ${cardioSvgPts} 300,${cardioInvert ? 10 : 80}`} fill="url(#cardioGrad)" />
-                <circle cx={300} cy={cardioLastY} r="5" fill="#4bdece" />
+                <line x1={hX} y1={0} x2={hX} y2={100} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                <circle cx={hX} cy={hY} r="5" fill="#4bdece" />
               </svg>
-            ) : (
+              )
+            })() : (
               <div className="w-full h-32 flex items-center justify-center">
                 <p className="text-sm text-on-surface-variant/40">
                   {filteredCardioHistory.length === 0 ? 'No cardio data yet' : `No ${cardioMetric} data for these sessions`}
