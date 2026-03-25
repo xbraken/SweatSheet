@@ -4,11 +4,22 @@ import { db, initDb } from '@/lib/db'
 await initDb()
 
 export async function POST() {
-  await db.executeMultiple(`
-    DELETE FROM sets;
-    DELETE FROM cardio;
-    DELETE FROM blocks;
-    DELETE FROM sessions;
-  `)
-  return NextResponse.json({ ok: true })
+  try {
+    const sets = await db.execute('DELETE FROM sets')
+    const cardio = await db.execute('DELETE FROM cardio')
+    const blocks = await db.execute('DELETE FROM blocks')
+    const sessions = await db.execute('DELETE FROM sessions')
+    return NextResponse.json({
+      ok: true,
+      deleted: {
+        sets: sets.rowsAffected,
+        cardio: cardio.rowsAffected,
+        blocks: blocks.rowsAffected,
+        sessions: sessions.rowsAffected,
+      },
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+  }
 }
