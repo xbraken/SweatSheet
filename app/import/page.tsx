@@ -130,6 +130,19 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   }
 }
 
+/**
+ * Parse Apple Health date string to Unix ms.
+ * Format: "2024-01-15 08:30:00 +0000" — the space before TZ offset breaks
+ * Safari's Date constructor, so we normalise to ISO 8601 first.
+ */
+function parseAppleDate(s: string): number {
+  if (!s) return NaN
+  // "2024-01-15 08:30:00 +0000" → "2024-01-15T08:30:00+00:00"
+  const m = s.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-])(\d{2})(\d{2})/)
+  if (m) return new Date(`${m[1]}T${m[2]}${m[3]}${m[4]}:${m[5]}`).getTime()
+  return new Date(s).getTime() // fallback for any other format
+}
+
 /** Parse a single HKQuantityTypeIdentifierHeartRate Record element */
 function parseHrRecord(xml: string): { ts: number; bpm: number } | null {
   // Only Apple Watch HR (filters out iPhone passive sensing)
@@ -138,7 +151,7 @@ function parseHrRecord(xml: string): { ts: number; bpm: number } | null {
   const dateStr = attr(xml, 'startDate')
   const value = parseFloat(attr(xml, 'value'))
   if (!dateStr || isNaN(value) || value <= 0) return null
-  const ts = new Date(dateStr).getTime()
+  const ts = parseAppleDate(dateStr)
   if (isNaN(ts)) return null
   return { ts, bpm: Math.round(value) }
 }
@@ -255,7 +268,7 @@ async function streamParseAppleHealth(
 
   // Pass 2: collect HR samples for each workout (progress 60–100%)
   const windows = workouts
-    .map(w => ({ startTs: new Date(w.startedAt).getTime(), endTs: new Date(w.endedAt).getTime(), workout: w }))
+    .map(w => ({ startTs: parseAppleDate(w.startedAt), endTs: parseAppleDate(w.endedAt), workout: w }))
     .filter(w => !isNaN(w.startTs) && !isNaN(w.endTs) && w.endTs > w.startTs)
     .sort((a, b) => a.startTs - b.startTs)
 
