@@ -187,12 +187,13 @@ function parseDistRecord(xml: string): { ts: number; dist: number } | null {
   return { ts, dist: distKm }
 }
 
-/** Pass 1: collect workouts — original logic, completely unchanged */
+/** Pass 1: collect workouts */
 async function collectWorkouts(
   file: File,
   onProgress: (pct: number) => void,
-): Promise<ParsedWorkout[]> {
+): Promise<{ workouts: ParsedWorkout[], skippedTypes: Map<string, number> }> {
   const workouts: ParsedWorkout[] = []
+  const skippedTypes = new Map<string, number>()
   const decoder = new TextDecoder('utf-8')
   const reader = file.stream().getReader()
   let buffer = ''
@@ -212,14 +213,19 @@ async function collectWorkouts(
         if (end === -1) { buffer = buffer.slice(start); searchFrom = 0; break }
         const block = buffer.slice(start, end + '</Workout>'.length)
         const workout = processWorkoutBlock(block)
-        if (workout) workouts.push(workout)
+        if (workout) {
+          workouts.push(workout)
+        } else {
+          const t = attr(block, 'workoutActivityType')
+          if (t) skippedTypes.set(t, (skippedTypes.get(t) ?? 0) + 1)
+        }
         searchFrom = end + '</Workout>'.length
       }
       if (searchFrom > 0) buffer = buffer.slice(searchFrom)
       if (!buffer.includes('<Workout ') && buffer.length > 2000) buffer = buffer.slice(-500)
     }
   } finally { reader.releaseLock() }
-  return workouts
+  return { workouts, skippedTypes }
 }
 
 /** Pass 2: stream through the file collecting HR and distance samples for each workout window */
@@ -333,13 +339,11 @@ async function collectSamples(
 async function streamParseAppleHealth(
   file: File,
   onProgress: (pct: number) => void,
-): Promise<ParsedWorkout[]> {
+): Promise<{ workouts: ParsedWorkout[], skippedTypes: Map<string, number> }> {
   // Pass 1: collect workouts (progress 0–60%)
-  const rawWorkouts = await collectWorkouts(file, pct => onProgress(pct * 0.6))
+  const { workouts: rawWorkouts, skippedTypes } = await collectWorkouts(file, pct => onProgress(pct * 0.6))
 
   // Remove sub-interval workouts contained within a longer parent workout.
-  // Apple Watch interval presets (e.g. 4x4) export both the full HIIT workout and
-  // each individual running interval as separate Workout elements. Keep only the parent.
   const withTs = rawWorkouts.map(w => ({
     w, start: parseAppleDate(w.startedAt), end: parseAppleDate(w.endedAt),
   }))
@@ -362,7 +366,7 @@ async function streamParseAppleHealth(
     await collectSamples(file, windows, pct => onProgress(0.6 + pct * 0.4))
   }
 
-  return workouts.sort((a, b) => b.date.localeCompare(a.date))
+  return { workouts: workouts.sort((a, b) => b.date.localeCompare(a.date)), skippedTypes }
 }
 
 // ── Shortcut JSON import ──────────────────────────────────────────────────────
@@ -537,6 +541,7 @@ export default function ImportPage() {
   const [duplicates, setDuplicates] = useState(0)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [skippedTypes, setSkippedTypes] = useState<Map<string, number>>(new Map())
   const fileRef = useRef<HTMLInputElement>(null)
 
   const processFile = useCallback(async (file: File) => {
@@ -559,7 +564,9 @@ export default function ImportPage() {
         parsed = parseShortcutJSON(json)
         setParseProgress(100)
       } else {
-        parsed = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
+        const result = await streamParseAppleHealth(file, pct => setParseProgress(Math.round(pct * 100)))
+        parsed = result.workouts
+        setSkippedTypes(result.skippedTypes)
       }
     } catch {
       setError(isJson
@@ -780,6 +787,9 @@ export default function ImportPage() {
             <div>
               <h2 className="font-headline font-bold text-lg">{workouts.length} workouts found</h2>
               <p className="text-xs text-on-surface-variant">{workouts.filter(w => w.alreadyImported).length} already in SweatSheet</p>
+              {skippedTypes.size > 0 && (
+                <p className="text-xs text-yellow-400 mt-1">Skipped types: {[...skippedTypes.entries()].map(([t, n]) => `${t} (${n})`).join(', ')}</p>
+              )}
             </div>
             <button
               onClick={toggleAll}
