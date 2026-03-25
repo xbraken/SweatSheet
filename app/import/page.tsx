@@ -62,17 +62,11 @@ function toSeconds(str: string | null): number | null {
 
 function processWorkoutBlock(xml: string): ParsedWorkout | null {
   const type = attr(xml, 'workoutActivityType')
-  if (!(type in SUPPORTED)) return null
 
   const startedAt = attr(xml, 'startDate') // full timestamp e.g. "2024-01-15 08:30:00 +0000"
   const endedAt = attr(xml, 'endDate')
   const startDate = startedAt.split(' ')[0]
   if (!startDate) return null
-
-  // Detect indoor runs via metadata
-  const isIndoor = type === 'HKWorkoutActivityTypeRunning' &&
-    /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
-  const activity = isIndoor ? 'Indoor run' : SUPPORTED[type]
 
   const durationMin = parseFloat(attr(xml, 'duration')) || 0
 
@@ -88,8 +82,24 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   }
   const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
 
-  // Skip non-cardio "Other/Custom" workouts (strength training, yoga, etc.) that have no distance
-  if (type === 'HKWorkoutActivityTypeOther' && distKm < 0.5) return null
+  // Skip workouts with no meaningful distance (strength training, yoga, meditation, etc.)
+  // Known non-cardio types are also skipped explicitly
+  const NON_CARDIO = new Set([
+    'HKWorkoutActivityTypeTraditionalStrengthTraining',
+    'HKWorkoutActivityTypeFunctionalStrengthTraining',
+    'HKWorkoutActivityTypeYoga',
+    'HKWorkoutActivityTypeMindAndBody',
+    'HKWorkoutActivityTypeMixedMetabolicCardioTraining',
+    'HKWorkoutActivityTypePreparationAndRecovery',
+    'HKWorkoutActivityTypeCooldown',
+    'HKWorkoutActivityTypeFlexibility',
+  ])
+  if (NON_CARDIO.has(type)) return null
+  if (distKm < 0.5 && !(type in SUPPORTED)) return null
+
+  // Detect indoor runs via metadata
+  const isIndoor = /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
+  const activity = SUPPORTED[type] ?? (isIndoor ? 'Indoor run' : 'Outdoor run')
 
   // Calories
   let caloriesRaw = parseFloat(attr(xml, 'totalEnergyBurned')) || 0
