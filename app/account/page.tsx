@@ -12,11 +12,15 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true)
   const [invalidExercises, setInvalidExercises] = useState<{ exercise: string; set_count: number }[]>([])
   const [cleaning, setCleaning] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [keyCopied, setKeyCopied] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
     fetch('/api/account').then(r => r.json()).then(data => {
       setUsername(data.username ?? '')
       setUnitPref(data.unit_pref === 'imperial' ? 'imperial' : 'metric')
+      setApiKey(data.api_key ?? '')
       setLoading(false)
     }).catch(() => setLoading(false))
 
@@ -120,6 +124,49 @@ export default function AccountPage() {
           </div>
         </section>
       )}
+
+      {/* Shortcut sync */}
+      <section className="flex flex-col gap-4 mb-8">
+        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Shortcut Sync</h3>
+        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
+          <p className="text-sm text-[#a48b83] leading-snug">Use this key in the SweatSheet iPhone Shortcut to sync workouts directly — no file downloads needed.</p>
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Your API Key</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-[#2a2a2a] rounded-xl px-4 py-3 font-mono text-xs text-[#e5e2e1] truncate select-all">
+                {apiKey || '—'}
+              </div>
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(apiKey)
+                  setKeyCopied(true)
+                  setTimeout(() => setKeyCopied(false), 2000)
+                }}
+                className="shrink-0 px-4 py-3 bg-[#4bdece]/20 text-[#4bdece] rounded-xl text-sm font-bold font-label transition-colors"
+              >
+                {keyCopied ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              if (!confirm('Regenerate your API key? Your Shortcut will need to be updated with the new key.')) return
+              setRegenerating(true)
+              const data = await fetch('/api/account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'regenerate_api_key' }),
+              }).then(r => r.json())
+              setApiKey(data.api_key ?? '')
+              setRegenerating(false)
+            }}
+            disabled={regenerating}
+            className="text-xs text-[#a48b83] underline underline-offset-2 self-start disabled:opacity-50"
+          >
+            {regenerating ? 'Regenerating…' : 'Regenerate key'}
+          </button>
+        </div>
+      </section>
 
       {/* Danger zone */}
       <section className="flex flex-col gap-3">
