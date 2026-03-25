@@ -4,14 +4,15 @@ import { db, initDb } from '@/lib/db'
 await initDb()
 
 const ACTIVITY_MAP: Record<string, string> = {
-  running: 'Outdoor run',
-  'outdoor run': 'Outdoor run',
-  'indoor run': 'Indoor run',
+  running: 'Run',
+  'outdoor run': 'Run',
+  'indoor run': 'Run',
+  'interval run': 'Interval run',
   cycling: 'Cycling',
   'outdoor cycling': 'Cycling',
   'indoor cycling': 'Cycling',
   walking: 'Walking',
-  hkworkoutactivitytyperunning: 'Outdoor run',
+  hkworkoutactivitytyperunning: 'Run',
   hkworkoutactivitytypecycling: 'Cycling',
   hkworkoutactivitytypewalking: 'Walking',
 }

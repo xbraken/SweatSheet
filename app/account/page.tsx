@@ -173,7 +173,7 @@ export default function AccountPage() {
             Download SweatSheet Shortcut
           </a>
           <p className="text-[11px] text-[#a48b83] leading-snug">
-            Opens in iPhone Shortcuts — your API key is pre-filled. Requires <strong className="text-[#e5e2e1]">Allow Untrusted Shortcuts</strong> in iOS Settings → Privacy &amp; Security → Shortcuts.
+            Opens in iPhone Shortcuts — you&apos;ll be asked for your API key on install (copy it above). Requires <strong className="text-[#e5e2e1]">Allow Untrusted Shortcuts</strong> in iOS Settings → Privacy &amp; Security → Shortcuts.
           </p>
         </div>
       </section>

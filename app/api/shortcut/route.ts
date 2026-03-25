@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server'
-import { db, initDb } from '@/lib/db'
-import { getSession } from '@/lib/auth'
 import plist from 'plist'
-
-await initDb()
 
 // Encode a plist value to binary bplist00 format
 // We use plist.build() for XML then rely on iOS accepting XML plists named .shortcut
 // iOS Shortcuts can import XML plist files directly.
 
-function makeShortcut(apiKey: string, baseUrl: string): string {
+function makeShortcut(baseUrl: string): string {
   const apiUrl = `${baseUrl}/api/import/shortcut`
 
   // WFVariable reference helper
@@ -135,7 +131,7 @@ function makeShortcut(apiKey: string, baseUrl: string): string {
               {
                 WFItemType: 0,
                 WFKey: { Value: { string: 'X-API-Key' }, WFSerializationType: 'WFTextTokenString' },
-                WFValue: { Value: { string: apiKey }, WFSerializationType: 'WFTextTokenString' },
+                WFValue: { Value: { attachmentsByRange: { '{0, 1}': varRef('SweatSheet API Key') }, string: '{0}' }, WFSerializationType: 'WFTextTokenString' },
               },
               {
                 WFItemType: 0,
@@ -169,7 +165,15 @@ function makeShortcut(apiKey: string, baseUrl: string): string {
       WFWorkflowIconStartColor: 0x4bdece00,
       WFWorkflowIconGlyphNumber: 59511,
     },
-    WFWorkflowImportQuestions: [],
+    WFWorkflowImportQuestions: [
+      {
+        ParameterKey: 'SweatSheet API Key',
+        Category: 'Parameter',
+        Text: 'Paste your SweatSheet API Key (from Account → Shortcut Sync)',
+        DefaultValue: '',
+        ActionIndex: 8,
+      },
+    ],
     WFWorkflowInputContentItemClasses: [],
     WFWorkflowMinimumClientVersionString: '900',
     WFWorkflowName: 'SweatSheet Sync',
@@ -183,15 +187,8 @@ function makeShortcut(apiKey: string, baseUrl: string): string {
 }
 
 export async function GET() {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const res = await db.execute({ sql: 'SELECT api_key FROM users WHERE id = ?', args: [session.userId] })
-  const apiKey = res.rows[0]?.api_key as string | null
-  if (!apiKey) return NextResponse.json({ error: 'No API key found — generate one in Account settings' }, { status: 400 })
-
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://sweat-sheet.vercel.app'
-  const xml = makeShortcut(apiKey, baseUrl)
+  const xml = makeShortcut(baseUrl)
 
   return new NextResponse(xml, {
     headers: {
