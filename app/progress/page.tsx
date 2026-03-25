@@ -230,72 +230,127 @@ function RunDetailSheet({
           {/* HR Chart */}
           {hasHr ? (
             <div className="mt-5 bg-[#131313] rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
-                  {compareDetail ? 'HR comparison (% completion)' : 'Heart rate over time'}
-                </p>
-                {chartHoveredIdx !== null && hVal !== undefined && (
-                  <span className="text-sm font-black font-headline text-[#ff9066]">{hVal} bpm</span>
-                )}
-              </div>
-
-              <svg
-                className="w-full h-36"
-                viewBox="0 0 300 90"
-                preserveAspectRatio="none"
-                style={{ touchAction: 'none' }}
-                onPointerMove={e => handlePointer(e, mainValues.length)}
-                onPointerLeave={() => setChartHoveredIdx(null)}
-              >
-                <defs>
-                  <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ff9066" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
-                  </linearGradient>
-                  <linearGradient id="hrGradCmp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#4bdece" stopOpacity="0.15" />
-                    <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Avg HR dashed line for main run */}
-                {mainAvg && (() => {
-                  const avgY = 80 - ((mainAvg - yMin) / (yMax - yMin || 1)) * 68
-                  return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke="#ff9066" strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.4" />
-                })()}
-
-                {/* Compare run fill + line */}
-                {comparePts && (
+              {(() => {
+                const maxT = hasHr ? detail.hrSamples[detail.hrSamples.length - 1].time_offset_sec : 0
+                const interval = maxT > 1800 ? 600 : 300
+                const ticks: number[] = []
+                for (let t = interval; t < maxT - interval * 0.4; t += interval) ticks.push(t)
+                const hTimeSec = mainValues.length > 1 && maxT > 0
+                  ? Math.round((hIdx / (mainValues.length - 1)) * maxT)
+                  : null
+                const hTimeLabel = hTimeSec !== null
+                  ? hTimeSec >= 3600
+                    ? `${Math.floor(hTimeSec / 3600)}:${String(Math.floor((hTimeSec % 3600) / 60)).padStart(2, '0')}:${String(hTimeSec % 60).padStart(2, '0')}`
+                    : `${Math.floor(hTimeSec / 60)}:${String(hTimeSec % 60).padStart(2, '0')}`
+                  : null
+                return (
                   <>
-                    <polygon points={`0,80 ${comparePts} 300,80`} fill="url(#hrGradCmp)" />
-                    <polyline points={comparePts} fill="none" stroke="#4bdece" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.7" />
-                  </>
-                )}
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                        {compareDetail ? 'HR comparison (% completion)' : 'Heart rate over time'}
+                      </p>
+                      {chartHoveredIdx !== null && hVal !== undefined && (
+                        <span className="text-sm font-black font-headline text-[#ff9066]">
+                          {hTimeLabel && <span className="text-[#a48b83] font-normal mr-1">{hTimeLabel}</span>}{hVal} bpm
+                        </span>
+                      )}
+                    </div>
 
-                {/* Main run fill + line */}
-                {mainPts && (
-                  <>
-                    <polygon points={`0,80 ${mainPts} 300,80`} fill="url(#hrGrad)" />
-                    <polyline points={mainPts} fill="none" stroke="#ff9066" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </>
-                )}
+                    <svg
+                      className="w-full h-40"
+                      viewBox="0 0 300 102"
+                      preserveAspectRatio="none"
+                      style={{ touchAction: 'none' }}
+                      onPointerMove={e => handlePointer(e, mainValues.length)}
+                      onPointerLeave={() => setChartHoveredIdx(null)}
+                    >
+                      <defs>
+                        <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#ff9066" stopOpacity="0.25" />
+                          <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="hrGradCmp" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#4bdece" stopOpacity="0.15" />
+                          <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
 
-                {/* Hover scrubber */}
-                {mainPts && (
-                  <>
-                    <line x1={hX} y1={0} x2={hX} y2={90} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
-                    <circle cx={hX} cy={hY} r="4" fill="#ff9066" />
-                    {hCompareVal !== null && compareValues.length > 0 && (() => {
-                      const cY = 80 - ((hCompareVal - yMin) / (yMax - yMin || 1)) * 68
-                      return <circle cx={hX} cy={cY} r="4" fill="#4bdece" />
-                    })()}
-                  </>
-                )}
+                      {/* Avg HR dashed line for main run */}
+                      {mainAvg && (() => {
+                        const avgY = 80 - ((mainAvg - yMin) / (yMax - yMin || 1)) * 68
+                        return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke="#ff9066" strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.4" />
+                      })()}
 
-                {/* Y axis labels */}
-                <text x={3} y={14} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{yMax}</text>
-                <text x={3} y={79} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{yMin}</text>
-              </svg>
+                      {/* Compare run fill + line */}
+                      {comparePts && (
+                        <>
+                          <polygon points={`0,80 ${comparePts} 300,80`} fill="url(#hrGradCmp)" />
+                          <polyline points={comparePts} fill="none" stroke="#4bdece" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.7" />
+                        </>
+                      )}
+
+                      {/* Main run fill + line */}
+                      {mainPts && (
+                        <>
+                          <polygon points={`0,80 ${mainPts} 300,80`} fill="url(#hrGrad)" />
+                          <polyline points={mainPts} fill="none" stroke="#ff9066" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </>
+                      )}
+
+                      {/* Hover scrubber */}
+                      {mainPts && (
+                        <>
+                          <line x1={hX} y1={0} x2={hX} y2={82} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
+                          <circle cx={hX} cy={hY} r="4" fill="#ff9066" />
+                          {hCompareVal !== null && compareValues.length > 0 && (() => {
+                            const cY = 80 - ((hCompareVal - yMin) / (yMax - yMin || 1)) * 68
+                            return <circle cx={hX} cy={cY} r="4" fill="#4bdece" />
+                          })()}
+                        </>
+                      )}
+
+                      {/* Y axis labels */}
+                      <text x={3} y={14} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{yMax}</text>
+                      <text x={3} y={79} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{yMin}</text>
+
+                      {/* X axis baseline */}
+                      <line x1={0} y1={82} x2={300} y2={82} stroke="#2a2a2a" strokeWidth="0.5" />
+
+                      {/* X axis time labels */}
+                      {compareDetail ? (
+                        // Comparison mode: show % labels
+                        [0, 50, 100].map(pct => {
+                          const x = pct === 0 ? 2 : pct === 100 ? 298 : 150
+                          const anchor = pct === 0 ? 'start' : pct === 100 ? 'end' : 'middle'
+                          return (
+                            <text key={pct} x={x} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor={anchor}>{pct}%</text>
+                          )
+                        })
+                      ) : (
+                        // Real-time labels
+                        <>
+                          <text x={2} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="start">0:00</text>
+                          {ticks.map(t => {
+                            const x = (t / maxT) * 300
+                            const mins = Math.floor(t / 60)
+                            const secs = t % 60
+                            const label = secs === 0 ? `${mins}m` : `${mins}:${String(secs).padStart(2, '0')}`
+                            return (
+                              <text key={t} x={x} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="middle">{label}</text>
+                            )
+                          })}
+                          {maxT > 0 && (() => {
+                            const totalMins = Math.floor(maxT / 60)
+                            const totalSecs = maxT % 60
+                            const endLabel = totalSecs === 0 ? `${totalMins}m` : `${totalMins}:${String(totalSecs).padStart(2, '0')}`
+                            return <text x={298} y={96} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="end">{endLabel}</text>
+                          })()}
+                        </>
+                      )}
+                    </svg>
+                  </>
+                )
+              })()}
 
               {/* Legend when comparing */}
               {compareDetail && (
