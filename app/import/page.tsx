@@ -27,6 +27,7 @@ type WorkoutRow = ParsedWorkout & {
 
 const SUPPORTED: Record<string, string> = {
   HKWorkoutActivityTypeRunning: 'Outdoor run',
+  HKWorkoutActivityTypeHighIntensityIntervalTraining: 'Indoor run',
   HKWorkoutActivityTypeCycling: 'Cycling',
   HKWorkoutActivityTypeWalking: 'Walking',
 }
@@ -309,7 +310,22 @@ async function streamParseAppleHealth(
   onProgress: (pct: number) => void,
 ): Promise<ParsedWorkout[]> {
   // Pass 1: collect workouts (progress 0–60%)
-  const workouts = await collectWorkouts(file, pct => onProgress(pct * 0.6))
+  const rawWorkouts = await collectWorkouts(file, pct => onProgress(pct * 0.6))
+
+  // Remove sub-interval workouts contained within a longer parent workout.
+  // Apple Watch interval presets (e.g. 4x4) export both the full HIIT workout and
+  // each individual running interval as separate Workout elements. Keep only the parent.
+  const withTs = rawWorkouts.map(w => ({
+    w, start: parseAppleDate(w.startedAt), end: parseAppleDate(w.endedAt),
+  }))
+  const workouts = withTs.filter(({ w, start, end }) => {
+    const dur = end - start
+    return !withTs.some(p => {
+      if (p.w === w) return false
+      const pDur = p.end - p.start
+      return pDur > dur * 1.5 && start >= p.start && end <= p.end
+    })
+  }).map(({ w }) => w)
 
   // Pass 2: collect HR samples for each workout (progress 60–100%)
   const windows = workouts
@@ -349,9 +365,12 @@ const SHORTCUT_ACTIVITY: Record<string, string> = {
   'outdoor cycling': 'Cycling',
   'indoor cycling': 'Cycling',
   walking: 'Walking',
+  hiit: 'Indoor run',
+  'high intensity interval training': 'Indoor run',
   hkworkoutactivitytyperunning: 'Outdoor run',
   hkworkoutactivitytypecycling: 'Cycling',
   hkworkoutactivitytypewalking: 'Walking',
+  hkworkoutactivitytypehighintensityintervaltraining: 'Indoor run',
 }
 
 // Accept many possible field-name spellings so the Shortcut is flexible
