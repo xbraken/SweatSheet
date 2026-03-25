@@ -28,40 +28,27 @@ export default function UploadPage() {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setParsed(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to parse workout')
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  const saveWorkout = async () => {
-    if (!parsed) return
-    setSaving(true)
-    try {
-      const activity = /cycl/i.test(parsed.type) ? 'Cycling' : 'Outdoor run'
-      const distanceStr = parsed.distance ? parsed.distance.replace(/[^\d.]/g, '') : ''
-      const block = {
-        id: Date.now(),
-        type: 'cardio',
-        activity,
-        distance: distanceStr,
-        time: parsed.duration || '',
-      }
-      const res = await fetch('/api/sessions', {
+      // Auto-save immediately after parsing
+      setSaving(true)
+      const activity = /cycl/i.test(data.type) ? 'Cycling' : 'Outdoor run'
+      const distanceStr = data.distance ? data.distance.replace(/[^\d.]/g, '') : ''
+      const block = { id: Date.now(), type: 'cardio', activity, distance: distanceStr, time: data.duration || '' }
+      const saveRes = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ blocks: [block] }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to save')
+      if (!saveRes.ok) {
+        const saveData = await saveRes.json().catch(() => ({}))
+        throw new Error(saveData.error || 'Failed to save')
       }
       setSaved(true)
-      setTimeout(() => router.push('/'), 1000)
+      setTimeout(() => router.push('/'), 1500)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save workout')
+      setError(e instanceof Error ? e.message : 'Failed to parse or save workout')
     } finally {
+      setLoading(false)
       setSaving(false)
     }
   }
@@ -157,18 +144,12 @@ export default function UploadPage() {
                     <p className="font-headline text-3xl font-black text-on-surface">{parsed.calories}</p>
                   </div>}
                 </div>
-                <button
-                  onClick={saveWorkout}
-                  disabled={saving || saved}
-                  className="w-full py-4 bg-primary-container/20 border border-primary-container/30 rounded-lg flex justify-center items-center gap-2 hover:bg-primary-container/30 transition-colors active:scale-[0.98] disabled:opacity-50"
-                >
+                <div className="w-full py-4 rounded-lg flex justify-center items-center gap-2">
                   <span className="font-label text-xs font-bold uppercase tracking-widest text-primary-container">
-                    {saved ? 'Saved!' : saving ? 'Saving...' : 'Save workout'}
+                    {saved ? 'Saved!' : saving ? 'Saving...'}
                   </span>
-                  <span className="material-symbols-outlined text-sm text-primary-container">
-                    {saved ? 'check' : 'save'}
-                  </span>
-                </button>
+                  {saved && <span className="material-symbols-outlined text-sm text-primary-container">check</span>}
+                </div>
               </div>
             ) : (
               <div className="bg-surface-container-high rounded-lg p-5 space-y-6">
