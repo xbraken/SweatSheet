@@ -172,6 +172,7 @@ export default function ImportPage() {
   const [dragging, setDragging] = useState(false)
   const [parseProgress, setParseProgress] = useState(0)
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([])
+  const [activeSources, setActiveSources] = useState<Set<string>>(new Set())
   const [imported, setImported] = useState(0)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -224,11 +225,13 @@ export default function ImportPage() {
         return false
       })
 
-    setWorkouts(parsed.map(w => ({
+    const rows = parsed.map(w => ({
       ...w,
       selected: !isDuplicate(w),
       alreadyImported: isDuplicate(w),
-    })))
+    }))
+    setWorkouts(rows)
+    setActiveSources(new Set(rows.map(w => w.sourceName)))
     setPhase('preview')
   }, [])
 
@@ -244,9 +247,21 @@ export default function ImportPage() {
     if (file) processFile(file)
   }, [processFile])
 
+  const sources = [...new Set(workouts.map(w => w.sourceName))]
+  const toggleSource = (src: string) =>
+    setActiveSources(prev => {
+      const next = new Set(prev)
+      next.has(src) ? next.delete(src) : next.add(src)
+      return next
+    })
+
+  const visibleWorkouts = workouts.filter(w => activeSources.has(w.sourceName))
+
   const toggleAll = () => {
-    const allSelected = workouts.filter(w => !w.alreadyImported).every(w => w.selected)
-    setWorkouts(prev => prev.map(w => w.alreadyImported ? w : { ...w, selected: !allSelected }))
+    const allSelected = visibleWorkouts.filter(w => !w.alreadyImported).every(w => w.selected)
+    setWorkouts(prev => prev.map(w =>
+      activeSources.has(w.sourceName) && !w.alreadyImported ? { ...w, selected: !allSelected } : w
+    ))
   }
 
   const toggleOne = (i: number) => {
@@ -254,7 +269,7 @@ export default function ImportPage() {
   }
 
   const confirmImport = async () => {
-    const toImport = workouts.filter(w => w.selected)
+    const toImport = workouts.filter(w => w.selected && activeSources.has(w.sourceName))
     if (toImport.length === 0) return
 
     setTotal(toImport.length)
@@ -289,7 +304,7 @@ export default function ImportPage() {
     setPhase('done')
   }
 
-  const selectedCount = workouts.filter(w => w.selected).length
+  const selectedCount = workouts.filter(w => w.selected && activeSources.has(w.sourceName)).length
 
   return (
     <main className="w-full max-w-[390px] mx-auto px-6 pt-2 pb-32 flex flex-col gap-6 min-h-screen">
@@ -376,15 +391,35 @@ export default function ImportPage() {
               onClick={toggleAll}
               className="text-[11px] font-bold font-label uppercase tracking-widest text-primary-container"
             >
-              {workouts.filter(w => !w.alreadyImported).every(w => w.selected) ? 'Deselect all' : 'Select all'}
+              {visibleWorkouts.filter(w => !w.alreadyImported).every(w => w.selected) ? 'Deselect all' : 'Select all'}
             </button>
           </div>
 
+          {sources.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {sources.map(src => (
+                <button
+                  key={src}
+                  onClick={() => toggleSource(src)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label tracking-wide transition-colors ${
+                    activeSources.has(src)
+                      ? 'bg-[#4bdece] text-[#003732]'
+                      : 'bg-surface-container text-on-surface-variant/50 line-through'
+                  }`}
+                >
+                  {src}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
-            {workouts.map((w, i) => (
+            {visibleWorkouts.map((w) => {
+              const origIdx = workouts.indexOf(w)
+              return (
               <button
-                key={i}
-                onClick={() => toggleOne(i)}
+                key={origIdx}
+                onClick={() => toggleOne(origIdx)}
                 disabled={w.alreadyImported}
                 className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all ${
                   w.alreadyImported
@@ -423,7 +458,8 @@ export default function ImportPage() {
                   {!w.pace && <p className="text-sm text-on-surface-variant">{w.duration}</p>}
                 </div>
               </button>
-            ))}
+              )
+            })}
           </div>
 
           <div className="sticky bottom-24 pt-4">
