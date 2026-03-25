@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No blocks provided' }, { status: 400 })
   }
 
-  const date = new Date().toISOString().split('T')[0]
+  const date = body.date ?? new Date().toISOString().split('T')[0]
 
   try {
     // Create session
@@ -59,8 +59,17 @@ export async function POST(req: NextRequest) {
         }
       } else {
         await db.execute({
-          sql: 'INSERT INTO cardio (block_id, activity, distance, duration) VALUES (?, ?, ?, ?)',
-          args: [blockId, block.activity, block.distance || null, block.time || null],
+          sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace, calories, heart_rate, imported_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          args: [
+            blockId,
+            block.activity,
+            block.distance || null,
+            block.time || null,
+            block.pace || null,
+            block.calories || null,
+            block.heartRate || null,
+            block.importedFrom || null,
+          ],
         })
       }
     }

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
 
 type SetRow = { id: number; weight: number; reps: number; done: boolean }
@@ -223,10 +224,10 @@ export default function LogPage() {
                 <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
               </div>
             </div>
-            <button className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#2a2a2a] transition-colors">
+            <Link href="/import" className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#2a2a2a] transition-colors">
               <span className="material-symbols-outlined text-base">ios_share</span>
-              Import from Apple later
-            </button>
+              Import from Apple Health
+            </Link>
           </section>
         ))}
 
