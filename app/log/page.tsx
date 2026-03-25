@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
 import { EXERCISES, CATEGORIES, type ExerciseCategory } from '@/lib/exercises'
@@ -253,6 +253,29 @@ export default function LogPage() {
   const [cardioTime, setCardioTime] = useState('')
   const cardioPace = useMemo(() => calcPace(cardioDistance, cardioTime), [cardioDistance, cardioTime])
 
+  // Screenshot parsing
+  const parseInputRef = useRef<HTMLInputElement>(null)
+  const [parseLoading, setParseLoading] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+
+  const handleParseImage = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) { setParseError('Please upload an image file'); return }
+    setParseLoading(true); setParseError(null)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const res = await fetch('/api/parse-workout', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      if (data.distance) setCardioDistance(data.distance.replace(/[^\d.]/g, ''))
+      if (data.duration) setCardioTime(data.duration)
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : 'Failed to parse screenshot')
+    } finally {
+      setParseLoading(false)
+    }
+  }, [])
+
   // Hints + stars
   const [hints, setHints] = useState<ExerciseHint[]>([])
   const [starred, setStarred] = useState<Set<string>>(new Set())
@@ -326,6 +349,7 @@ export default function LogPage() {
   const startCardio = (activity: string) => {
     setCardioDistance('')
     setCardioTime('')
+    setParseError(null)
     setView({ type: 'cardio', activity })
   }
 
@@ -647,6 +671,27 @@ export default function LogPage() {
             <span className="font-headline font-bold text-[#4bdece]">{cardioPace} /km</span>
           </div>
         )}
+        {/* Screenshot scan */}
+        <input
+          ref={parseInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleParseImage(f); e.target.value = '' }}
+        />
+        <button
+          onClick={() => parseInputRef.current?.click()}
+          disabled={parseLoading}
+          className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors mt-2 active:scale-95 disabled:opacity-50"
+        >
+          {parseLoading ? (
+            <div className="w-4 h-4 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <span className="material-symbols-outlined text-base text-[#ff9066]">photo_camera</span>
+          )}
+          {parseLoading ? 'Scanning…' : 'Scan run screenshot'}
+        </button>
+        {parseError && <p className="text-red-400 text-xs mt-2 text-center">{parseError}</p>}
         <Link href="/import" className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors mt-2">
           <span className="material-symbols-outlined text-base">ios_share</span>
           Import from Apple Health
