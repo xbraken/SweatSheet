@@ -243,8 +243,8 @@ function RunDetailSheet({
   const pacePts = paceValuesAll.length > 1
     ? paceValuesAll.map((v, i) => {
         const x = ((i / Math.max(paceValuesAll.length - 1, 1)) * 300).toFixed(1)
-        const pv = v > 0 ? v : pYMin  // clamp zeros to min
-        const y = (80 - ((pv - pYMin) / (pYMax - pYMin || 1)) * 68).toFixed(1)
+        const pv = v > 0 ? v : pYMax  // clamp zeros to max (slowest) when inverted
+        const y = (10 + ((pv - pYMin) / (pYMax - pYMin || 1)) * 68).toFixed(1)  // inverted: fast=high
         return `${x},${y}`
       }).join(' ')
     : null
@@ -252,7 +252,7 @@ function RunDetailSheet({
   const pHovIdx = paceHoveredIdx ?? Math.floor((PACE_N - 1) / 2)
   const pHovPace = paceValuesAll[pHovIdx] ?? 0
   const pHovX = (pHovIdx / (PACE_N - 1)) * 300
-  const pHovY = pHovPace > 0 ? 80 - ((pHovPace - pYMin) / (pYMax - pYMin || 1)) * 68 : 40
+  const pHovY = pHovPace > 0 ? 10 + ((pHovPace - pYMin) / (pYMax - pYMin || 1)) * 68 : 78
   const pHovDist = hasPace ? distanceAtIdx(distSamples, pHovIdx, PACE_N) : 0
   const pHovTimeSec = hasPace
     ? Math.round((pHovIdx / (PACE_N - 1)) * distSamples[distSamples.length - 1].time_offset_sec)
@@ -397,14 +397,14 @@ function RunDetailSheet({
 
                       {/* Avg pace dashed line */}
                       {paceAvgSec && (() => {
-                        const avgY = 80 - ((paceAvgSec - pYMin) / (pYMax - pYMin || 1)) * 68
+                        const avgY = 10 + ((paceAvgSec - pYMin) / (pYMax - pYMin || 1)) * 68
                         return <line x1={0} y1={avgY} x2={300} y2={avgY} stroke="#4bdece" strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.35" />
                       })()}
 
                       {/* Fill + line */}
                       {pacePts && (
                         <>
-                          <polygon points={`0,80 ${pacePts} 300,80`} fill="url(#paceGrad)" />
+                          <polygon points={`0,78 ${pacePts} 300,78`} fill="url(#paceGrad)" />
                           <polyline points={pacePts} fill="none" stroke="#4bdece" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                         </>
                       )}
@@ -417,9 +417,9 @@ function RunDetailSheet({
                         </>
                       )}
 
-                      {/* Y axis labels (pace) */}
-                      <text x={3} y={14} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{fmtPaceSec(pYMax)}</text>
-                      <text x={3} y={79} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{fmtPaceSec(pYMin)}</text>
+                      {/* Y axis labels (pace): top = fastest, bottom = slowest */}
+                      <text x={3} y={14} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{fmtPaceSec(pYMin)}</text>
+                      <text x={3} y={79} fill="#a48b83" fontSize="7" fontFamily="sans-serif">{fmtPaceSec(pYMax)}</text>
 
                       {/* X axis baseline */}
                       <line x1={0} y1={82} x2={300} y2={82} stroke="#2a2a2a" strokeWidth="0.5" />
