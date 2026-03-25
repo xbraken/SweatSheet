@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       ORDER BY s.date DESC
     `)
 
-    // Calendar data — last 35 days, aggregated per day
+    // Calendar data — all time, aggregated per day
     const calendarRes = await db.execute(`
       SELECT s.date,
         MAX(st.weight) as max_weight,
@@ -53,7 +53,6 @@ export async function GET(req: NextRequest) {
       LEFT JOIN blocks b ON b.session_id = s.id
       LEFT JOIN sets st ON st.block_id = b.id
       LEFT JOIN cardio c ON c.block_id = b.id
-      WHERE s.date >= date('now', '-35 days')
       GROUP BY s.date
     `)
 

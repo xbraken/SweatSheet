@@ -73,6 +73,8 @@ export default function ProgressPage() {
   const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>('pace')
   const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>('date')
   const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>('date')
+  const [calMonthOffset, setCalMonthOffset] = useState(0)
+  const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/progress')
@@ -182,20 +184,30 @@ export default function ProgressPage() {
   }, [filteredCardioHistory])
 
   // ── Calendar heat-map ───────────────────────────────────────────────────────
+  const calMonthDate = useMemo(() => {
+    const d = new Date()
+    d.setDate(1)
+    d.setMonth(d.getMonth() + calMonthOffset)
+    return d
+  }, [calMonthOffset])
+
   const calendarGrid = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const year = calMonthDate.getFullYear()
+    const month = calMonthDate.getMonth()
+    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7 // Mon=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const today = new Date(); today.setHours(0, 0, 0, 0)
     const todayStr = today.toISOString().split('T')[0]
-    const dayOfWeek = (today.getDay() + 6) % 7
-    const startDay = new Date(today)
-    startDay.setDate(today.getDate() - dayOfWeek - 28)
-    return Array.from({ length: 35 }, (_, i) => {
-      const d = new Date(startDay)
-      d.setDate(startDay.getDate() + i)
-      const str = d.toISOString().split('T')[0]
-      return { date: str, isToday: str === todayStr, isFuture: d > today }
-    })
-  }, [])
+    const cells: Array<{ date: string | null; isToday: boolean; isFuture: boolean }> = []
+    for (let i = 0; i < firstDow; i++) cells.push({ date: null, isToday: false, isFuture: false })
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(year, month, d)
+      const str = dt.toISOString().split('T')[0]
+      cells.push({ date: str, isToday: str === todayStr, isFuture: dt > today })
+    }
+    while (cells.length % 7 !== 0) cells.push({ date: null, isToday: false, isFuture: false })
+    return cells
+  }, [calMonthDate])
 
   const calendarMap = useMemo(() => {
     const m = new Map<string, CalendarDay>()
@@ -217,6 +229,16 @@ export default function ProgressPage() {
   }
 
   const calColor = tab === 'lifts' ? '#ff9066' : '#4bdece'
+
+  const selectedDayWorkouts = useMemo(() => {
+    if (!selectedCalDate) return []
+    return filteredCardioHistory.filter(e => e.date === selectedCalDate)
+  }, [selectedCalDate, filteredCardioHistory])
+
+  const selectedDayLift = useMemo(() => {
+    if (!selectedCalDate) return null
+    return calendarMap.get(selectedCalDate) ?? null
+  }, [selectedCalDate, calendarMap])
 
   return (
     <main className="w-full max-w-[390px] mx-auto px-6 pt-2 pb-32 flex flex-col gap-8">
@@ -410,7 +432,16 @@ export default function ProgressPage() {
 
       {/* Calendar heat-map */}
       <section className="flex flex-col gap-3">
-        <h3 className="font-headline text-sm font-bold text-on-surface-variant uppercase tracking-widest">Activity map</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-headline text-sm font-bold text-on-surface-variant uppercase tracking-widest">Activity map</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setCalMonthOffset(o => o - 1); setSelectedCalDate(null) }} className="material-symbols-outlined text-on-surface-variant text-xl">chevron_left</button>
+            <span className="text-xs font-bold font-label text-on-surface-variant w-24 text-center">
+              {calMonthDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+            </span>
+            <button onClick={() => { setCalMonthOffset(o => Math.min(o + 1, 0)); setSelectedCalDate(null) }} className={`material-symbols-outlined text-xl ${calMonthOffset >= 0 ? 'text-on-surface-variant/20' : 'text-on-surface-variant'}`} disabled={calMonthOffset >= 0}>chevron_right</button>
+          </div>
+        </div>
         <div className="bg-surface-container rounded-xl p-4">
           <div className="grid grid-cols-7 gap-1 mb-1">
             {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
@@ -418,33 +449,65 @@ export default function ProgressPage() {
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
-            {calendarGrid.map(({ date, isToday, isFuture }) => {
+            {calendarGrid.map(({ date, isToday, isFuture }, i) => {
+              if (!date) return <div key={i} />
               const data = calendarMap.get(date)
               const intensity = cellIntensity(data)
               const hasWorkout = intensity > 0
-              const label = data
-                ? tab === 'lifts'
-                  ? `${date} · ${data.max_weight ?? '—'} kg`
-                  : `${date} · ${data.total_distance ?? '—'} km`
-                : date
+              const isSelected = date === selectedCalDate
               const hex2 = Math.round(intensity * 255).toString(16).padStart(2, '0')
               return (
-                <div
+                <button
                   key={date}
-                  title={label}
-                  className="aspect-square rounded-md transition-all"
+                  onClick={() => setSelectedCalDate(d => d === date ? null : date)}
+                  className="aspect-square rounded-md transition-all flex items-center justify-center"
                   style={{
                     backgroundColor: hasWorkout
                       ? `${calColor}${hex2}`
                       : isFuture ? 'transparent' : 'rgba(255,255,255,0.04)',
-                    outline: isToday ? `2px solid ${calColor}` : undefined,
-                    outlineOffset: isToday ? '2px' : undefined,
+                    outline: isSelected ? `2px solid ${calColor}` : isToday ? `1px solid ${calColor}66` : undefined,
+                    outlineOffset: '2px',
                   }}
-                />
+                >
+                  <span className="text-[9px] font-bold" style={{ color: hasWorkout ? calColor : 'rgba(255,255,255,0.2)' }}>
+                    {new Date(date + 'T00:00:00').getDate()}
+                  </span>
+                </button>
               )
             })}
           </div>
         </div>
+
+        {/* Selected day detail */}
+        {selectedCalDate && (
+          <div className="bg-surface-container rounded-xl p-4 flex flex-col gap-2">
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-on-surface-variant">
+              {new Date(selectedCalDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+            {tab === 'cardio' && selectedDayWorkouts.length > 0 ? (
+              selectedDayWorkouts.map((w, i) => (
+                <div key={i} className="flex justify-between items-center">
+                  <div>
+                    <p className="font-headline font-bold text-on-surface">{w.distance ? `${w.distance} km` : w.activity}</p>
+                    <p className="text-xs text-on-surface-variant">{w.activity}</p>
+                  </div>
+                  <div className="text-right">
+                    {w.pace && <p className="text-sm font-bold text-on-surface">{w.pace} /km</p>}
+                    {w.duration && <p className="text-xs text-on-surface-variant">{w.duration}</p>}
+                    {w.calories && <p className="text-xs text-on-surface-variant">{w.calories} kcal</p>}
+                  </div>
+                </div>
+              ))
+            ) : tab === 'lifts' && selectedDayLift?.max_weight ? (
+              <div className="flex justify-between items-center">
+                <p className="font-headline font-bold text-on-surface">{exercise}</p>
+                <p className="text-sm font-bold text-primary-container">{Number(selectedDayLift.max_weight)} kg peak</p>
+              </div>
+            ) : (
+              <p className="text-sm text-on-surface-variant">No workout recorded</p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Session history */}
