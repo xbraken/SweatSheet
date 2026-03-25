@@ -235,15 +235,19 @@ function RunDetailSheet({
   const validPaceValues = paceValuesAll.filter(v => v > 0)
   const paceAvgSec = detail.pace ? (toSeconds(detail.pace) ?? null) : null
   const paceMinSec = validPaceValues.length > 0 ? Math.min(...validPaceValues) : null  // fastest
-  const paceMaxSec = validPaceValues.length > 0 ? Math.max(...validPaceValues) : null  // slowest
+  // Use 95th-percentile as the slowest axis bound to ignore GPS outlier spikes
+  const pace95th = validPaceValues.length > 0
+    ? [...validPaceValues].sort((a, b) => a - b)[Math.floor(validPaceValues.length * 0.95)]
+    : null
 
   const pYMin = paceMinSec !== null ? Math.max(30, paceMinSec - 15) : 200
-  const pYMax = paceMaxSec !== null ? Math.min(900, paceMaxSec + 15) : 600
+  const pYMax = pace95th !== null ? Math.min(900, pace95th + 30) : 600
 
   const pacePts = paceValuesAll.length > 1
     ? paceValuesAll.map((v, i) => {
         const x = ((i / Math.max(paceValuesAll.length - 1, 1)) * 300).toFixed(1)
-        const pv = v > 0 ? v : pYMax  // clamp zeros to max (slowest) when inverted
+        // Clamp to axis range so GPS noise never pushes the line off-screen
+        const pv = Math.min(pYMax, Math.max(pYMin, v > 0 ? v : pYMax))
         const y = (10 + ((pv - pYMin) / (pYMax - pYMin || 1)) * 68).toFixed(1)  // inverted: fast=high
         return `${x},${y}`
       }).join(' ')
@@ -372,7 +376,13 @@ function RunDetailSheet({
                     {/* Hover readout */}
                     {paceHoveredIdx !== null && pHovPaceLabel && (
                       <div className="flex items-center justify-end gap-2 mb-2">
-                        <span className="text-[10px] text-[#a48b83]">{pHovDist.toFixed(2)} km</span>
+                        {pHovTimeSec !== null && (
+                          <span className="text-[10px] text-[#a48b83]">
+                            {pHovTimeSec >= 3600
+                              ? `${Math.floor(pHovTimeSec / 3600)}:${String(Math.floor((pHovTimeSec % 3600) / 60)).padStart(2, '0')}:${String(pHovTimeSec % 60).padStart(2, '0')}`
+                              : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
+                          </span>
+                        )}
                         <span className="text-sm font-black font-headline text-[#4bdece]">{pHovPaceLabel} /km</span>
                       </div>
                     )}
