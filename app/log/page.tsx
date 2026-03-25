@@ -424,10 +424,12 @@ export default function LogPage() {
 
   const handleAddBlock = (type: 'lift' | 'run' | 'cycle' | 'walk') => {
     if (type === 'lift') {
+      const id = Date.now()
       setBlocks(prev => [...prev, {
-        id: Date.now(), type: 'lift', exercise: '',
-        sets: [{ id: Date.now() + 1, weight: 60, reps: 8, done: false }],
+        id, type: 'lift', exercise: '',
+        sets: [{ id: id + 1, weight: 60, reps: 8, done: false }],
       }])
+      setPickerBlockId(id) // immediately open picker
     } else {
       const activityMap = { run: 'Outdoor run', cycle: 'Cycling', walk: 'Walking' } as const
       setBlocks(prev => [...prev, {
@@ -518,7 +520,7 @@ export default function LogPage() {
           <span className="font-label text-[#dcc1b8] text-sm uppercase tracking-widest">Session</span>
           <button
             onClick={finishSession}
-            disabled={saving || blocks.length === 0}
+            disabled={saving || blocks.length === 0 || blocks.some(b => b.type === 'lift' && !b.exercise)}
             className="bg-gradient-to-br from-primary to-primary-container text-[#752805] px-6 py-2.5 rounded-xl font-body font-bold text-sm shadow-xl active:scale-95 transition-all disabled:opacity-30"
           >
             {saving ? 'Saving…' : 'Finish'}
@@ -571,22 +573,38 @@ export default function LogPage() {
         {blocks.map(block => block.type === 'lift' ? (
           <section key={block.id} className="bg-[#201f1f] rounded-3xl p-5">
             <div className="flex justify-between items-start mb-5">
-              <button
-                onClick={() => setPickerBlockId(block.id)}
-                className="flex-1 text-left"
-              >
-                {block.exercise ? (
-                  <h3 className="font-headline text-xl font-bold text-[#e5e2e1]">{block.exercise}</h3>
+              {(() => {
+                const anyDone = block.sets.some(s => s.done)
+                return anyDone ? (
+                  // Locked once sets are logged
+                  <h3 className="font-headline text-xl font-bold text-[#e5e2e1] flex-1">{block.exercise}</h3>
                 ) : (
-                  <span className="font-headline text-xl font-bold text-[#56423c]">Tap to pick exercise</span>
-                )}
-              </button>
+                  <button onClick={() => setPickerBlockId(block.id)} className="flex-1 text-left">
+                    {block.exercise ? (
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-headline text-xl font-bold text-[#e5e2e1]">{block.exercise}</h3>
+                        <span className="material-symbols-outlined text-[#a48b83] text-base">edit</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 py-2 px-3 bg-[#ff9066]/10 rounded-xl border border-[#ff9066]/30">
+                        <span className="material-symbols-outlined text-[#ff9066] text-base">fitness_center</span>
+                        <span className="font-headline text-base font-bold text-[#ff9066]">Pick exercise</span>
+                      </div>
+                    )}
+                  </button>
+                )
+              })()}
               <button onClick={() => setBlocks(prev => prev.filter(b => b.id !== block.id))} className="ml-2 flex-shrink-0">
                 <span className="material-symbols-outlined text-[#a48b83] text-lg">close</span>
               </button>
             </div>
 
-            <div className="space-y-2">
+            {/* Don't show sets until exercise is chosen */}
+            {!block.exercise && (
+              <p className="text-xs text-[#a48b83] text-center py-4">Pick an exercise above to start logging sets</p>
+            )}
+
+            {block.exercise && <div className="space-y-2">
               {block.sets.map((set, i) => {
                 const isActive = !set.done && block.sets.findIndex(s => !s.done) === i
 
@@ -656,11 +674,13 @@ export default function LogPage() {
                   </div>
                 )
               })}
-            </div>
+            </div>}
 
-            <button onClick={() => addSet(block.id)} className="w-full mt-4 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors">
-              + Add set
-            </button>
+            {block.exercise && (
+              <button onClick={() => addSet(block.id)} className="w-full mt-4 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors">
+                + Add set
+              </button>
+            )}
           </section>
         ) : (
           <section key={block.id} className="bg-[#201f1f] rounded-3xl p-5">
