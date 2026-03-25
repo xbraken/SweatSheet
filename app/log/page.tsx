@@ -92,13 +92,13 @@ function PrToast({ prs, onDone }: { prs: { exercise: string; weight: number }[];
 
 // ── Add Block Sheet ───────────────────────────────────────────────────────────
 function AddBlockSheet({ onAdd, onClose }: {
-  onAdd: (type: 'lift' | 'run' | 'cycle') => void
+  onAdd: (type: 'lift' | 'run' | 'cycle' | 'walk') => void
   onClose: () => void
 }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10 shadow-2xl">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-28 shadow-2xl">
         <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Add to session</p>
         <div className="flex flex-col gap-3">
@@ -135,6 +135,18 @@ function AddBlockSheet({ onAdd, onClose }: {
             </div>
             <div>
               <p className="font-headline font-bold text-[#e5e2e1]">Cycle</p>
+              <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
+            </div>
+          </button>
+          <button
+            onClick={() => { onAdd('walk'); onClose() }}
+            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-[#4bdece]/10 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-[#4bdece] text-2xl">directions_walk</span>
+            </div>
+            <div>
+              <p className="font-headline font-bold text-[#e5e2e1]">Walk</p>
               <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
             </div>
           </button>
@@ -264,16 +276,17 @@ export default function LogPage() {
     }))
   }, [])
 
-  const handleAddBlock = (type: 'lift' | 'run' | 'cycle') => {
+  const handleAddBlock = (type: 'lift' | 'run' | 'cycle' | 'walk') => {
     if (type === 'lift') {
       setBlocks(prev => [...prev, {
         id: Date.now(), type: 'lift', exercise: '',
         sets: [{ id: Date.now() + 1, weight: 60, reps: 8, done: false }],
       }])
     } else {
+      const activityMap = { run: 'Outdoor run', cycle: 'Cycling', walk: 'Walking' } as const
       setBlocks(prev => [...prev, {
         id: Date.now(), type: 'cardio',
-        activity: type === 'run' ? 'Outdoor run' : 'Cycling',
+        activity: activityMap[type],
         distance: '', time: '', pace: '',
       }])
     }
