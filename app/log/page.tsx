@@ -628,50 +628,53 @@ export default function LogPage() {
 
                 if (isActive) return (
                   <div key={set.id} className="bg-[#2a2a2a] rounded-2xl p-4 border border-[#ff9066]/20">
-                    <div className="flex items-center gap-1 mb-4">
-                      <span className="font-headline text-lg font-black text-[#ff9066] w-6">{i + 1}</span>
-                      <div className="flex-1 flex gap-3">
-                        <div className="flex-1">
-                          <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight kg</p>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => updateSet(block.id, set.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                              <span className="material-symbols-outlined text-sm">remove</span>
-                            </button>
-                            <span className="font-headline text-2xl font-black w-12 text-center">{set.weight}</span>
-                            <button onClick={() => updateSet(block.id, set.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                              <span className="material-symbols-outlined text-sm">add</span>
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => updateSet(block.id, set.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                              <span className="material-symbols-outlined text-sm">remove</span>
-                            </button>
-                            <span className="font-headline text-2xl font-black w-10 text-center">{set.reps}</span>
-                            <button onClick={() => updateSet(block.id, set.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                              <span className="material-symbols-outlined text-sm">add</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Log set / rest timer */}
                     {restingBlockId === block.id ? (
+                      /* Resting — only show the timer, no controls */
                       <RestButton
                         seconds={restRemaining}
                         total={restDuration}
                         onSkip={() => setRestingBlockId(null)}
                       />
                     ) : (
-                      <button
-                        onClick={() => toggleSet(block.id, set.id)}
-                        className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
-                      >
-                        <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                        Log set
-                      </button>
+                      /* Ready — show weight/reps + log button */
+                      <>
+                        <div className="flex items-center gap-1 mb-4">
+                          <span className="font-headline text-lg font-black text-[#ff9066] w-6">{i + 1}</span>
+                          <div className="flex-1 flex gap-3">
+                            <div className="flex-1">
+                              <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight kg</p>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => updateSet(block.id, set.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                                  <span className="material-symbols-outlined text-sm">remove</span>
+                                </button>
+                                <span className="font-headline text-2xl font-black w-12 text-center">{set.weight}</span>
+                                <button onClick={() => updateSet(block.id, set.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                                  <span className="material-symbols-outlined text-sm">add</span>
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => updateSet(block.id, set.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                                  <span className="material-symbols-outlined text-sm">remove</span>
+                                </button>
+                                <span className="font-headline text-2xl font-black w-10 text-center">{set.reps}</span>
+                                <button onClick={() => updateSet(block.id, set.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                                  <span className="material-symbols-outlined text-sm">add</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => toggleSet(block.id, set.id)}
+                          className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+                        >
+                          <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                          Log set
+                        </button>
+                      </>
                     )}
                   </div>
                 )
