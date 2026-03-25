@@ -5,7 +5,7 @@ const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? 'dev-secret-please-set-AUTH_SECRET-in-env'
 )
 
-const PUBLIC_PREFIXES = ['/auth', '/api/auth', '/_next', '/favicon.ico', '/manifest.json', '/icons']
+const PUBLIC_PREFIXES = ['/auth', '/api/auth', '/api/import', '/_next', '/favicon.ico', '/manifest.json', '/icons']
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
