@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 
 type ParsedWorkout = {
@@ -8,15 +9,18 @@ type ParsedWorkout = {
 }
 
 export default function UploadPage() {
+  const router = useRouter()
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [parsed, setParsed] = useState<ParsedWorkout | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) { setError('Please upload an image file'); return }
-    setLoading(true); setError(null)
+    setLoading(true); setError(null); setSaved(false)
     try {
       const formData = new FormData()
       formData.append('image', file)
@@ -28,6 +32,37 @@ export default function UploadPage() {
       setError(e instanceof Error ? e.message : 'Failed to parse workout')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const saveWorkout = async () => {
+    if (!parsed) return
+    setSaving(true)
+    try {
+      const activity = /cycl/i.test(parsed.type) ? 'Cycling' : 'Outdoor run'
+      const distanceStr = parsed.distance ? parsed.distance.replace(/[^\d.]/g, '') : ''
+      const block = {
+        id: Date.now(),
+        type: 'cardio',
+        activity,
+        distance: distanceStr,
+        time: parsed.duration || '',
+      }
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks: [block] }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to save')
+      }
+      setSaved(true)
+      setTimeout(() => router.push('/'), 1000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save workout')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -122,9 +157,17 @@ export default function UploadPage() {
                     <p className="font-headline text-3xl font-black text-on-surface">{parsed.calories}</p>
                   </div>}
                 </div>
-                <button className="w-full py-4 bg-surface-container-highest rounded-lg flex justify-center items-center gap-2 hover:bg-outline-variant/20 transition-colors active:scale-[0.98]">
-                  <span className="font-label text-xs font-bold uppercase tracking-widest text-primary-container">View workout details</span>
-                  <span className="material-symbols-outlined text-sm text-primary-container">arrow_forward</span>
+                <button
+                  onClick={saveWorkout}
+                  disabled={saving || saved}
+                  className="w-full py-4 bg-primary-container/20 border border-primary-container/30 rounded-lg flex justify-center items-center gap-2 hover:bg-primary-container/30 transition-colors active:scale-[0.98] disabled:opacity-50"
+                >
+                  <span className="font-label text-xs font-bold uppercase tracking-widest text-primary-container">
+                    {saved ? 'Saved!' : saving ? 'Saving...' : 'Save workout'}
+                  </span>
+                  <span className="material-symbols-outlined text-sm text-primary-container">
+                    {saved ? 'check' : 'save'}
+                  </span>
                 </button>
               </div>
             ) : (
