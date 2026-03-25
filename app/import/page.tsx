@@ -82,8 +82,7 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   }
   const distKm = distUnit === 'mi' ? rawDist * 1.60934 : rawDist
 
-  // Skip workouts with no meaningful distance (strength training, yoga, meditation, etc.)
-  // Known non-cardio types are also skipped explicitly
+  // Skip known non-cardio types outright
   const NON_CARDIO = new Set([
     'HKWorkoutActivityTypeTraditionalStrengthTraining',
     'HKWorkoutActivityTypeFunctionalStrengthTraining',
@@ -95,7 +94,8 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
     'HKWorkoutActivityTypeFlexibility',
   ])
   if (NON_CARDIO.has(type)) return null
-  if (distKm < 0.5 && !(type in SUPPORTED)) return null
+  // Skip unknown types with no distance AND very short duration (bogus/noise entries)
+  if (distKm < 0.5 && !(type in SUPPORTED) && durationMin < 5) return null
 
   // Detect indoor runs via metadata
   const isIndoor = /MetadataEntry[^>]*key="HKMetadataKeyIndoorWorkout"[^>]*value="1"/.test(xml)
@@ -315,6 +315,17 @@ async function collectSamples(
       cumKm += d.dist
       return { offsetSec: Math.round((d.ts - w.startTs) / 1000), distKm: cumKm }
     })
+
+    // If totalDistance was missing from the XML (common for Custom workout presets),
+    // backfill distance and pace from the accumulated distance samples
+    if (parseFloat(w.workout.distance) < 0.5 && cumKm >= 0.5) {
+      w.workout.distance = cumKm.toFixed(2)
+      const durationSec = (w.endTs - w.startTs) / 1000
+      if (durationSec > 0) {
+        const paceSecPerKm = durationSec / cumKm
+        w.workout.pace = `${Math.floor(paceSecPerKm / 60)}:${String(Math.round(paceSecPerKm % 60)).padStart(2, '0')}`
+      }
+    }
   }
 }
 
