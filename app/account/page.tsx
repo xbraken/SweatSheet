@@ -15,6 +15,12 @@ export default function AccountPage() {
   const [apiKey, setApiKey] = useState('')
   const [keyCopied, setKeyCopied] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwError, setPwError] = useState('')
+  const [pwSaved, setPwSaved] = useState(false)
 
   useEffect(() => {
     fetch('/api/account').then(r => r.json()).then(data => {
@@ -175,6 +181,50 @@ export default function AccountPage() {
           <p className="text-[11px] text-[#a48b83] leading-snug">
             Opens in iPhone Shortcuts — you&apos;ll be asked for your API key on install (copy it above). Requires <strong className="text-[#e5e2e1]">Allow Untrusted Shortcuts</strong> in iOS Settings → Privacy &amp; Security → Shortcuts.
           </p>
+        </div>
+      </section>
+
+      {/* Change password */}
+      <section className="flex flex-col gap-4 mb-8">
+        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Security</h3>
+        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-3">
+          {[
+            { label: 'Current password', value: currentPassword, set: setCurrentPassword },
+            { label: 'New password', value: newPassword, set: setNewPassword },
+            { label: 'Confirm new password', value: confirmPassword, set: setConfirmPassword },
+          ].map(({ label, value, set }) => (
+            <div key={label}>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1.5">{label}</p>
+              <input
+                type="password"
+                value={value}
+                onChange={e => { set(e.target.value); setPwError(''); setPwSaved(false) }}
+                className="w-full bg-[#2a2a2a] rounded-xl px-4 py-3 text-sm text-[#e5e2e1] outline-none focus:ring-1 focus:ring-[#ff9066]/50"
+              />
+            </div>
+          ))}
+          {pwError && <p className="text-xs text-red-400">{pwError}</p>}
+          <button
+            onClick={async () => {
+              if (newPassword !== confirmPassword) { setPwError('Passwords don\'t match'); return }
+              if (newPassword.length < 6) { setPwError('Password must be at least 6 characters'); return }
+              setPwSaving(true); setPwError('')
+              const res = await fetch('/api/account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'change_password', currentPassword, newPassword }),
+              }).then(r => r.json())
+              setPwSaving(false)
+              if (res.error) { setPwError(res.error); return }
+              setPwSaved(true)
+              setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+              setTimeout(() => setPwSaved(false), 2000)
+            }}
+            disabled={pwSaving || !currentPassword || !newPassword || !confirmPassword}
+            className="w-full py-3 bg-[#ff9066]/20 text-[#ff9066] rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
+          >
+            {pwSaved ? '✓ Password updated' : pwSaving ? 'Saving…' : 'Change password'}
+          </button>
         </div>
       </section>
 
