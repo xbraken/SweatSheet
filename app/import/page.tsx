@@ -11,6 +11,7 @@ type ParsedWorkout = {
   pace: string | null
   calories: number | null
   heartRate: number | null
+  sourceName: string
 }
 
 type WorkoutRow = ParsedWorkout & {
@@ -29,6 +30,15 @@ function attr(xml: string, name: string): string {
   return m?.[1] ?? ''
 }
 
+function toSeconds(str: string | null): number | null {
+  if (!str) return null
+  const parts = str.split(':').map(Number)
+  if (parts.some(isNaN)) return null
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return null
+}
+
 function processWorkoutBlock(xml: string): ParsedWorkout | null {
   const type = attr(xml, 'workoutActivityType')
   if (!(type in SUPPORTED)) return null
@@ -44,6 +54,7 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
 
   const hrMatch = xml.match(/WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*average="([^"]*)"/)
   const avgHr = hrMatch ? Math.round(parseFloat(hrMatch[1])) || null : null
+  const sourceName = attr(xml, 'sourceName') || 'Unknown'
 
   const totalSec = Math.round(durationMin * 60)
   const hh = Math.floor(totalSec / 3600)
@@ -66,6 +77,7 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
     pace,
     calories,
     heartRate: avgHr,
+    sourceName,
   }
 }
 
@@ -163,18 +175,32 @@ export default function ImportPage() {
       return
     }
 
-    // Fetch existing session dates to detect duplicates
-    let existingDates: Set<string> = new Set()
+    // Fetch all existing cardio to detect duplicates by activity + duration/distance
+    let existingCardio: Array<{ date: string; activity: string; duration: string | null; distance: string | null }> = []
     try {
-      const res = await fetch('/api/sessions')
-      const sessions = await res.json()
-      existingDates = new Set((sessions as { date: string }[]).map(s => s.date))
+      const res = await fetch('/api/progress')
+      const data = await res.json()
+      existingCardio = data.cardioHistory ?? []
     } catch { /* proceed without duplicate check */ }
+
+    const isDuplicate = (w: ParsedWorkout) =>
+      existingCardio.some(ex => {
+        if (ex.date !== w.date || ex.activity !== w.activity) return false
+        const exSec = toSeconds(ex.duration)
+        const wSec = toSeconds(w.duration)
+        if (exSec && wSec && Math.abs(exSec - wSec) <= 300) return true
+        const exDist = parseFloat(ex.distance ?? '')
+        const wDist = parseFloat(w.distance)
+        if (!isNaN(exDist) && !isNaN(wDist) && exDist > 0) {
+          if (Math.abs(exDist - wDist) / exDist <= 0.1) return true
+        }
+        return false
+      })
 
     setWorkouts(parsed.map(w => ({
       ...w,
-      selected: !existingDates.has(w.date),
-      alreadyImported: existingDates.has(w.date),
+      selected: !isDuplicate(w),
+      alreadyImported: isDuplicate(w),
     })))
     setPhase('preview')
   }, [])
@@ -362,11 +388,11 @@ export default function ImportPage() {
                   <p className="font-headline font-bold text-on-surface">
                     {parseFloat(w.distance) > 0 ? `${w.distance} km` : w.activity}
                   </p>
+                  <p className="text-[10px] text-on-surface-variant/60 mt-0.5">{w.sourceName}</p>
                 </div>
 
                 <div className="text-right shrink-0">
                   {w.pace && <p className="text-sm font-bold text-on-surface">{w.pace} /km</p>}
-                  {w.heartRate && <p className="text-xs text-[#4bdece] font-bold">{w.heartRate} bpm</p>}
                   {!w.pace && <p className="text-sm text-on-surface-variant">{w.duration}</p>}
                 </div>
               </button>

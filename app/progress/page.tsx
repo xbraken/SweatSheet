@@ -9,13 +9,11 @@ type CardioEntry = {
   distance: string | null
   duration: string | null
   pace: string | null
-  heart_rate: number | null
 }
 type CalendarDay = {
   date: string
   max_weight: number | null
   total_distance: number | null
-  best_hr: number | null
 }
 
 function formatDate(dateStr: string) {
@@ -69,9 +67,9 @@ export default function ProgressPage() {
   const [cardioHistory, setCardioHistory] = useState<CardioEntry[]>([])
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
-  const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance' | 'hr'>('pace')
+  const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>('pace')
   const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>('date')
-  const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace' | 'hr'>('date')
+  const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>('date')
 
   useEffect(() => {
     fetch('/api/progress')
@@ -116,19 +114,15 @@ export default function ProgressPage() {
   // ── Cardio chart ────────────────────────────────────────────────────────────
   const cardioChartData = useMemo(() => [...cardioHistory].reverse(), [cardioHistory])
   const hasPaceData = cardioHistory.some(e => e.pace)
-  const hasHrData = cardioHistory.some(e => e.heart_rate)
 
   const cardioValues = useMemo((): number[] => {
     if (cardioMetric === 'pace') {
       return cardioChartData.map(e => toSeconds(e.pace)).filter((v): v is number => v !== null)
     }
-    if (cardioMetric === 'distance') {
-      return cardioChartData.map(e => e.distance ? parseFloat(e.distance) : null).filter((v): v is number => v !== null && !isNaN(v))
-    }
-    return cardioChartData.map(e => e.heart_rate ? Number(e.heart_rate) : null).filter((v): v is number => v !== null)
+    return cardioChartData.map(e => e.distance ? parseFloat(e.distance) : null).filter((v): v is number => v !== null && !isNaN(v))
   }, [cardioChartData, cardioMetric])
 
-  const cardioInvert = cardioMetric === 'pace' || cardioMetric === 'hr'
+  const cardioInvert = cardioMetric === 'pace'
   const cardioSvgPts = cardioValues.length > 1 ? buildSvgPoints(cardioValues, cardioInvert) : null
   const cardioTrend = useMemo(() => trendPercent(cardioValues, cardioInvert), [cardioValues, cardioInvert])
   const cardioLastY = useMemo(() => {
@@ -144,8 +138,7 @@ export default function ProgressPage() {
       const best = Math.min(...cardioValues)
       return `${Math.floor(best / 60)}:${String(best % 60).padStart(2, '0')}`
     }
-    if (cardioMetric === 'distance') return Math.max(...cardioValues).toFixed(1)
-    return Math.min(...cardioValues).toString()
+    return Math.max(...cardioValues).toFixed(1)
   }, [cardioValues, cardioMetric])
 
   // ── Sorting ─────────────────────────────────────────────────────────────────
@@ -160,7 +153,6 @@ export default function ProgressPage() {
     const arr = [...cardioHistory]
     if (cardioSort === 'distance') return arr.sort((a, b) => (parseFloat(b.distance ?? '0') || 0) - (parseFloat(a.distance ?? '0') || 0))
     if (cardioSort === 'pace') return arr.sort((a, b) => (toSeconds(a.pace) ?? Infinity) - (toSeconds(b.pace) ?? Infinity))
-    if (cardioSort === 'hr') return arr.sort((a, b) => (Number(a.heart_rate) || Infinity) - (Number(b.heart_rate) || Infinity))
     return arr
   }, [cardioHistory, cardioSort])
 
@@ -173,12 +165,6 @@ export default function ProgressPage() {
     const runs = cardioHistory.filter(e => e.pace)
     if (runs.length === 0) return null
     return runs.reduce((best, e) => (toSeconds(e.pace) ?? Infinity) < (toSeconds(best.pace) ?? Infinity) ? e : best)
-  }, [cardioHistory])
-
-  const bestHrEntry = useMemo(() => {
-    const withHr = cardioHistory.filter(e => e.heart_rate)
-    if (withHr.length === 0) return null
-    return withHr.reduce((best, e) => Number(e.heart_rate) < Number(best.heart_rate) ? e : best)
   }, [cardioHistory])
 
   // ── Calendar heat-map ───────────────────────────────────────────────────────
@@ -279,29 +265,26 @@ export default function ProgressPage() {
       </section>
 
       {/* Cardio metric toggle */}
-      {tab === 'cardio' && (hasPaceData || hasHrData) && (
+      {tab === 'cardio' && hasPaceData && (
         <div className="flex gap-2">
-          {(['pace', 'distance', 'hr'] as const)
-            .filter(m => m !== 'pace' || hasPaceData)
-            .filter(m => m !== 'hr' || hasHrData)
-            .map(m => (
-              <button
-                key={m}
-                onClick={() => setCardioMetric(m)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
-                  cardioMetric === m ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
-                }`}
-              >
-                {m === 'hr' ? 'Heart Rate' : m === 'pace' ? 'Pace' : 'Distance'}
-              </button>
-            ))}
+          {(['pace', 'distance'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setCardioMetric(m)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+                cardioMetric === m ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
+              }`}
+            >
+              {m === 'pace' ? 'Pace' : 'Distance'}
+            </button>
+          ))}
         </div>
       )}
 
       {/* Chart */}
       <section className="flex flex-col gap-3">
         <h3 className="font-headline text-sm font-bold text-on-surface-variant">
-          {tab === 'lifts' ? 'Weight trend' : `${cardioMetric === 'pace' ? 'Pace' : cardioMetric === 'hr' ? 'Heart rate' : 'Distance'} trend`}
+          {tab === 'lifts' ? 'Weight trend' : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
         </h3>
         <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] relative overflow-hidden flex flex-col justify-end">
 
@@ -316,7 +299,7 @@ export default function ProgressPage() {
             <div className="absolute top-6 right-6 flex flex-col items-end">
               <span className="text-3xl font-black font-headline text-[#4bdece] leading-none">{peakCardioValue}</span>
               <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
-                {cardioMetric === 'pace' ? 'best pace' : cardioMetric === 'hr' ? 'best hr bpm' : 'km peak'}
+                {cardioMetric === 'pace' ? 'best pace' : 'km peak'}
               </span>
             </div>
           )}
@@ -433,9 +416,8 @@ export default function ProgressPage() {
                     {s === 'date' ? 'Date' : s === 'weight' ? 'Wt' : 'Vol'}
                   </button>
                 ))
-              : (['date', 'distance', 'pace', 'hr'] as const)
+              : (['date', 'distance', 'pace'] as const)
                   .filter(s => s !== 'pace' || hasPaceData)
-                  .filter(s => s !== 'hr' || hasHrData)
                   .map(s => (
                     <button
                       key={s}
@@ -444,7 +426,7 @@ export default function ProgressPage() {
                         cardioSort === s ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'text-on-surface-variant/40'
                       }`}
                     >
-                      {s === 'date' ? 'Date' : s === 'distance' ? 'Dist' : s === 'pace' ? 'Pace' : 'HR'}
+                      {s === 'date' ? 'Date' : s === 'distance' ? 'Dist' : 'Pace'}
                     </button>
                   ))
             }
@@ -484,9 +466,8 @@ export default function ProgressPage() {
             sortedCardio.length > 0 ? (
               sortedCardio.map((s, i) => {
                 const isFastest = !!(fastestRunEntry && s.date === fastestRunEntry.date && s.pace === fastestRunEntry.pace)
-                const isBestHr = !!(bestHrEntry && !isFastest && s.date === bestHrEntry.date && s.heart_rate === bestHrEntry.heart_rate)
                 return (
-                  <div key={i} className={`bg-surface-container p-5 flex justify-between items-start hover:bg-surface-container-high transition-all cursor-pointer rounded-lg ${(isFastest || isBestHr) ? 'border border-[#4bdece]/30' : ''}`}>
+                  <div key={i} className={`bg-surface-container p-5 flex justify-between items-start hover:bg-surface-container-high transition-all cursor-pointer rounded-lg ${isFastest ? 'border border-[#4bdece]/30' : ''}`}>
                     <div className="flex flex-col gap-1 flex-1 min-w-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -496,15 +477,11 @@ export default function ProgressPage() {
                         {isFastest && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-[#4bdece] text-[#003732] uppercase tracking-wide">Fastest</span>
                         )}
-                        {isBestHr && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-[#4bdece] text-[#003732] uppercase tracking-wide">Best HR</span>
-                        )}
                       </div>
                     </div>
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{s.activity}</p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
-                      {s.heart_rate && <p className="text-sm text-[#4bdece] font-bold">{s.heart_rate} bpm</p>}
                       {s.duration && !s.pace && <p className="font-bold text-on-surface">{s.duration}</p>}
                     </div>
                   </div>
