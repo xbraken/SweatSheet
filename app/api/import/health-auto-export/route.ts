@@ -39,19 +39,20 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
-  // Temporary debug — remove once payload structure is confirmed
-  if (process.env.NODE_ENV !== 'production' || req.headers.get('x-debug') === '1') {
+  // Debug mode
+  if (req.headers.get('x-debug') === '1') {
     return NextResponse.json({ debug: true, keys: Object.keys(body), sample: JSON.stringify(body).slice(0, 500) })
   }
 
-  // Health Auto Export sends { data: [...] } or { workouts: [...] } or just [...]
+  // Health Auto Export: { data: { workouts: [...] } }
   let rawWorkouts: Record<string, unknown>[]
   if (Array.isArray(body)) rawWorkouts = body
   else if (Array.isArray(body.data)) rawWorkouts = body.data
+  else if (body.data && Array.isArray((body.data as Record<string, unknown>).workouts)) rawWorkouts = (body.data as Record<string, unknown>).workouts as Record<string, unknown>[]
   else if (Array.isArray(body.workouts)) rawWorkouts = body.workouts
   else rawWorkouts = []
 
-  if (rawWorkouts.length === 0) return NextResponse.json({ error: 'No workouts provided', bodyKeys: Object.keys(body) }, { status: 400 })
+  if (rawWorkouts.length === 0) return NextResponse.json({ error: 'No workouts provided' }, { status: 400 })
 
   let imported = 0
   let duplicates = 0
