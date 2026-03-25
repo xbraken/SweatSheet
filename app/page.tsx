@@ -1,11 +1,13 @@
 import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
 import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import LogoutButton from '@/components/LogoutButton'
 
-async function getTodayData() {
+async function getTodayData(userId: number) {
   const today = new Date().toISOString().split('T')[0]
 
-  // Get this week's session dates (Mon-Sun of current week)
   const now = new Date()
   const dayOfWeek = (now.getDay() + 6) % 7 // Mon=0
   const weekStart = new Date(now)
@@ -23,12 +25,12 @@ async function getTodayData() {
         (SELECT COUNT(*) FROM blocks b WHERE b.session_id = s.id AND b.type = 'lift') as lift_blocks,
         (SELECT COUNT(*) FROM blocks b WHERE b.session_id = s.id AND b.type != 'lift') as cardio_blocks,
         (SELECT COUNT(*) FROM sets st JOIN blocks b ON st.block_id = b.id WHERE b.session_id = s.id) as total_sets
-        FROM sessions s WHERE s.date = ? LIMIT 1`,
-      args: [today],
+        FROM sessions s WHERE s.date = ? AND s.user_id = ? LIMIT 1`,
+      args: [today, userId],
     }),
     db.execute({
-      sql: `SELECT DISTINCT date FROM sessions WHERE date >= ? AND date <= ? ORDER BY date`,
-      args: [weekDates[0], weekDates[6]],
+      sql: `SELECT DISTINCT date FROM sessions WHERE date >= ? AND date <= ? AND user_id = ? ORDER BY date`,
+      args: [weekDates[0], weekDates[6], userId],
     }),
   ])
 
@@ -40,13 +42,16 @@ async function getTodayData() {
 }
 
 export default async function TodayPage() {
+  const session = await getSession()
+  if (!session) redirect('/auth')
+
   const now = new Date()
   const dayName = now.toLocaleDateString('en-GB', { weekday: 'long' })
   const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   const hour = now.getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  const { today, completedDates, weekDates } = await getTodayData()
+  const { today, completedDates, weekDates } = await getTodayData(session.userId)
 
   const week = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const todayIdx = (now.getDay() + 6) % 7
@@ -54,9 +59,14 @@ export default async function TodayPage() {
   return (
     <main className="max-w-[390px] mx-auto min-h-screen pb-32 px-6 pt-12">
       {/* Header */}
-      <header className="mb-10">
-        <p className="font-label text-[#a48b83] text-sm tracking-wide mb-1">{dayName}, {dateStr}</p>
-        <h1 className="font-headline text-3xl font-black tracking-tight text-[#e5e2e1]">{greeting}, Edmond.</h1>
+      <header className="mb-10 flex justify-between items-start">
+        <div>
+          <p className="font-label text-[#a48b83] text-sm tracking-wide mb-1">{dayName}, {dateStr}</p>
+          <h1 className="font-headline text-3xl font-black tracking-tight text-[#e5e2e1]">
+            {greeting}, {session.username}.
+          </h1>
+        </div>
+        <LogoutButton />
       </header>
 
       {/* Today's session or CTA */}

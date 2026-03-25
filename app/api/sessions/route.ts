@@ -1,22 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 
 await initDb()
 
 export async function GET() {
-  const result = await db.execute(`
-    SELECT s.id, s.date, s.created_at,
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const result = await db.execute({
+    sql: `SELECT s.id, s.date, s.created_at,
       COUNT(DISTINCT b.id) as block_count
-    FROM sessions s
-    LEFT JOIN blocks b ON b.session_id = s.id
-    GROUP BY s.id
-    ORDER BY s.created_at DESC
-    LIMIT 20
-  `)
+      FROM sessions s
+      LEFT JOIN blocks b ON b.session_id = s.id
+      WHERE s.user_id = ?
+      GROUP BY s.id
+      ORDER BY s.created_at DESC
+      LIMIT 20`,
+    args: [session.userId],
+  })
   return NextResponse.json(result.rows)
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const body = await req.json()
   const { blocks } = body
 
@@ -29,8 +38,8 @@ export async function POST(req: NextRequest) {
   try {
     // Create session
     const sessionRes = await db.execute({
-      sql: 'INSERT INTO sessions (date) VALUES (?) RETURNING id',
-      args: [date],
+      sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
+      args: [session.userId, date],
     })
     const sessionId = sessionRes.rows[0].id as number
 
