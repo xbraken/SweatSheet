@@ -487,6 +487,7 @@ export default function ImportPage() {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([])
   const [activeSources, setActiveSources] = useState<Set<string>>(new Set())
   const [imported, setImported] = useState(0)
+  const [duplicates, setDuplicates] = useState(0)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -616,6 +617,7 @@ export default function ImportPage() {
         })
         const data = await res.json()
         done += data.imported ?? chunk.length
+        setDuplicates(prev => prev + (data.duplicates ?? 0))
       } catch {
         done += chunk.length
       }
@@ -846,6 +848,9 @@ export default function ImportPage() {
             <p className="font-headline font-black text-3xl text-primary-container">{imported}</p>
             <p className="font-headline font-bold text-xl mt-1">workout{imported !== 1 ? 's' : ''} imported</p>
             <p className="text-sm text-on-surface-variant mt-2">from Apple Health</p>
+            {duplicates > 0 && (
+              <p className="text-sm text-on-surface-variant/60 mt-1">{duplicates} already existed, skipped</p>
+            )}
           </div>
           <div className="flex flex-col gap-3 w-full mt-4">
             <Link

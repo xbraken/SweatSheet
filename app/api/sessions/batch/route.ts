@@ -31,8 +31,21 @@ export async function POST(req: NextRequest) {
   }
 
   let count = 0
+  let duplicates = 0
   for (const w of workouts) {
     try {
+      // Skip if a workout with the same start time already exists for this user
+      if (w.startedAt) {
+        const dup = await db.execute({
+          sql: `SELECT c.id FROM cardio c
+                JOIN blocks b ON b.id = c.block_id
+                JOIN sessions s ON s.id = b.session_id
+                WHERE s.user_id = ? AND c.started_at = ? LIMIT 1`,
+          args: [session.userId, w.startedAt],
+        })
+        if (dup.rows.length > 0) { duplicates++; continue }
+      }
+
       const sessionRes = await db.execute({
         sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
         args: [session.userId, w.date],
@@ -87,5 +100,5 @@ export async function POST(req: NextRequest) {
     } catch { /* skip failed rows, continue */ }
   }
 
-  return NextResponse.json({ imported: count, total: workouts.length })
+  return NextResponse.json({ imported: count, duplicates, total: workouts.length })
 }
