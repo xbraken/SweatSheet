@@ -10,6 +10,15 @@ type CardioBlock = { id: number; type: 'cardio'; activity: string; distance: str
 type Block = LiftBlock | CardioBlock
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
 
+const REST_OPTIONS = [
+  { label: 'Off', value: 0 },
+  { label: '30s', value: 30 },
+  { label: '1m', value: 60 },
+  { label: '90s', value: 90 },
+  { label: '2m', value: 120 },
+  { label: '3m', value: 180 },
+]
+
 function calcPace(distStr: string, timeStr: string): string {
   const dist = parseFloat(distStr)
   if (!dist || !timeStr) return ''
@@ -25,7 +34,7 @@ function calcPace(distStr: string, timeStr: string): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// ── Rest Timer ────────────────────────────────────────────────────────────────
+// ── Rest Timer overlay ────────────────────────────────────────────────────────
 function RestTimer({ seconds, onDone }: { seconds: number; onDone: () => void }) {
   const [remaining, setRemaining] = useState(seconds)
   useEffect(() => {
@@ -78,6 +87,60 @@ function PrToast({ prs, onDone }: { prs: { exercise: string; weight: number }[];
         </div>
       ))}
     </div>
+  )
+}
+
+// ── Add Block Sheet ───────────────────────────────────────────────────────────
+function AddBlockSheet({ onAdd, onClose }: {
+  onAdd: (type: 'lift' | 'run' | 'cycle') => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10 shadow-2xl">
+        <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
+        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Add to session</p>
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={() => { onAdd('lift'); onClose() }}
+            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-[#ff9066]/10 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-[#ff9066] text-2xl">fitness_center</span>
+            </div>
+            <div>
+              <p className="font-headline font-bold text-[#e5e2e1]">Lift exercise</p>
+              <p className="text-xs text-[#a48b83] mt-0.5">Track sets, weight and reps</p>
+            </div>
+          </button>
+          <button
+            onClick={() => { onAdd('run'); onClose() }}
+            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-[#4bdece]/10 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-[#4bdece] text-2xl">directions_run</span>
+            </div>
+            <div>
+              <p className="font-headline font-bold text-[#e5e2e1]">Run</p>
+              <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
+            </div>
+          </button>
+          <button
+            onClick={() => { onAdd('cycle'); onClose() }}
+            className="flex items-center gap-4 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-[#4bdece]/10 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-[#4bdece] text-2xl">directions_bike</span>
+            </div>
+            <div>
+              <p className="font-headline font-bold text-[#e5e2e1]">Cycle</p>
+              <p className="text-xs text-[#a48b83] mt-0.5">Distance, time and auto-pace</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -140,11 +203,23 @@ export default function LogPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [hints, setHints] = useState<ExerciseHint[]>([])
-  const [restTimer, setRestTimer] = useState<number | null>(null) // seconds remaining trigger
-  const [restDuration] = useState(90)
+  const [restTimer, setRestTimer] = useState<number | null>(null)
+  const [restDuration, setRestDuration] = useState(90)
+  const [showAddSheet, setShowAddSheet] = useState(false)
   const [prs, setPrs] = useState<{ exercise: string; weight: number }[]>([])
   const [showPrs, setShowPrs] = useState(false)
   const [loadingLast, setLoadingLast] = useState(false)
+
+  // Load rest duration from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('ss_rest_duration')
+    if (saved) setRestDuration(parseInt(saved))
+  }, [])
+
+  const setAndSaveRestDuration = (v: number) => {
+    setRestDuration(v)
+    localStorage.setItem('ss_rest_duration', String(v))
+  }
 
   // Fetch exercise hints
   useEffect(() => {
@@ -164,7 +239,7 @@ export default function LogPage() {
       if (b.type !== 'lift' || b.id !== blockId) return b
       const updated = b.sets.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
-      if (justDone) setRestTimer(Date.now()) // trigger rest timer
+      if (justDone && restDuration > 0) setRestTimer(Date.now())
       return { ...b, sets: updated }
     }))
   }
@@ -189,15 +264,19 @@ export default function LogPage() {
     }))
   }, [])
 
-  const addLiftBlock = () => {
-    setBlocks(prev => [...prev, {
-      id: Date.now(), type: 'lift', exercise: '',
-      sets: [{ id: Date.now() + 1, weight: 60, reps: 8, done: false }],
-    }])
-  }
-
-  const addCardioBlock = (activity: string) => {
-    setBlocks(prev => [...prev, { id: Date.now(), type: 'cardio', activity, distance: '', time: '', pace: '' }])
+  const handleAddBlock = (type: 'lift' | 'run' | 'cycle') => {
+    if (type === 'lift') {
+      setBlocks(prev => [...prev, {
+        id: Date.now(), type: 'lift', exercise: '',
+        sets: [{ id: Date.now() + 1, weight: 60, reps: 8, done: false }],
+      }])
+    } else {
+      setBlocks(prev => [...prev, {
+        id: Date.now(), type: 'cardio',
+        activity: type === 'run' ? 'Outdoor run' : 'Cycling',
+        distance: '', time: '', pace: '',
+      }])
+    }
   }
 
   const repeatLast = async () => {
@@ -249,26 +328,41 @@ export default function LogPage() {
 
   return (
     <main className="max-w-[390px] mx-auto min-h-screen pb-32 flex flex-col">
-      {/* Rest timer overlay */}
-      {restTimer !== null && (
-        <RestTimer seconds={restDuration} onDone={() => setRestTimer(null)} />
-      )}
-
-      {/* PR toast */}
-      {showPrs && prs.length > 0 && (
-        <PrToast prs={prs} onDone={() => setShowPrs(false)} />
-      )}
+      {restTimer !== null && <RestTimer seconds={restDuration} onDone={() => setRestTimer(null)} />}
+      {showPrs && prs.length > 0 && <PrToast prs={prs} onDone={() => setShowPrs(false)} />}
+      {showAddSheet && <AddBlockSheet onAdd={handleAddBlock} onClose={() => setShowAddSheet(false)} />}
 
       {/* Top bar */}
-      <div className="sticky top-0 z-40 px-6 py-5 flex justify-between items-center bg-[#0e0e0e]/80 backdrop-blur-md border-b border-[#201f1f]">
-        <span className="font-label text-[#dcc1b8] text-sm uppercase tracking-widest">Session</span>
-        <button
-          onClick={finishSession}
-          disabled={saving || blocks.length === 0}
-          className="bg-gradient-to-br from-primary to-primary-container text-[#752805] px-6 py-2.5 rounded-xl font-body font-bold text-sm shadow-xl active:scale-95 transition-all disabled:opacity-30"
-        >
-          {saving ? 'Saving…' : 'Finish'}
-        </button>
+      <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
+        <div className="flex justify-between items-center">
+          <span className="font-label text-[#dcc1b8] text-sm uppercase tracking-widest">Session</span>
+          <button
+            onClick={finishSession}
+            disabled={saving || blocks.length === 0}
+            className="bg-gradient-to-br from-primary to-primary-container text-[#752805] px-6 py-2.5 rounded-xl font-body font-bold text-sm shadow-xl active:scale-95 transition-all disabled:opacity-30"
+          >
+            {saving ? 'Saving…' : 'Finish'}
+          </button>
+        </div>
+        {/* Rest duration picker */}
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
+          <div className="flex gap-1">
+            {REST_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setAndSaveRestDuration(opt.value)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
+                  restDuration === opt.value
+                    ? 'bg-[#ff9066]/20 text-[#ff9066]'
+                    : 'text-[#a48b83]/60 hover:text-[#a48b83]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {saveError && (
@@ -310,41 +404,41 @@ export default function LogPage() {
                   }
                 }))}
               />
-              <button onClick={() => setBlocks(prev => prev.filter(b => b.id !== block.id))}>
+              <button onClick={() => setBlocks(prev => prev.filter(b => b.id !== block.id))} className="ml-2 flex-shrink-0">
                 <span className="material-symbols-outlined text-[#a48b83] text-lg">close</span>
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {block.sets.map((set, i) => {
                 const isActive = !set.done && block.sets.findIndex(s => !s.done) === i
 
                 if (set.done) return (
-                  <div key={set.id} className="flex items-center gap-3 opacity-40">
-                    <span className="w-6 font-headline text-base font-bold text-[#dcc1b8]">{i + 1}</span>
+                  <div key={set.id} className="flex items-center gap-3 opacity-40 px-1">
+                    <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
                     <div className="flex-1 flex gap-6">
                       <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
                       <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
                     </div>
-                    <button onClick={() => toggleSet(block.id, set.id)} className="w-7 h-7 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-[#003732] text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+                    <button onClick={() => toggleSet(block.id, set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
                     </button>
                   </div>
                 )
 
                 if (isActive) return (
                   <div key={set.id} className="bg-[#2a2a2a] rounded-2xl p-4 border border-[#ff9066]/20">
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="font-headline text-xl font-black text-[#ff9066] w-6">{i + 1}</span>
-                      <div className="flex-1 flex gap-4">
+                    <div className="flex items-center gap-1 mb-4">
+                      <span className="font-headline text-lg font-black text-[#ff9066] w-6">{i + 1}</span>
+                      <div className="flex-1 flex gap-3">
                         <div className="flex-1">
                           <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight kg</p>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => updateSet(block.id, set.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center">
+                            <button onClick={() => updateSet(block.id, set.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                               <span className="material-symbols-outlined text-sm">remove</span>
                             </button>
                             <span className="font-headline text-2xl font-black w-12 text-center">{set.weight}</span>
-                            <button onClick={() => updateSet(block.id, set.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center">
+                            <button onClick={() => updateSet(block.id, set.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                               <span className="material-symbols-outlined text-sm">add</span>
                             </button>
                           </div>
@@ -352,37 +446,42 @@ export default function LogPage() {
                         <div className="flex-1">
                           <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => updateSet(block.id, set.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center">
+                            <button onClick={() => updateSet(block.id, set.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                               <span className="material-symbols-outlined text-sm">remove</span>
                             </button>
                             <span className="font-headline text-2xl font-black w-10 text-center">{set.reps}</span>
-                            <button onClick={() => updateSet(block.id, set.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center">
+                            <button onClick={() => updateSet(block.id, set.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                               <span className="material-symbols-outlined text-sm">add</span>
                             </button>
                           </div>
                         </div>
                       </div>
-                      <button onClick={() => toggleSet(block.id, set.id)} className="w-9 h-9 rounded-full border-2 border-[#ff9066]/40 flex items-center justify-center flex-shrink-0">
-                        <span className="material-symbols-outlined text-[#ff9066]">check</span>
-                      </button>
                     </div>
+                    {/* Full-width log set button */}
+                    <button
+                      onClick={() => toggleSet(block.id, set.id)}
+                      className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                      Log set
+                    </button>
                   </div>
                 )
 
                 return (
-                  <div key={set.id} className="flex items-center gap-3 opacity-30 py-1">
-                    <span className="w-6 font-headline text-base font-bold text-[#dcc1b8]">{i + 1}</span>
+                  <div key={set.id} className="flex items-center gap-3 opacity-25 px-1 py-0.5">
+                    <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
                     <div className="flex-1 flex gap-6">
                       <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
                       <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
                     </div>
-                    <div className="w-7 h-7 rounded-full border border-[#56423c]/50 flex-shrink-0" />
+                    <div className="w-6 h-6 rounded-full border border-[#56423c]/50 flex-shrink-0" />
                   </div>
                 )
               })}
             </div>
 
-            <button onClick={() => addSet(block.id)} className="w-full mt-5 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors">
+            <button onClick={() => addSet(block.id)} className="w-full mt-4 py-3 rounded-xl bg-[#2a2a2a] font-label text-[11px] font-bold uppercase tracking-widest text-[#dcc1b8] hover:text-[#ff9066] transition-colors">
               + Add set
             </button>
           </section>
@@ -450,28 +549,14 @@ export default function LogPage() {
           </div>
         )}
 
-        {/* Add block buttons */}
-        <div className="grid grid-cols-1 gap-3 pt-2 pb-8">
-          <button onClick={addLiftBlock} className="flex items-center justify-between p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all">
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
-              <span className="font-headline font-bold">Add exercise</span>
-            </div>
-            <span className="material-symbols-outlined text-[#a48b83]">arrow_forward</span>
-          </button>
-          <button onClick={() => addCardioBlock('Outdoor run')} className="flex items-center justify-between p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all">
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-[#4bdece]">directions_run</span>
-              <span className="font-headline font-bold">Add run</span>
-            </div>
-            <span className="material-symbols-outlined text-[#a48b83]">arrow_forward</span>
-          </button>
-          <button onClick={() => addCardioBlock('Cycling')} className="flex items-center justify-between p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all">
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-[#4bdece]">directions_bike</span>
-              <span className="font-headline font-bold">Add cycle</span>
-            </div>
-            <span className="material-symbols-outlined text-[#a48b83]">arrow_forward</span>
+        {/* Single add button */}
+        <div className="pb-8">
+          <button
+            onClick={() => setShowAddSheet(true)}
+            className="w-full flex items-center justify-center gap-3 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40 hover:bg-[#201f1f]/80"
+          >
+            <span className="material-symbols-outlined text-[#ff9066] text-2xl">add_circle</span>
+            <span className="font-headline font-bold text-[#dcc1b8]">Add block</span>
           </button>
         </div>
       </div>
