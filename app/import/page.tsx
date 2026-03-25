@@ -276,13 +276,23 @@ export default function ImportPage() {
     setImported(0)
     setPhase('importing')
 
-    const res = await fetch('/api/sessions/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workouts: toImport }),
-    })
-    const data = await res.json()
-    setImported(data.imported ?? toImport.length)
+    const CHUNK = 50
+    let done = 0
+    for (let i = 0; i < toImport.length; i += CHUNK) {
+      const chunk = toImport.slice(i, i + CHUNK)
+      try {
+        const res = await fetch('/api/sessions/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workouts: chunk }),
+        })
+        const data = await res.json()
+        done += data.imported ?? chunk.length
+      } catch {
+        done += chunk.length
+      }
+      setImported(done)
+    }
 
     setPhase('done')
   }
