@@ -343,18 +343,7 @@ async function streamParseAppleHealth(
   // Pass 1: collect workouts (progress 0–60%)
   const { workouts: rawWorkouts, skippedTypes } = await collectWorkouts(file, pct => onProgress(pct * 0.6))
 
-  // Remove sub-interval workouts contained within a longer parent workout.
-  const withTs = rawWorkouts.map(w => ({
-    w, start: parseAppleDate(w.startedAt), end: parseAppleDate(w.endedAt),
-  }))
-  const workouts = withTs.filter(({ w, start, end }) => {
-    const dur = end - start
-    return !withTs.some(p => {
-      if (p.w === w) return false
-      const pDur = p.end - p.start
-      return pDur > dur * 1.5 && start >= p.start && end <= p.end
-    })
-  }).map(({ w }) => w)
+  const workouts = rawWorkouts
 
   // Pass 2: collect HR samples for each workout (progress 60–100%)
   const windows = workouts
