@@ -26,9 +26,9 @@ type WorkoutRow = ParsedWorkout & {
 }
 
 const SUPPORTED: Record<string, string> = {
-  HKWorkoutActivityTypeRunning: 'Outdoor run',
-  HKWorkoutActivityTypeHighIntensityIntervalTraining: 'Indoor run',
-  HKWorkoutActivityTypeOther: 'Indoor run', // custom workout presets on Apple Watch
+  HKWorkoutActivityTypeRunning: 'Run',
+  HKWorkoutActivityTypeHighIntensityIntervalTraining: 'Run',
+  HKWorkoutActivityTypeOther: 'Run', // custom workout presets on Apple Watch
   HKWorkoutActivityTypeCycling: 'Cycling',
   HKWorkoutActivityTypeWalking: 'Walking',
 }
@@ -111,9 +111,7 @@ function processWorkoutBlock(xml: string): ParsedWorkout | null {
   const isInterval = type === 'HKWorkoutActivityTypeRunning' && (
     xml.includes('<WorkoutActivity ') || xml.includes('HKWorkoutEventTypeLap')
   )
-  const activity = isInterval
-    ? 'Interval run'
-    : SUPPORTED[type] ?? (isIndoor ? 'Indoor run' : 'Outdoor run')
+  const activity = isInterval ? 'Interval run' : SUPPORTED[type] ?? 'Run'
 
   // Calories
   let caloriesRaw = parseFloat(attr(xml, 'totalEnergyBurned')) || 0
@@ -386,24 +384,24 @@ async function streamParseAppleHealth(
 // }
 
 const SHORTCUT_ACTIVITY: Record<string, string> = {
-  running: 'Outdoor run',
-  'outdoor run': 'Outdoor run',
-  'indoor run': 'Indoor run',
+  running: 'Run',
+  'outdoor run': 'Run',
+  'indoor run': 'Run',
   'interval run': 'Interval run',
   'interval': 'Interval run',
   cycling: 'Cycling',
   'outdoor cycling': 'Cycling',
   'indoor cycling': 'Cycling',
   walking: 'Walking',
-  hiit: 'Indoor run',
-  'high intensity interval training': 'Indoor run',
-  hkworkoutactivitytyperunning: 'Outdoor run',
+  hiit: 'Interval run',
+  'high intensity interval training': 'Interval run',
+  hkworkoutactivitytyperunning: 'Run',
   hkworkoutactivitytypecycling: 'Cycling',
   hkworkoutactivitytypewalking: 'Walking',
-  hkworkoutactivitytypehighintensityintervaltraining: 'Indoor run',
-  hkworkoutactivitytypeother: 'Indoor run',
-  other: 'Indoor run',
-  custom: 'Indoor run',
+  hkworkoutactivitytypehighintensityintervaltraining: 'Interval run',
+  hkworkoutactivitytypeother: 'Run',
+  other: 'Run',
+  custom: 'Run',
 }
 
 // Accept many possible field-name spellings so the Shortcut is flexible

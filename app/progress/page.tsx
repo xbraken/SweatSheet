@@ -885,7 +885,7 @@ export default function ProgressPage() {
         const savedActivity = localStorage.getItem('ss_prog_cardio_activity')
         const restoredActivity = savedActivity && activities.includes(savedActivity)
           ? savedActivity
-          : (activities.find(a => a === 'Outdoor run') ?? activities[0] ?? '')
+          : (activities.find(a => a === 'Run') ?? activities.find(a => a === 'Outdoor run') ?? activities[0] ?? '')
         setCardioActivity(restoredActivity)
 
         // Restore saved exercise if still valid, else pick first
