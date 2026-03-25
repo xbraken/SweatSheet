@@ -8,6 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@google/generative-ai": "^0.24.1",
     "@google/stitch-sdk": "^0.0.3",
     "@libsql/client": "^0.17.2",
     "better-sqlite3": "^11.0.0",
