@@ -436,9 +436,11 @@ function RunDetailSheet({
                       style={{ touchAction: 'none' }}
                       onPointerMove={e => {
                         const rect = e.currentTarget.getBoundingClientRect()
-                        setPaceHoveredIdx(Math.max(0, Math.min(PACE_N - 1, Math.round(((e.clientX - rect.left) / rect.width) * (PACE_N - 1)))))
+                        const idx = Math.max(0, Math.min(PACE_N - 1, Math.round(((e.clientX - rect.left) / rect.width) * (PACE_N - 1))))
+                        setPaceHoveredIdx(idx)
+                        setChartHoveredIdx(Math.round((idx / (PACE_N - 1)) * (mainValues.length - 1)))
                       }}
-                      onPointerLeave={() => setPaceHoveredIdx(null)}
+                      onPointerLeave={() => { setPaceHoveredIdx(null); setChartHoveredIdx(null) }}
                     >
                       <defs>
                         <linearGradient id="paceGrad" x1="0" y1="0" x2="0" y2="1">
@@ -617,8 +619,13 @@ function RunDetailSheet({
                       viewBox="0 0 300 102"
                       preserveAspectRatio="none"
                       style={{ touchAction: 'none' }}
-                      onPointerMove={e => handlePointer(e, mainValues.length)}
-                      onPointerLeave={() => setChartHoveredIdx(null)}
+                      onPointerMove={e => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const idx = Math.max(0, Math.min(mainValues.length - 1, Math.round(((e.clientX - rect.left) / rect.width) * (mainValues.length - 1))))
+                        setChartHoveredIdx(idx)
+                        if (hasPace) setPaceHoveredIdx(Math.round((idx / (mainValues.length - 1)) * (PACE_N - 1)))
+                      }}
+                      onPointerLeave={() => { setChartHoveredIdx(null); setPaceHoveredIdx(null) }}
                     >
                       <defs>
                         <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
