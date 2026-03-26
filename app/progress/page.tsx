@@ -53,6 +53,7 @@ type CalendarDay = {
   date: string
   max_weight: number | null
   total_distance: number | null
+  cardio_count: number
 }
 
 function formatDate(dateStr: string) {
@@ -1172,8 +1173,11 @@ export default function ProgressPage() {
       if (!day.max_weight) return 0
       return Math.max(0.2, Number(day.max_weight) / maxCalWeight)
     }
-    if (!day.total_distance) return 0
-    return Math.max(0.2, Number(day.total_distance) / maxCalDist)
+    // cardio tab: use distance if available, else show min dot for any cardio activity
+    if (day.total_distance && Number(day.total_distance) > 0)
+      return Math.max(0.2, Number(day.total_distance) / maxCalDist)
+    if (Number(day.cardio_count) > 0) return 0.2
+    return 0
   }
 
   const calColor = tab === 'lifts' ? '#ff9066' : '#4bdece'

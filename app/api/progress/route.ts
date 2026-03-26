@@ -55,15 +55,23 @@ export async function GET(req: NextRequest) {
       args: [userId],
     })
 
-    // Calendar data — all time, aggregated per day
+    // Calendar data — per day, using subqueries to avoid cross-product between sets and cardio
     const calendarRes = await db.execute({
       sql: `SELECT s.date,
-              MAX(st.weight) as max_weight,
-              SUM(c.distance) as total_distance
+              MAX(lft.max_weight) as max_weight,
+              SUM(crd.total_distance) as total_distance,
+              COALESCE(SUM(crd.cardio_count), 0) as cardio_count
             FROM sessions s
-            LEFT JOIN blocks b ON b.session_id = s.id
-            LEFT JOIN sets st ON st.block_id = b.id
-            LEFT JOIN cardio c ON c.block_id = b.id
+            LEFT JOIN (
+              SELECT b.session_id, MAX(st.weight) as max_weight
+              FROM sets st JOIN blocks b ON st.block_id = b.id AND b.type = 'lift'
+              GROUP BY b.session_id
+            ) lft ON lft.session_id = s.id
+            LEFT JOIN (
+              SELECT b.session_id, SUM(c.distance) as total_distance, COUNT(*) as cardio_count
+              FROM cardio c JOIN blocks b ON c.block_id = b.id
+              GROUP BY b.session_id
+            ) crd ON crd.session_id = s.id
             WHERE s.user_id = ?
             GROUP BY s.date`,
       args: [userId],
