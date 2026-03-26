@@ -2,6 +2,20 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import BottomNav from '@/components/BottomNav'
 
+function ActivityLabel({ activity, className }: { activity: string; className?: string }) {
+  const base = activity.toLowerCase()
+  const isInterval = base === 'interval run'
+  const isIndoor = base === 'indoor run'
+  const label = base.includes('run') ? 'Run' : activity
+  return (
+    <span className={`inline-flex items-center gap-1 ${className ?? ''}`}>
+      {label}
+      {isInterval && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
+      {isIndoor && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#a48b83]/20 text-[#a48b83] uppercase tracking-wide leading-none">INDOOR</span>}
+    </span>
+  )
+}
+
 type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number }
 type CardioEntry = {
   cardio_id: number
@@ -312,7 +326,7 @@ function RunDetailSheet({
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-[#201f1f] flex items-start justify-between shrink-0">
           <div>
-            <p className="font-label text-[10px] uppercase tracking-widest text-[#4bdece] mb-1">{detail.activity}</p>
+            <p className="font-label text-[10px] uppercase tracking-widest text-[#4bdece] mb-1"><ActivityLabel activity={detail.activity} /></p>
             <h2 className="font-headline text-xl font-black text-[#e5e2e1]">{formatDate(detail.date)}</h2>
             <div className="flex gap-3 mt-2 flex-wrap">
               {distLabel && <span className="text-sm font-bold text-[#e5e2e1]">{distLabel}</span>}
@@ -827,7 +841,7 @@ function RunDetailSheet({
                       <div>
                         <p className="text-[10px] text-[#a48b83] font-label uppercase">{formatDate(r.date)}</p>
                         <p className="font-headline font-bold text-sm text-[#e5e2e1]">{r.distance ? `${r.distance} km` : r.activity}</p>
-                        <p className="text-[10px] text-[#a48b83]">{r.activity}</p>
+                        <p className="text-[10px] text-[#a48b83]"><ActivityLabel activity={r.activity} /></p>
                       </div>
                       <div className="text-right">
                         {r.pace && <p className="text-sm font-bold text-[#4bdece]">{r.pace} /km</p>}
@@ -1223,7 +1237,7 @@ export default function ProgressPage() {
             >
               <div>
                 <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#4bdece] mb-1">Activity</p>
-                <h2 className="font-headline text-xl font-bold">{cardioActivity}</h2>
+                <h2 className="font-headline text-xl font-bold"><ActivityLabel activity={cardioActivity} /></h2>
               </div>
               <span className="material-symbols-outlined text-[#4bdece]">expand_more</span>
             </div>
@@ -1233,9 +1247,9 @@ export default function ProgressPage() {
                   <button
                     key={a}
                     onClick={() => { setCardioActivity(a); setCardioOpen(false) }}
-                    className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors"
+                    className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors flex items-center gap-2"
                   >
-                    {a}
+                    <ActivityLabel activity={a} />
                   </button>
                 ))}
               </div>
@@ -1515,7 +1529,7 @@ export default function ProgressPage() {
                 <div key={i} className="flex justify-between items-center">
                   <div>
                     <p className="font-headline font-bold text-on-surface">{w.distance ? `${w.distance} km` : w.activity}</p>
-                    <p className="text-xs text-on-surface-variant">{w.activity}</p>
+                    <p className="text-xs text-on-surface-variant"><ActivityLabel activity={w.activity} /></p>
                   </div>
                   <div className="text-right">
                     {w.pace && <p className="text-sm font-bold text-on-surface">{w.pace} /km</p>}
@@ -1674,7 +1688,7 @@ export default function ProgressPage() {
                     </div>
                     </div>
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
-                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{s.activity}</p>
+                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} /></p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
                       {s.heart_rate && <p className="text-xs text-[#ff9066]">♥ {s.heart_rate} avg</p>}
