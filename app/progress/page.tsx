@@ -48,6 +48,7 @@ type RunDetail = {
   heart_rate: number | null
   hr_min: number | null
   hr_max: number | null
+  started_at: string | null
   hrSamples: HrSample[]
   distanceSamples: DistanceSample[]
 }
@@ -365,7 +366,16 @@ function RunDetailSheet({
         <div className="px-5 pt-5 pb-4 border-b border-[#201f1f] flex items-start justify-between shrink-0">
           <div>
             <p className="font-label text-[10px] uppercase tracking-widest text-[#4bdece] mb-1"><ActivityLabel activity={detail.activity} /></p>
-            <h2 className="font-headline text-xl font-black text-[#e5e2e1]">{formatDate(detail.date)}</h2>
+            <div className="flex items-baseline gap-2">
+              <h2 className="font-headline text-xl font-black text-[#e5e2e1]">{formatDate(detail.date)}</h2>
+              {detail.started_at && (() => {
+                const iso = detail.started_at.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T').replace(/ ?Z$/, 'Z').replace(/ ([+-])/, '$1')
+                const hasOffset = iso.endsWith('Z') || /[+-]\d{2}/.test(iso.slice(10))
+                const d = new Date(hasOffset ? iso : iso + 'Z')
+                if (isNaN(d.getTime())) return null
+                return <span className="text-sm font-mono text-[#a48b83]">{d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+              })()}
+            </div>
             <div className="flex gap-3 mt-2 flex-wrap">
               {distLabel && <span className="text-sm font-bold text-[#e5e2e1]">{distLabel}</span>}
               {durationLabel && <span className="text-sm text-[#a48b83]">{durationLabel}</span>}

@@ -14,7 +14,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const runRes = await db.execute({
     sql: `SELECT c.id as cardio_id, c.activity, c.distance, c.duration, c.pace,
-                 c.calories, c.heart_rate, c.hr_min, c.hr_max, s.date
+                 c.calories, c.heart_rate, c.hr_min, c.hr_max, s.date,
+                 COALESCE(c.started_at, s.created_at) as started_at
           FROM cardio c
           JOIN blocks b ON c.block_id = b.id
           JOIN sessions s ON b.session_id = s.id
