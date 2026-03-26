@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
           const set = block.sets[j]
           if (!set.done) continue // only save completed sets
           await db.execute({
-            sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position) VALUES (?, ?, ?, ?, ?)',
+            sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))',
             args: [blockId, block.exercise, set.weight, set.reps, j],
           })
         }

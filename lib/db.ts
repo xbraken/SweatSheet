@@ -87,6 +87,10 @@ export async function initDb() {
     await db.execute(`ALTER TABLE users ADD COLUMN api_key TEXT`)
   } catch { /* exists */ }
 
+  try {
+    await db.execute(`ALTER TABLE sets ADD COLUMN logged_at TEXT`)
+  } catch { /* exists */ }
+
   // HR samples over time (one row per ~5s reading during a workout)
   await db.execute(`CREATE TABLE IF NOT EXISTS cardio_hr_samples (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 
 function baseActivity(activity: string) {
@@ -880,6 +881,7 @@ function RunDetailSheet({
 }
 
 export default function ProgressPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<'lifts' | 'cardio'>(() =>
     (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_tab') as 'lifts' | 'cardio') || 'lifts'
   )
@@ -1523,7 +1525,7 @@ export default function ProgressPage() {
               return (
                 <button
                   key={date}
-                  onClick={() => setSelectedCalDate(d => d === date ? null : date)}
+                  onClick={() => hasWorkout ? router.push(`/sessions/${date}`) : setSelectedCalDate(d => d === date ? null : date)}
                   className="aspect-square rounded-md transition-all flex items-center justify-center"
                   style={{
                     backgroundColor: hasWorkout

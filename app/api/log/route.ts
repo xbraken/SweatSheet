@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       for (let j = 0; j < doneSets.length; j++) {
         const s = doneSets[j]
         await db.execute({
-          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position) VALUES (?, ?, ?, ?, ?)',
+          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))',
           args: [blockId, exercise, s.weight, s.reps, j],
         })
       }
