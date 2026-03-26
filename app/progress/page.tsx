@@ -1195,51 +1195,12 @@ export default function ProgressPage() {
     return calendarMap.get(selectedCalDate) ?? null
   }, [selectedCalDate, calendarMap])
 
-  // ── Navigation calendar (Apple-style) ────────────────────────────────────────
-  const [calNavOpen, setCalNavOpen] = useState(false)
-  const [calNavOffset, setCalNavOffset] = useState(0)
-
-  const calNavDate = useMemo(() => {
-    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + calNavOffset); return d
-  }, [calNavOffset])
-
-  const calNavGrid = useMemo(() => {
-    const year = calNavDate.getFullYear()
-    const month = calNavDate.getMonth()
-    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().split('T')[0]
-    const cells: Array<{ date: string | null; isToday: boolean; isFuture: boolean }> = []
-    for (let i = 0; i < firstDow; i++) cells.push({ date: null, isToday: false, isFuture: false })
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dt = new Date(year, month, d)
-      const str = dt.toISOString().split('T')[0]
-      cells.push({ date: str, isToday: str === todayStr, isFuture: dt > today })
-    }
-    while (cells.length % 7 !== 0) cells.push({ date: null, isToday: false, isFuture: false })
-    return cells
-  }, [calNavDate])
-
-  const workoutDates = useMemo(() => {
-    const s = new Set<string>()
-    for (const d of calendarData) {
-      if (d.max_weight || Number(d.total_distance) > 0 || Number(d.cardio_count) > 0) s.add(d.date)
-    }
-    return s
-  }, [calendarData])
-
   return (
     <main className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-8">
       {/* Header */}
       <header className="flex justify-between items-center py-4">
         <h1 className="text-2xl font-black text-primary tracking-tighter font-headline">SweatSheet</h1>
-        <div className="flex items-center gap-3">
-          <button onClick={() => { setCalNavOpen(true); setCalNavOffset(0) }} className="text-primary hover:opacity-70 transition-opacity active:scale-95">
-            <span className="material-symbols-outlined text-2xl">calendar_month</span>
-          </button>
-          <span className="material-symbols-outlined text-primary text-2xl">account_circle</span>
-        </div>
+        <span className="material-symbols-outlined text-primary text-2xl">account_circle</span>
       </header>
 
       {/* Tabs */}
@@ -1995,56 +1956,6 @@ export default function ProgressPage() {
       </section>
 
       <BottomNav />
-
-      {/* Navigation calendar overlay */}
-      {calNavOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0e0e0e]/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setCalNavOpen(false)}>
-          <div className="w-full max-w-[390px] bg-[#131313] rounded-t-3xl p-5 pb-8" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <button onClick={() => setCalNavOffset(o => o - 1)} className="text-[#a48b83] hover:text-[#e5e2e1] transition-colors">
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-              <span className="font-headline font-bold text-base text-[#e5e2e1]">
-                {calNavDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-              </span>
-              <button onClick={() => setCalNavOffset(o => Math.min(o + 1, 0))} disabled={calNavOffset >= 0} className="text-[#a48b83] hover:text-[#e5e2e1] transition-colors disabled:opacity-20">
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
-            {/* Day labels */}
-            <div className="grid grid-cols-7 mb-1">
-              {['M','T','W','T','F','S','S'].map((d, i) => (
-                <div key={i} className="text-center text-[10px] font-bold text-[#a48b83]/50">{d}</div>
-              ))}
-            </div>
-            {/* Grid */}
-            <div className="grid grid-cols-7 gap-y-1">
-              {calNavGrid.map(({ date, isToday, isFuture }, i) => {
-                if (!date) return <div key={i} />
-                const hasWorkout = workoutDates.has(date)
-                return (
-                  <button
-                    key={date}
-                    disabled={!hasWorkout || isFuture}
-                    onClick={() => { router.push(`/sessions/${date}`); setCalNavOpen(false) }}
-                    className="flex flex-col items-center gap-0.5 py-1 rounded-xl transition-all active:scale-95 disabled:cursor-default"
-                  >
-                    <span className={`text-sm font-bold ${
-                      isToday ? 'text-[#ff9066]' : hasWorkout ? 'text-[#e5e2e1]' : 'text-[#a48b83]/30'
-                    }`}>
-                      {new Date(date + 'T00:00:00').getDate()}
-                    </span>
-                    {hasWorkout && (
-                      <span className="w-1 h-1 rounded-full bg-[#ff9066]" />
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {selectedRunId !== null && (
         <RunDetailSheet
