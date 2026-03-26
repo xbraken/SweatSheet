@@ -21,7 +21,7 @@ function ActivityLabel({ activity, className }: { activity: string; className?: 
   )
 }
 
-type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number; rows: { weight: number; reps: number; logged_at?: string | null }[]; first_logged_at?: string | null }
+type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number; rows: { id: number; weight: number; reps: number; logged_at?: string | null }[]; first_logged_at?: string | null }
 type CardioEntry = {
   cardio_id: number
   date: string
@@ -123,6 +123,10 @@ function RunDetailSheet({
   const [paceHoveredIdx, setPaceHoveredIdx] = useState<number | null>(null)
   const [togglingInterval, setTogglingInterval] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editingStats, setEditingStats] = useState(false)
+  const [editDist, setEditDist] = useState('')
+  const [editDuration, setEditDuration] = useState('')
+  const [savingStats, setSavingStats] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -936,6 +940,55 @@ function RunDetailSheet({
             )}
           </div>
 
+          {/* Edit stats */}
+          {!compareDetail && !editingStats && (
+            <button
+              onClick={() => { setEditDist(detail.distance ?? ''); setEditDuration(detail.duration ?? ''); setEditingStats(true) }}
+              className="mt-4 w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors"
+            >
+              <span className="material-symbols-outlined text-base text-[#a48b83]">edit</span>
+              Edit stats
+            </button>
+          )}
+          {editingStats && (
+            <div className="mt-4 bg-[#131313] rounded-2xl p-4">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Edit stats</p>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="bg-[#201f1f] rounded-xl p-3 text-center">
+                  <input type="number" value={editDist} onChange={e => setEditDist(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-2xl font-black outline-none placeholder:text-[#353534]" />
+                  <span className="block text-[10px] font-label uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
+                </div>
+                <div className="bg-[#201f1f] rounded-xl p-3 text-center">
+                  <input type="text" value={editDuration} onChange={e => setEditDuration(e.target.value)} placeholder="00:00" className="w-full bg-transparent text-center font-headline text-2xl font-black outline-none placeholder:text-[#353534]" />
+                  <span className="block text-[10px] font-label uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setEditingStats(false)} className="flex-1 py-2.5 rounded-xl border border-[#353534] text-[#a48b83] text-sm font-bold transition-colors hover:bg-[#201f1f]">Cancel</button>
+                <button
+                  disabled={savingStats}
+                  onClick={async () => {
+                    setSavingStats(true)
+                    const dist = parseFloat(editDist)
+                    let pace: string | null = null
+                    if (dist > 0 && editDuration) {
+                      const parts = editDuration.split(':').map(Number)
+                      const totalSecs = parts.length === 3 ? parts[0]*3600+parts[1]*60+parts[2] : parts[0]*60+(parts[1]??0)
+                      if (totalSecs > 0) { const spm = totalSecs / dist; pace = `${Math.floor(spm/60)}:${String(Math.round(spm%60)).padStart(2,'0')}` }
+                    }
+                    await fetch(`/api/run/${runId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ distance: editDist || null, duration: editDuration || null, pace }) })
+                    setDetail({ ...detail, distance: editDist || null, duration: editDuration || null, pace })
+                    setSavingStats(false)
+                    setEditingStats(false)
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-[#4bdece] text-[#003732] text-sm font-bold disabled:opacity-50 transition-opacity"
+                >
+                  {savingStats ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Delete */}
           <button
             disabled={deleting}
@@ -1000,6 +1053,9 @@ export default function ProgressPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [visibleCount, setVisibleCount] = useState(10)
+  const [editSetModal, setEditSetModal] = useState<{id: number; weight: number; reps: number} | null>(null)
+  const [editSetSaving, setEditSetSaving] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Persist UI preferences to localStorage
   useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
@@ -1060,7 +1116,20 @@ export default function ProgressPage() {
         setCalendarData(data.calendarData ?? [])
       })
       .finally(() => setLoading(false))
-  }, [exercise])
+  }, [exercise, refreshKey])
+
+  const saveEditSet = async () => {
+    if (!editSetModal) return
+    setEditSetSaving(true)
+    await fetch('/api/sets', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editSetModal.id, weight: editSetModal.weight, reps: editSetModal.reps }),
+    })
+    setEditSetSaving(false)
+    setEditSetModal(null)
+    setRefreshKey(k => k + 1)
+  }
 
   // ── Chart range cutoff ───────────────────────────────────────────────────────
   const rangeCutoff = useMemo(() => {
@@ -1822,9 +1891,13 @@ export default function ProgressPage() {
                       return (
                         <div className="flex flex-wrap gap-1.5">
                           {visible.map((r, j) => (
-                            <span key={j} className="bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg">
+                            <button
+                              key={j}
+                              onClick={() => r.id && setEditSetModal({ id: r.id, weight: r.weight, reps: r.reps })}
+                              className={`bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg transition-colors ${r.id ? 'hover:bg-[#2a2a2a] active:scale-95' : ''}`}
+                            >
                               {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
-                            </span>
+                            </button>
                           ))}
                           {!isExpanded && hidden > 0 && (
                             <button
@@ -2065,6 +2138,48 @@ export default function ProgressPage() {
             setSelectedRunId(null)
           }}
         />
+      )}
+
+      {/* Edit set modal */}
+      {editSetModal && (
+        <>
+          <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm" onClick={() => setEditSetModal(null)} />
+          <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10">
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Edit set</p>
+              <button onClick={() => setEditSetModal(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+            </div>
+            <div className="flex justify-center gap-10 mb-6">
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Weight kg</p>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setEditSetModal(m => m ? {...m, weight: Math.max(0, +(m.weight - 2.5).toFixed(1))} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <span className="material-symbols-outlined text-sm">remove</span>
+                  </button>
+                  <span className="font-headline text-2xl font-black w-16 text-center">{editSetModal.weight}</span>
+                  <button onClick={() => setEditSetModal(m => m ? {...m, weight: +(m.weight + 2.5).toFixed(1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <span className="material-symbols-outlined text-sm">add</span>
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Reps</p>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <span className="material-symbols-outlined text-sm">remove</span>
+                  </button>
+                  <span className="font-headline text-2xl font-black w-10 text-center">{editSetModal.reps}</span>
+                  <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <span className="material-symbols-outlined text-sm">add</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button onClick={saveEditSet} disabled={editSetSaving} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-50">
+              {editSetSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </>
       )}
     </main>
   )

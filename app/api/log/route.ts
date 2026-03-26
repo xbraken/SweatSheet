@@ -24,8 +24,24 @@ export async function GET() {
     args: [session.userId, today],
   })
 
+  const setsRes = await db.execute({
+    sql: `SELECT st.id, st.block_id, st.weight, st.reps
+          FROM sets st
+          JOIN blocks b ON st.block_id = b.id
+          JOIN sessions s ON b.session_id = s.id
+          WHERE s.user_id = ? AND s.date = ?
+          ORDER BY b.id, st.position`,
+    args: [session.userId, today],
+  })
+  const setsByBlock: Record<number, {id: number; weight: number; reps: number}[]> = {}
+  for (const r of setsRes.rows) {
+    const bid = r.block_id as number
+    if (!setsByBlock[bid]) setsByBlock[bid] = []
+    setsByBlock[bid].push({ id: r.id as number, weight: Number(r.weight), reps: Number(r.reps) })
+  }
+
   const cardioRes = await db.execute({
-    sql: `SELECT b.id as block_id, c.activity, c.distance, c.duration, c.pace
+    sql: `SELECT b.id as block_id, c.id as cardio_id, c.activity, c.distance, c.duration, c.pace
           FROM blocks b
           JOIN sessions s ON b.session_id = s.id
           JOIN cardio c ON c.block_id = b.id
@@ -34,7 +50,10 @@ export async function GET() {
     args: [session.userId, today],
   })
 
-  return NextResponse.json({ lifts: liftRes.rows, cardio: cardioRes.rows })
+  return NextResponse.json({
+    lifts: liftRes.rows.map(r => ({ ...r, sets: setsByBlock[r.block_id as number] ?? [] })),
+    cardio: cardioRes.rows,
+  })
 }
 
 /** POST — save one exercise or cardio block, reusing today's session */
@@ -125,6 +144,30 @@ export async function POST(req: NextRequest) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
+}
+
+/** PATCH — update a cardio entry */
+export async function PATCH(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { cardioId, distance, duration, pace } = await req.json()
+  if (!cardioId) return NextResponse.json({ error: 'cardioId required' }, { status: 400 })
+
+  const check = await db.execute({
+    sql: `SELECT c.id FROM cardio c
+          JOIN blocks b ON c.block_id = b.id
+          JOIN sessions s ON b.session_id = s.id
+          WHERE c.id = ? AND s.user_id = ?`,
+    args: [cardioId, session.userId],
+  })
+  if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  await db.execute({
+    sql: 'UPDATE cardio SET distance = ?, duration = ?, pace = ? WHERE id = ?',
+    args: [distance || null, duration || null, pace || null, cardioId],
+  })
+  return NextResponse.json({ ok: true })
 }
 
 /** DELETE — remove a block (and its sets/cardio) from today */

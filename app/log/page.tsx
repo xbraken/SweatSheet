@@ -6,8 +6,8 @@ import { EXERCISES, CATEGORIES, type ExerciseCategory } from '@/lib/exercises'
 
 type SetRow = { id: number; weight: number; reps: number; done: boolean }
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
-type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number }
-type LoggedCardio = { block_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
+type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; sets: {id: number; weight: number; reps: number}[] }
+type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 
 const REST_OPTIONS = [
   { label: 'Off', value: 0 },
@@ -284,6 +284,11 @@ export default function LogPage() {
   const [saving, setSaving] = useState(false)
   const [pr, setPr] = useState<{ exercise: string; weight: number } | null>(null)
 
+  // Edit sheets
+  const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number}[]} | null>(null)
+  const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+
   // Load rest duration from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('ss_rest_duration')
@@ -425,6 +430,31 @@ export default function LogPage() {
     }
   }
 
+  const adjustEditLiftSet = (setId: number, field: 'weight' | 'reps', delta: number) => {
+    setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s) } : prev)
+  }
+
+  const saveEditLift = async () => {
+    if (!editLift) return
+    setEditSaving(true)
+    await Promise.all(editLift.sets.map(s =>
+      fetch('/api/sets', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, weight: s.weight, reps: s.reps }) })
+    ))
+    setEditSaving(false)
+    setEditLift(null)
+    refreshToday()
+  }
+
+  const saveEditCardio = async () => {
+    if (!editCardio) return
+    setEditSaving(true)
+    const pace = calcPace(editCardio.distance, editCardio.duration)
+    await fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardioId: editCardio.cardioId, distance: editCardio.distance, duration: editCardio.duration, pace }) })
+    setEditSaving(false)
+    setEditCardio(null)
+    refreshToday()
+  }
+
   // Delete a logged block
   const deleteBlock = async (blockId: number) => {
     await fetch('/api/log', {
@@ -478,9 +508,14 @@ export default function LogPage() {
                     <p className="text-xs text-[#a48b83]">{l.set_count} sets · {l.max_weight} kg peak</p>
                   </div>
                 </div>
-                <button onClick={() => deleteBlock(l.block_id)}>
-                  <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets] })}>
+                    <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
+                  </button>
+                  <button onClick={() => deleteBlock(l.block_id)}>
+                    <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                  </button>
+                </div>
               </div>
             ))}
             {loggedCardio.map(c => (
@@ -497,9 +532,14 @@ export default function LogPage() {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => deleteBlock(c.block_id)}>
-                  <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEditCardio({ blockId: c.block_id, cardioId: c.cardio_id, activity: c.activity, distance: c.distance ?? '', duration: c.duration ?? '' })}>
+                    <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
+                  </button>
+                  <button onClick={() => deleteBlock(c.block_id)}>
+                    <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -522,6 +562,82 @@ export default function LogPage() {
             <span className="font-headline font-bold text-[#dcc1b8]">Log cardio</span>
           </button>
         </div>
+
+        {/* Edit lift sheet */}
+        {editLift && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setEditLift(null)} />
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-headline font-bold text-[#e5e2e1]">{editLift.exercise}</h3>
+                <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+              </div>
+              <div className="space-y-3 mb-6">
+                {editLift.sets.map((s, i) => (
+                  <div key={s.id} className="flex items-center gap-2">
+                    <span className="text-xs text-[#a48b83] w-10 shrink-0">Set {i + 1}</span>
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">remove</span>
+                      </button>
+                      <span className="font-headline font-bold text-sm w-16 text-center">{s.weight}<span className="text-[10px] font-normal text-[#a48b83]"> kg</span></span>
+                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">add</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => adjustEditLiftSet(s.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">remove</span>
+                      </button>
+                      <span className="font-headline font-bold text-sm w-10 text-center">{s.reps}<span className="text-[10px] font-normal text-[#a48b83]"> r</span></span>
+                      <button onClick={() => adjustEditLiftSet(s.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">add</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={saveEditLift} disabled={editSaving} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-50">
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Edit cardio sheet */}
+        {editCardio && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setEditCardio(null)} />
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-headline font-bold text-[#e5e2e1]">{editCardio.activity}</h3>
+                <button onClick={() => setEditCardio(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
+                  <input type="number" value={editCardio.distance} onChange={e => setEditCardio(prev => prev ? { ...prev, distance: e.target.value } : prev)} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]" />
+                  <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
+                </div>
+                <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
+                  <input type="text" value={editCardio.duration} onChange={e => setEditCardio(prev => prev ? { ...prev, duration: e.target.value } : prev)} placeholder="00:00" className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]" />
+                  <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
+                </div>
+              </div>
+              {(() => {
+                const pace = calcPace(editCardio.distance, editCardio.duration)
+                return pace ? (
+                  <div className="bg-[#201f1f] rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Avg Pace</span>
+                    <span className="font-headline font-bold text-[#4bdece]">{pace} /km</span>
+                  </div>
+                ) : null
+              })()}
+              <button onClick={saveEditCardio} disabled={editSaving} className="w-full py-3.5 bg-[#4bdece] text-[#003732] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-50">
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </>
+        )}
 
         <BottomNav />
       </main>

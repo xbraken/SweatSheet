@@ -88,20 +88,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const cardioId = parseInt(id)
   if (isNaN(cardioId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const { activity } = await req.json()
-  if (!['Run', 'Indoor run', 'Interval run'].includes(activity)) {
-    return NextResponse.json({ error: 'Invalid activity' }, { status: 400 })
+  const body = await req.json()
+  const { activity, distance, duration, pace } = body
+
+  if (activity !== undefined) {
+    if (!['Run', 'Indoor run', 'Interval run'].includes(activity)) {
+      return NextResponse.json({ error: 'Invalid activity' }, { status: 400 })
+    }
+    await db.execute({
+      sql: `UPDATE cardio SET activity = ? WHERE id = ? AND block_id IN (
+              SELECT b.id FROM blocks b JOIN sessions s ON s.id = b.session_id WHERE s.user_id = ?
+            )`,
+      args: [activity, cardioId, session.userId],
+    })
+    return NextResponse.json({ ok: true, activity })
   }
 
-  await db.execute({
-    sql: `UPDATE cardio SET activity = ?
-          WHERE id = ? AND block_id IN (
-            SELECT b.id FROM blocks b
-            JOIN sessions s ON s.id = b.session_id
-            WHERE s.user_id = ?
-          )`,
-    args: [activity, cardioId, session.userId],
-  })
+  if (distance !== undefined || duration !== undefined || pace !== undefined) {
+    await db.execute({
+      sql: `UPDATE cardio SET distance = ?, duration = ?, pace = ? WHERE id = ? AND block_id IN (
+              SELECT b.id FROM blocks b JOIN sessions s ON s.id = b.session_id WHERE s.user_id = ?
+            )`,
+      args: [distance || null, duration || null, pace || null, cardioId, session.userId],
+    })
+    return NextResponse.json({ ok: true })
+  }
 
-  return NextResponse.json({ ok: true, activity })
+  return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 }
