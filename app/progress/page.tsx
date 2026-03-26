@@ -1874,10 +1874,16 @@ export default function ProgressPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
                         {s.started_at && (() => {
-                          const raw = s.started_at
-                          const normalized = /[Z+\-]\d*$/.test(raw) ? raw : raw.replace(' ', 'T') + 'Z'
-                          const t = new Date(normalized).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-                          return <p className="text-[10px] font-mono text-on-surface-variant/50">{t}</p>
+                          // Normalize to strict ISO 8601 (Safari requires it)
+                          // "2026-01-15 09:45:23 +0000" → "2026-01-15T09:45:23+0000"
+                          // "2026-01-15 09:45:23"       → "2026-01-15T09:45:23Z"
+                          const iso = s.started_at
+                            .replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T')
+                            .replace(/ ([+-])/, '$1')
+                          const normalized = /[Z+\-]\d/.test(iso.slice(10)) ? iso : iso + 'Z'
+                          const d = new Date(normalized)
+                          if (isNaN(d.getTime())) return null
+                          return <p className="text-[10px] font-mono text-on-surface-variant/50">{d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
                         })()}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
