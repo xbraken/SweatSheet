@@ -1626,28 +1626,64 @@ export default function ProgressPage() {
           </div>
         )}
 
-        {/* Bulk delete bar */}
+        {/* Bulk action bar */}
         {selectMode && selectedIds.size > 0 && (
-          <button
-            disabled={bulkDeleting}
-            onClick={async () => {
-              if (!confirm(`Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return
-              setBulkDeleting(true)
-              await fetch('/api/run/bulk-delete', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: [...selectedIds] }),
-              })
-              setCardioHistory(prev => prev.filter(e => !selectedIds.has(e.cardio_id!)))
-              setSelectedIds(new Set())
-              setSelectMode(false)
-              setBulkDeleting(false)
-            }}
-            className="w-full py-3 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-red-950/60"
-          >
-            <span className="material-symbols-outlined text-base">delete</span>
-            {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}`}
-          </button>
+          <div className="flex gap-2">
+            <button
+              disabled={bulkDeleting}
+              onClick={async () => {
+                const ids = [...selectedIds]
+                const allInterval = ids.every(id => {
+                  const entry = cardioHistory.find(e => e.cardio_id === id)
+                  return entry && runSubtype(entry.activity) === 'interval'
+                })
+                const newActivity = allInterval ? 'Run' : 'Interval run'
+                setBulkDeleting(true)
+                await fetch('/api/run/bulk-patch', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids, activity: newActivity }),
+                })
+                setCardioHistory(prev => prev.map(e =>
+                  selectedIds.has(e.cardio_id!) ? { ...e, activity: newActivity } : e
+                ))
+                setSelectedIds(new Set())
+                setSelectMode(false)
+                setBulkDeleting(false)
+              }}
+              className="flex-1 py-3 rounded-xl bg-[#4bdece]/10 border border-[#4bdece]/30 text-[#4bdece] text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-[#4bdece]/20"
+            >
+              <span className="material-symbols-outlined text-base">timer</span>
+              {bulkDeleting ? '…' : (() => {
+                const ids = [...selectedIds]
+                const allInterval = ids.every(id => {
+                  const entry = cardioHistory.find(e => e.cardio_id === id)
+                  return entry && runSubtype(entry.activity) === 'interval'
+                })
+                return allInterval ? 'Unmark interval' : 'Mark interval'
+              })()}
+            </button>
+            <button
+              disabled={bulkDeleting}
+              onClick={async () => {
+                if (!confirm(`Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return
+                setBulkDeleting(true)
+                await fetch('/api/run/bulk-delete', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: [...selectedIds] }),
+                })
+                setCardioHistory(prev => prev.filter(e => !selectedIds.has(e.cardio_id!)))
+                setSelectedIds(new Set())
+                setSelectMode(false)
+                setBulkDeleting(false)
+              }}
+              className="flex-1 py-3 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-red-950/60"
+            >
+              <span className="material-symbols-outlined text-base">delete</span>
+              {bulkDeleting ? '…' : `Delete ${selectedIds.size}`}
+            </button>
+          </div>
         )}
 
 
