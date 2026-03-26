@@ -896,6 +896,7 @@ export default function ProgressPage() {
   const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>(() =>
     (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_cardio_metric') as 'pace' | 'distance') || 'pace'
   )
+  const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>(() =>
     (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_lift_sort') as 'date' | 'weight' | 'volume') || 'date'
   )
@@ -1718,15 +1719,37 @@ export default function ProgressPage() {
                         <p className="font-bold text-on-surface">{Number(s.volume).toFixed(0)} kg</p>
                       </div>
                     </div>
-                    {s.rows?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {s.rows.map((r, j) => (
-                          <span key={j} className="bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg">
-                            {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {s.rows?.length > 0 && (() => {
+                      const LIMIT = 8
+                      const isExpanded = expandedSets.has(s.date)
+                      const visible = isExpanded ? s.rows : s.rows.slice(0, LIMIT)
+                      const hidden = s.rows.length - LIMIT
+                      return (
+                        <div className="flex flex-wrap gap-1.5">
+                          {visible.map((r, j) => (
+                            <span key={j} className="bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg">
+                              {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
+                            </span>
+                          ))}
+                          {!isExpanded && hidden > 0 && (
+                            <button
+                              onClick={() => setExpandedSets(prev => new Set(prev).add(s.date))}
+                              className="bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg hover:text-on-surface transition-colors"
+                            >
+                              +{hidden} more
+                            </button>
+                          )}
+                          {isExpanded && hidden > 0 && (
+                            <button
+                              onClick={() => setExpandedSets(prev => { const n = new Set(prev); n.delete(s.date); return n })}
+                              className="bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg hover:text-on-surface transition-colors"
+                            >
+                              show less
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })

@@ -67,6 +67,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
+  const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [following, setFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
 
@@ -251,13 +252,38 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                                       {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k kg` : `${e.volume} kg`}
                                     </span>
                                   </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {e.rows.map((r, j) => (
-                                      <span key={j} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
-                                        {r.weight}kg <span className="text-[#e5e2e1]">× {r.reps}</span>
-                                      </span>
-                                    ))}
-                                  </div>
+                                  {(() => {
+                                    const LIMIT = 8
+                                    const key = `${g.date}:${e.name}`
+                                    const isExpanded = expandedSets.has(key)
+                                    const visible = isExpanded ? e.rows : e.rows.slice(0, LIMIT)
+                                    const hidden = e.rows.length - LIMIT
+                                    return (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {visible.map((r, j) => (
+                                          <span key={j} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                            {r.weight}kg <span className="text-[#e5e2e1]">× {r.reps}</span>
+                                          </span>
+                                        ))}
+                                        {!isExpanded && hidden > 0 && (
+                                          <button
+                                            onClick={() => setExpandedSets(prev => new Set(prev).add(key))}
+                                            className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg hover:text-[#e5e2e1] transition-colors"
+                                          >
+                                            +{hidden} more
+                                          </button>
+                                        )}
+                                        {isExpanded && hidden > 0 && (
+                                          <button
+                                            onClick={() => setExpandedSets(prev => { const n = new Set(prev); n.delete(key); return n })}
+                                            className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg hover:text-[#e5e2e1] transition-colors"
+                                          >
+                                            show less
+                                          </button>
+                                        )}
+                                      </div>
+                                    )
+                                  })()}
                                 </div>
                               )) : (
                                 <p className="text-[#a48b83] text-sm">No exercises recorded</p>
