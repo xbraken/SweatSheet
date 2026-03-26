@@ -144,58 +144,55 @@ export default function SocialPage() {
         )}
       </main>
 
-      {/* Search Sheet */}
+      {/* Search Modal — full page so keyboard doesn't push input off screen */}
       {showSearch && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSearch(false)} />
-          <div className="relative bg-[#131313] rounded-t-[24px] border-t border-[#201f1f] max-w-[390px] mx-auto w-full pb-10 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#201f1f]">
-              <h2 className="font-headline font-bold text-lg text-[#e5e2e1]">Add Friends</h2>
-              <button className="text-[#a48b83]" onClick={() => setShowSearch(false)}>
-                <span className="material-symbols-outlined">close</span>
-              </button>
+        <div className="fixed inset-0 z-50 bg-[#0e0e0e] flex flex-col max-w-[390px] mx-auto">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-[#201f1f]">
+            <button className="text-[#a48b83]" onClick={() => setShowSearch(false)}>
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <div className="flex-1 flex items-center gap-2 bg-[#1c1b1b] rounded-xl px-3 py-2">
+              <span className="material-symbols-outlined text-[#a48b83] text-xl">search</span>
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search by username…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent text-[#e5e2e1] placeholder-[#a48b83]/50 text-sm outline-none"
+              />
+              {searching && <div className="w-4 h-4 border border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />}
             </div>
-            <div className="px-5 py-3 border-b border-[#201f1f]">
-              <div className="flex items-center gap-2 bg-[#1c1b1b] rounded-xl px-3 py-2">
-                <span className="material-symbols-outlined text-[#a48b83] text-xl">search</span>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search by username…"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="flex-1 bg-transparent text-[#e5e2e1] placeholder-[#a48b83]/50 text-sm outline-none"
-                />
-                {searching && <div className="w-4 h-4 border border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />}
-              </div>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              {searchResults.length === 0 && searchQuery.trim() && !searching && (
-                <p className="text-center text-[#a48b83] text-sm py-8">No users found</p>
-              )}
-              {searchResults.map(user => {
-                const isFollowing = !!user.is_following || justFollowed.has(user.username)
-                return (
-                  <div key={user.id} className="flex items-center justify-between px-5 py-3 border-b border-[#201f1f]/50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#2a2a2a] flex items-center justify-center">
-                        <span className="text-[#ffb9a0] font-headline font-bold text-xs">{user.username.slice(0, 2).toUpperCase()}</span>
-                      </div>
-                      <span className="text-[#e5e2e1] text-sm font-medium">{user.username}</span>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {searchResults.length === 0 && searchQuery.trim() && !searching && (
+              <p className="text-center text-[#a48b83] text-sm py-8">No users found</p>
+            )}
+            {!searchQuery.trim() && (
+              <p className="text-center text-[#a48b83]/50 text-sm py-12">Type a username to search</p>
+            )}
+            {searchResults.map(user => {
+              const isFollowing = !!user.is_following || justFollowed.has(user.username)
+              return (
+                <div key={user.id} className="flex items-center justify-between px-5 py-3 border-b border-[#201f1f]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-[#2a2a2a] flex items-center justify-center">
+                      <span className="text-[#ffb9a0] font-headline font-bold text-xs">{user.username.slice(0, 2).toUpperCase()}</span>
                     </div>
-                    <button
-                      disabled={isFollowing}
-                      onClick={() => follow(user.username)}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
-                        isFollowing ? 'bg-[#201f1f] text-[#a48b83]' : 'bg-[#ff9066] text-[#0e0e0e] hover:bg-[#ffb9a0]'
-                      }`}
-                    >
-                      {isFollowing ? 'Following' : 'Follow'}
-                    </button>
+                    <span className="text-[#e5e2e1] text-sm font-medium">{user.username}</span>
                   </div>
-                )
-              })}
-            </div>
+                  <button
+                    disabled={isFollowing}
+                    onClick={() => follow(user.username)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
+                      isFollowing ? 'bg-[#201f1f] text-[#a48b83]' : 'bg-[#ff9066] text-[#0e0e0e] hover:bg-[#ffb9a0]'
+                    }`}
+                  >
+                    {isFollowing ? 'Following' : 'Follow'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

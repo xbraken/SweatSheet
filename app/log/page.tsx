@@ -194,15 +194,15 @@ function CardioPicker({ onSelect, onClose }: {
   onClose: () => void
 }) {
   const options = [
-    { label: 'Outdoor run', icon: 'directions_run' },
-    { label: 'Cycling', icon: 'directions_bike' },
+    { label: 'Run', icon: 'directions_run' },
     { label: 'Walking', icon: 'directions_walk' },
-    { label: 'Indoor run', icon: 'directions_run' },
+    { label: 'Cycling', icon: 'directions_bike' },
+    { label: 'Interval run', icon: 'directions_run' },
   ]
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-28 md:pb-6 shadow-2xl">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-6 shadow-2xl overflow-y-auto max-h-[70vh]">
         <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
         <div className="flex flex-col gap-3">
@@ -477,7 +477,7 @@ export default function LogPage() {
               <div key={c.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[#4bdece]">
-                    {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : 'directions_run'}
+                    {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
                   </span>
                   <div>
                     <p className="font-headline font-bold text-[#e5e2e1]">{c.activity}</p>
