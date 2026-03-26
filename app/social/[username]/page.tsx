@@ -241,34 +241,26 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                           {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
 
                           {g.lift && (
-                            <div className="space-y-3">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Volume</p>
-                                  <p className="font-headline font-bold text-lg text-[#e5e2e1]">
-                                    {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}k kg` : `${g.lift.volume} kg`}
-                                  </p>
+                            <div className="space-y-1.5">
+                              {g.lift.exercises.length > 0 ? g.lift.exercises.map((e, i) => (
+                                <div key={i} className="flex items-center justify-between py-1">
+                                  <span className="text-[#e5e2e1] text-sm font-medium">{e.name}</span>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[#a48b83] text-xs">{e.sets} sets</span>
+                                    <span className="text-[#ff9066] text-sm font-bold w-16 text-right">
+                                      {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k kg` : `${e.volume} kg`}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Sets</p>
-                                  <p className="font-headline font-bold text-lg text-[#e5e2e1]">{g.lift.sets}</p>
-                                </div>
-                              </div>
-                              {g.lift.exercises.length > 0 && (
-                                <div className="space-y-2">
-                                  {g.lift.exercises.map((e, i) => (
-                                    <div key={i} className="flex items-center justify-between">
-                                      <span className="text-[#e5e2e1] text-sm font-medium">{e.name}</span>
-                                      <div className="flex items-center gap-3 text-right">
-                                        <span className="text-[#a48b83] text-xs">{e.sets} sets</span>
-                                        <span className="text-[#ff9066] text-sm font-bold">
-                                          {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k` : e.volume} kg
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                              )) : (
+                                <p className="text-[#a48b83] text-sm">No exercises recorded</p>
                               )}
+                              <div className="flex justify-between pt-2 mt-1 border-t border-[#201f1f]/50">
+                                <span className="text-[#a48b83] text-xs">{g.lift.sets} sets total</span>
+                                <span className="text-[#a48b83] text-xs font-bold">
+                                  {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}k kg` : `${g.lift.volume} kg`} total
+                                </span>
+                              </div>
                             </div>
                           )}
                         </div>
