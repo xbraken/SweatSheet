@@ -67,7 +67,6 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
-  const [expandedEx, setExpandedEx] = useState<string | null>(null)
   const [following, setFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
 
@@ -243,42 +242,27 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                           {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
 
                           {g.lift && (
-                            <div className="space-y-0.5">
-                              {g.lift.exercises.length > 0 ? g.lift.exercises.map((e, i) => {
-                                const exKey = `${g.date}:${e.name}`
-                                const exOpen = expandedEx === exKey
-                                return (
-                                  <div key={i}>
-                                    <button
-                                      className="w-full flex items-center justify-between py-1.5 text-left"
-                                      onClick={() => setExpandedEx(exOpen ? null : exKey)}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-[#a48b83]/40 text-sm">{exOpen ? 'expand_less' : 'expand_more'}</span>
-                                        <span className="text-[#e5e2e1] text-sm font-medium">{e.name}</span>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        <span className="text-[#a48b83] text-xs">{e.rows.length} sets</span>
-                                        <span className="text-[#ff9066] text-sm font-bold w-16 text-right">
-                                          {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k kg` : `${e.volume} kg`}
-                                        </span>
-                                      </div>
-                                    </button>
-                                    {exOpen && (
-                                      <div className="ml-6 mb-2 flex flex-wrap gap-1.5">
-                                        {e.rows.map((r, j) => (
-                                          <span key={j} className="bg-[#201f1f] text-[#e5e2e1] text-xs font-mono px-2.5 py-1 rounded-lg">
-                                            {r.weight}kg × {r.reps}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
+                            <div className="space-y-3">
+                              {g.lift.exercises.length > 0 ? g.lift.exercises.map((e, i) => (
+                                <div key={i}>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[#e5e2e1] text-sm font-semibold">{e.name}</span>
+                                    <span className="text-[#ff9066] text-xs font-bold">
+                                      {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k kg` : `${e.volume} kg`}
+                                    </span>
                                   </div>
-                                )
-                              }) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {e.rows.map((r, j) => (
+                                      <span key={j} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                        {r.weight}kg <span className="text-[#e5e2e1]">× {r.reps}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )) : (
                                 <p className="text-[#a48b83] text-sm">No exercises recorded</p>
                               )}
-                              <div className="flex justify-between pt-2 mt-1 border-t border-[#201f1f]/50">
+                              <div className="flex justify-between pt-2 border-t border-[#201f1f]/50">
                                 <span className="text-[#a48b83] text-xs">{g.lift.sets} sets total</span>
                                 <span className="text-[#a48b83] text-xs font-bold">
                                   {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}k kg` : `${g.lift.volume} kg`} total
