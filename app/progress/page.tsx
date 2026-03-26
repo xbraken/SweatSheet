@@ -1525,7 +1525,7 @@ export default function ProgressPage() {
               return (
                 <button
                   key={date}
-                  onClick={() => hasWorkout ? router.push(`/sessions/${date}`) : setSelectedCalDate(d => d === date ? null : date)}
+                  onClick={() => setSelectedCalDate(d => d === date ? null : date)}
                   className="aspect-square rounded-md transition-all flex items-center justify-center"
                   style={{
                     backgroundColor: hasWorkout
@@ -1571,6 +1571,15 @@ export default function ProgressPage() {
               </div>
             ) : (
               <p className="text-sm text-on-surface-variant">No workout recorded</p>
+            )}
+            {(tab === 'cardio' ? selectedDayWorkouts.length > 0 : !!selectedDayLift?.max_weight) && (
+              <button
+                onClick={() => router.push(`/sessions/${selectedCalDate}`)}
+                className="mt-1 flex items-center gap-1 text-xs font-bold text-primary-container hover:opacity-80 transition-opacity self-start"
+              >
+                View full session
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
             )}
           </div>
         )}
