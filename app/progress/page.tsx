@@ -1601,7 +1601,12 @@ export default function ProgressPage() {
           </div>
           {tab === 'cardio' && (
             <button
-              onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()) }}
+              onClick={() => {
+                const next = !selectMode
+                setSelectMode(next)
+                setSelectedIds(new Set())
+                if (next && runSubFilter === 'all') setRunSubFilter('run')
+              }}
               className={`px-2 py-1 rounded-lg text-[10px] font-bold font-label uppercase tracking-wide transition-colors ${selectMode ? 'bg-red-900/30 text-red-400' : 'text-on-surface-variant/40 hover:text-on-surface-variant'}`}
             >
               {selectMode ? 'Cancel' : 'Select'}
@@ -1615,7 +1620,7 @@ export default function ProgressPage() {
             {(['all', 'run', 'interval'] as const).map(s => (
               <button
                 key={s}
-                onClick={() => setRunSubFilter(s)}
+                onClick={() => { setRunSubFilter(s); setSelectedIds(new Set()) }}
                 className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
                   runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
                 }`}
