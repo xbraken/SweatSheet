@@ -104,18 +104,14 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                     {/* Cardio blocks */}
                     {sess.cardio.map((c, i) => {
                       const cTime = formatTime(c.started_at)
-                      // Show individual time only if multiple cardio in same session and they differ
-                      const showCardioTime = sess.cardio.length > 1 && cTime && cTime !== displayTime
                       return (
                         <div key={i} className="rounded-2xl bg-[#131313] border border-[#201f1f] p-4">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                               <span className="bg-[#4bdece]/20 text-[#4bdece] text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Cardio</span>
-                              <span className="text-[#e5e2e1] font-headline font-bold text-base">{c.activity}</span>
+                              {cTime && <span className="text-[#a48b83] text-xs font-mono">{cTime}</span>}
                             </div>
-                            {showCardioTime && (
-                              <span className="text-[#a48b83] text-xs font-mono">{cTime}</span>
-                            )}
+                            <span className="text-[#e5e2e1] font-headline font-bold text-base">{c.activity}</span>
                           </div>
                           <div className="grid grid-cols-3 gap-3">
                             {c.distance && Number(c.distance) > 0 && (
