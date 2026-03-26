@@ -1,14 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
-
-interface CardioBlock {
-  activity: string
-  distance: number | null
-  duration: string | null
-  pace: string | null
-  heart_rate: number | null
-}
 
 interface FeedItem {
   userId: number
@@ -17,14 +10,10 @@ interface FeedItem {
   date: string
   createdAt: string
   lift: { volume: number; sets: number; exercises: string[] } | null
-  cardio: CardioBlock[] | null
+  cardio: Array<{ activity: string }> | null
 }
 
-interface SearchUser {
-  id: number
-  username: string
-  is_following: number
-}
+interface SearchUser { id: number; username: string; is_following: number }
 
 function timeAgo(utcStr: string): string {
   const diff = Date.now() - new Date(utcStr + (utcStr.includes('Z') ? '' : 'Z')).getTime()
@@ -37,112 +26,20 @@ function timeAgo(utcStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function initials(username: string): string {
-  return username.slice(0, 2).toUpperCase()
-}
-
-function workoutTitle(item: FeedItem): string {
-  if (item.cardio && item.lift) return (item.cardio[0]?.activity ?? 'Cardio') + ' + Lift'
-  if (item.cardio) return item.cardio[0]?.activity ?? 'Cardio'
-  if (item.lift) {
-    const ex = item.lift.exercises
-    if (ex.length === 0) return 'Lift Session'
-    if (ex.length <= 2) return ex.join(' · ')
-    return ex.slice(0, 2).join(' · ') + ` +${ex.length - 2}`
-  }
-  return 'Workout'
-}
-
-function workoutStats(item: FeedItem): Array<{ label: string; value: string }> {
-  if (item.cardio && item.cardio.length > 0) {
-    const c = item.cardio[0]
-    const stats: Array<{ label: string; value: string }> = []
-    if (c.distance && c.distance > 0) stats.push({ label: 'Distance', value: `${Number(c.distance).toFixed(1)} km` })
-    if (c.pace) stats.push({ label: 'Pace', value: `${c.pace} /km` })
-    if (c.duration) stats.push({ label: 'Time', value: c.duration })
-    if (stats.length < 3 && c.heart_rate) stats.push({ label: 'Avg HR', value: `${c.heart_rate} bpm` })
-    while (stats.length < 3) stats.push({ label: '', value: '—' })
-    return stats.slice(0, 3)
-  }
-  if (item.lift) {
-    return [
-      { label: 'Volume', value: item.lift.volume >= 1000 ? `${(item.lift.volume / 1000).toFixed(1)}k kg` : `${item.lift.volume} kg` },
-      { label: 'Sets', value: String(item.lift.sets) },
-      { label: 'Exercises', value: String(item.lift.exercises.length) },
-    ]
-  }
-  return []
-}
-
-function FeedCard({ item, onUnfollow }: { item: FeedItem; onUnfollow: (username: string) => void }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const stats = workoutStats(item)
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    if (menuOpen) document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [menuOpen])
-
-  return (
-    <article className="bg-[#131313] border border-[#201f1f] rounded-[16px] overflow-hidden p-5 transition-transform hover:scale-[1.01]">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[#2a2a2a] flex items-center justify-center border border-[#56423c]/30">
-            <span className="text-[#ffb9a0] font-headline font-bold text-sm">{initials(item.username)}</span>
-          </div>
-          <div>
-            <h3 className="text-[#e5e2e1] font-semibold text-sm">{item.username}</h3>
-            <p className="text-[#a48b83]/60 text-xs font-medium">{timeAgo(item.createdAt)}</p>
-          </div>
-        </div>
-        <div className="relative" ref={menuRef}>
-          <button
-            className="text-[#a48b83]/40 hover:text-[#a48b83] transition-colors"
-            onClick={() => setMenuOpen(v => !v)}
-          >
-            <span className="material-symbols-outlined">more_horiz</span>
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-8 bg-[#201f1f] border border-[#2a2a2a] rounded-xl shadow-xl z-20 overflow-hidden min-w-[130px]">
-              <button
-                className="w-full px-4 py-3 text-left text-sm text-[#ff9066] hover:bg-[#2a2a2a] transition-colors font-medium"
-                onClick={() => { setMenuOpen(false); onUnfollow(item.username) }}
-              >
-                Unfollow
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mb-6">
-        <h2 className="font-headline font-extrabold text-3xl text-[#e5e2e1] tracking-tight">{workoutTitle(item)}</h2>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {stats.map((s, i) => (
-          <div key={i} className="space-y-1">
-            <span className="text-[#ff9066]/60 text-[10px] font-bold uppercase tracking-widest font-label">{s.label}</span>
-            <p className="text-[#e5e2e1] font-headline font-bold text-lg">{s.value}</p>
-          </div>
-        ))}
-      </div>
-    </article>
-  )
+function feedSubtitle(item: FeedItem): string {
+  const type = item.cardio ? (item.cardio[0]?.activity ?? 'Cardio') : item.lift ? 'Lift' : 'Workout'
+  return `${type} · ${timeAgo(item.createdAt)}`
 }
 
 export default function SocialPage() {
+  const router = useRouter()
   const [feed, setFeed] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchUser[]>([])
   const [searching, setSearching] = useState(false)
-  const [following, setFollowing] = useState<Set<string>>(new Set())
+  const [justFollowed, setJustFollowed] = useState<Set<string>>(new Set())
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -171,63 +68,83 @@ export default function SocialPage() {
   }, [searchQuery])
 
   async function follow(username: string) {
-    setFollowing(s => new Set(s).add(username))
+    setJustFollowed(s => new Set(s).add(username))
     await fetch('/api/social/follow', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username }),
     })
-    // Refresh feed
     fetch('/api/social/feed').then(r => r.json()).then(d => setFeed(d.feed ?? []))
-  }
-
-  async function unfollow(username: string) {
-    await fetch(`/api/social/follow?username=${encodeURIComponent(username)}`, { method: 'DELETE' })
-    setFeed(f => f.filter(item => item.username !== username))
-    setFollowing(s => { const n = new Set(s); n.delete(username); return n })
   }
 
   return (
     <>
-      <header className="fixed top-0 w-full z-50 bg-[#131313]/60 backdrop-blur-xl">
-        <div className="flex justify-between items-center px-6 py-4 w-full max-w-[390px] mx-auto">
-          <h1 className="font-headline font-bold text-2xl tracking-tight text-[#ffb9a0]">Friends</h1>
-          <div className="flex gap-4">
-            <button
-              className="hover:opacity-80 transition-opacity active:scale-95 duration-100 text-[#ffb9a0]"
-              onClick={() => setShowSearch(true)}
-            >
-              <span className="material-symbols-outlined">person_add</span>
-            </button>
-          </div>
+      <header className="sticky top-0 z-50 bg-[#0e0e0e]/80 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-6 py-4 max-w-[390px] mx-auto">
+          <h1 className="font-headline font-bold text-xl tracking-tight text-[#ffb9a0]">Friends</h1>
+          <button onClick={() => setShowSearch(true)} className="text-[#ffb9a0] hover:opacity-80 active:scale-95 transition-all">
+            <span className="material-symbols-outlined">person_add</span>
+          </button>
         </div>
       </header>
 
-      <main className="pt-20 pb-32 max-w-[390px] mx-auto px-4 space-y-4">
+      <main className="max-w-[390px] mx-auto px-6 pb-32 mt-4">
         {loading ? (
           <div className="flex justify-center pt-20">
             <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
         ) : feed.length === 0 ? (
-          <div className="flex flex-col items-center justify-center pt-24 gap-4 text-center px-6">
-            <span className="material-symbols-outlined text-5xl text-[#a48b83]/40">group</span>
-            <p className="text-[#e5e2e1] font-headline font-bold text-xl">No friends yet</p>
+          <div className="flex flex-col items-center pt-24 gap-4 text-center">
+            <span className="material-symbols-outlined text-5xl text-[#a48b83]/30">group</span>
+            <p className="font-headline font-bold text-lg text-[#e5e2e1]">No friends yet</p>
             <p className="text-[#a48b83] text-sm">Add friends to see their latest workouts</p>
             <button
               onClick={() => setShowSearch(true)}
-              className="mt-2 px-6 py-3 bg-[#ff9066] text-[#0e0e0e] rounded-xl font-bold font-label text-sm"
+              className="mt-2 flex items-center gap-2 bg-gradient-to-br from-[#ffb9a0] to-[#ff9066] text-[#0e0e0e] font-headline font-bold text-sm px-6 py-3 rounded-full shadow-lg"
             >
+              <span className="material-symbols-outlined text-[18px]">search</span>
               Find Friends
             </button>
           </div>
         ) : (
-          feed.map(item => (
-            <FeedCard key={item.sessionId} item={item} onUnfollow={unfollow} />
-          ))
+          <>
+            <div className="space-y-0">
+              {feed.map(item => (
+                <button
+                  key={item.userId}
+                  onClick={() => router.push(`/social/${item.username}`)}
+                  className="w-full flex items-center justify-between py-4 hover:bg-[#201f1f] active:bg-[#201f1f] transition-colors rounded-xl px-2 -mx-2 group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#2a2a2a] flex items-center justify-center border border-[#56423c]/20 shrink-0">
+                      <span className="font-headline font-bold text-[#ffb9a0] text-base">
+                        {item.username.slice(0, 2).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-headline font-semibold text-[#e5e2e1] text-base">{item.username}</p>
+                      <p className="text-[#a48b83]/70 text-xs mt-0.5 font-medium">{feedSubtitle(item)}</p>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[#a48b83]/30 group-hover:text-[#ffb9a0] transition-colors">chevron_right</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-10 flex justify-center">
+              <button
+                onClick={() => setShowSearch(true)}
+                className="flex items-center gap-2 bg-gradient-to-br from-[#ffb9a0] to-[#ff9066] text-[#0e0e0e] font-headline font-bold text-sm px-6 py-3 rounded-full shadow-lg active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[18px]">search</span>
+                Find Friends
+              </button>
+            </div>
+          </>
         )}
       </main>
 
-      {/* Search / Add Friend Sheet */}
+      {/* Search Sheet */}
       {showSearch && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSearch(false)} />
@@ -257,12 +174,12 @@ export default function SocialPage() {
                 <p className="text-center text-[#a48b83] text-sm py-8">No users found</p>
               )}
               {searchResults.map(user => {
-                const isFollowing = !!user.is_following || following.has(user.username)
+                const isFollowing = !!user.is_following || justFollowed.has(user.username)
                 return (
                   <div key={user.id} className="flex items-center justify-between px-5 py-3 border-b border-[#201f1f]/50">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-[#2a2a2a] flex items-center justify-center">
-                        <span className="text-[#ffb9a0] font-headline font-bold text-xs">{initials(user.username)}</span>
+                        <span className="text-[#ffb9a0] font-headline font-bold text-xs">{user.username.slice(0, 2).toUpperCase()}</span>
                       </div>
                       <span className="text-[#e5e2e1] text-sm font-medium">{user.username}</span>
                     </div>
@@ -270,9 +187,7 @@ export default function SocialPage() {
                       disabled={isFollowing}
                       onClick={() => follow(user.username)}
                       className={`px-4 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
-                        isFollowing
-                          ? 'bg-[#201f1f] text-[#a48b83]'
-                          : 'bg-[#ff9066] text-[#0e0e0e] hover:bg-[#ffb9a0]'
+                        isFollowing ? 'bg-[#201f1f] text-[#a48b83]' : 'bg-[#ff9066] text-[#0e0e0e] hover:bg-[#ffb9a0]'
                       }`}
                     >
                       {isFollowing ? 'Following' : 'Follow'}
