@@ -403,12 +403,22 @@ export default function LogPage() {
     if (view.type !== 'cardio') return
     setSaving(true)
     try {
-      await fetch('/api/log', {
+      const res = await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'cardio', activity: view.activity, distance: cardioDistance, time: cardioTime, pace: cardioPace }),
       })
-      refreshToday()
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(`Save failed: ${data.error ?? res.status}`)
+        return
+      }
+      await new Promise<void>(resolve => {
+        fetch('/api/log').then(r => r.json()).then(data => {
+          setLoggedLifts(data.lifts ?? [])
+          setLoggedCardio(data.cardio ?? [])
+        }).finally(resolve)
+      })
       setView({ type: 'list' })
     } finally {
       setSaving(false)
