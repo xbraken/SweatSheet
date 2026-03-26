@@ -918,6 +918,7 @@ export default function ProgressPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(10)
 
   // Persist UI preferences to localStorage
   useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
@@ -926,6 +927,7 @@ export default function ProgressPage() {
   useEffect(() => { localStorage.setItem('ss_prog_cardio_sort', cardioSort) }, [cardioSort])
   useEffect(() => { localStorage.setItem('ss_prog_range', chartRange) }, [chartRange])
   useEffect(() => { localStorage.setItem('ss_prog_lift_metric', liftMetric) }, [liftMetric])
+  useEffect(() => { setVisibleCount(10) }, [tab, liftSort, cardioSort, cardioActivity, runSubFilter])
   useEffect(() => { if (exercise) localStorage.setItem('ss_prog_exercise', exercise) }, [exercise])
   useEffect(() => { if (cardioActivity) localStorage.setItem('ss_prog_cardio_activity', cardioActivity) }, [cardioActivity])
 
@@ -1690,7 +1692,7 @@ export default function ProgressPage() {
         <div className="flex flex-col gap-[0.35rem]">
           {tab === 'lifts' ? (
             sortedLifts.length > 0 ? (
-              sortedLifts.map((s, i) => {
+              sortedLifts.slice(0, visibleCount).map((s, i) => {
                 const isPb = s.date === pbDate
                 return (
                   <div key={i} className={`bg-surface-container p-5 flex justify-between items-center hover:bg-surface-container-high transition-all cursor-pointer rounded-lg ${isPb ? 'border border-primary-container/30' : ''}`}>
@@ -1718,7 +1720,7 @@ export default function ProgressPage() {
             )
           ) : (
             sortedCardio.length > 0 ? (
-              sortedCardio.map((s, i) => {
+              sortedCardio.slice(0, visibleCount).map((s, i) => {
                 const isFastest = !!(fastestRunEntry && s.date === fastestRunEntry.date && s.pace === fastestRunEntry.pace)
                 const isSelected = s.cardio_id ? selectedIds.has(s.cardio_id) : false
                 return (
@@ -1770,6 +1772,17 @@ export default function ProgressPage() {
               !loading && <p className="text-sm text-on-surface-variant text-center py-4">No cardio history yet</p>
             )
           )}
+          {!loading && (() => {
+            const total = tab === 'lifts' ? sortedLifts.length : sortedCardio.length
+            return total > visibleCount ? (
+              <button
+                onClick={() => setVisibleCount(c => c + 10)}
+                className="mt-2 w-full py-3 rounded-xl bg-surface-container text-on-surface-variant text-sm font-bold font-label hover:bg-surface-container-high transition-colors"
+              >
+                Load more ({total - visibleCount} remaining)
+              </button>
+            ) : null
+          })()}
           {loading && (
             <div className="flex justify-center py-8">
               <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />

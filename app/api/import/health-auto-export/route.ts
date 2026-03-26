@@ -30,6 +30,7 @@ function qtyInKm(obj: unknown): number {
 }
 
 export async function POST(req: NextRequest) {
+  const force = req.nextUrl.searchParams.get('force') === '1'
   const apiKey = req.headers.get('x-api-key') ?? req.headers.get('authorization')?.replace('Bearer ', '')
   if (!apiKey) return NextResponse.json({ error: 'Missing X-API-Key header' }, { status: 401 })
 
@@ -39,11 +40,6 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
-  // Debug mode
-  if (req.headers.get('x-debug') === '1') {
-    return NextResponse.json({ debug: true, keys: Object.keys(body), sample: JSON.stringify(body).slice(0, 500) })
-  }
-
   // Health Auto Export: { data: { workouts: [...] } }
   let rawWorkouts: Record<string, unknown>[]
   if (Array.isArray(body)) rawWorkouts = body
@@ -51,6 +47,23 @@ export async function POST(req: NextRequest) {
   else if (body.data && Array.isArray((body.data as Record<string, unknown>).workouts)) rawWorkouts = (body.data as Record<string, unknown>).workouts as Record<string, unknown>[]
   else if (Array.isArray(body.workouts)) rawWorkouts = body.workouts
   else rawWorkouts = []
+
+  // Debug mode — runs after rawWorkouts is parsed
+  if (req.headers.get('x-debug') === '1') {
+    return NextResponse.json({
+      debug: true,
+      total: rawWorkouts.length,
+      workouts: rawWorkouts.map(w => ({
+        name: w.name,
+        start: w.start,
+        keys: Object.keys(w),
+        heartRateDataLength: Array.isArray(w.heartRateData) ? (w.heartRateData as unknown[]).length : 'missing',
+        heartRateRecoveryLength: Array.isArray(w.heartRateRecovery) ? (w.heartRateRecovery as unknown[]).length : 'missing',
+        heartRateSample: Array.isArray(w.heartRateData) ? (w.heartRateData as unknown[])[0] : (Array.isArray(w.heartRateRecovery) ? (w.heartRateRecovery as unknown[])[0] : null),
+        heartRate: w.heartRate,
+      })),
+    })
+  }
 
   if (rawWorkouts.length === 0) return NextResponse.json({ error: 'No workouts provided' }, { status: 400 })
 
@@ -78,14 +91,29 @@ export async function POST(req: NextRequest) {
 
       // Duplicate check
       const dupCheck = await db.execute({
-        sql: `SELECT c.id FROM cardio c
+        sql: `SELECT c.id, c.block_id FROM cardio c
               JOIN blocks b ON b.id = c.block_id
               JOIN sessions s ON s.id = b.session_id
               WHERE s.user_id = ? AND c.started_at = ?
               LIMIT 1`,
         args: [userId, startStr],
       })
-      if (dupCheck.rows.length > 0) { duplicates++; continue }
+      let existingBlockId: number | null = null
+      if (dupCheck.rows.length > 0) {
+        const existingId = dupCheck.rows[0].id as number
+        // Check if the existing entry is missing HR samples
+        const hrCheck = await db.execute({
+          sql: `SELECT COUNT(*) as n FROM cardio_hr_samples WHERE cardio_id = ?`,
+          args: [existingId],
+        })
+        const hasSamples = (hrCheck.rows[0].n as number) > 0
+        if (!force && hasSamples) { duplicates++; continue }
+        // Re-import: wipe cardio + samples, reuse existing block/session
+        existingBlockId = dupCheck.rows[0].block_id as number
+        await db.execute({ sql: `DELETE FROM cardio_hr_samples WHERE cardio_id = ?`, args: [existingId] })
+        await db.execute({ sql: `DELETE FROM cardio_distance_samples WHERE cardio_id = ?`, args: [existingId] })
+        await db.execute({ sql: `DELETE FROM cardio WHERE id = ?`, args: [existingId] })
+      }
 
       // Duration (already in seconds in v2)
       const totalSec = !isNaN(Number(raw.duration)) ? Math.round(Number(raw.duration)) : Math.round((endTs - startTs) / 1000)
@@ -108,16 +136,25 @@ export async function POST(req: NextRequest) {
       // Calories — activeEnergyBurned takes priority over totalEnergy
       const cals = !isNaN(qty(raw.activeEnergyBurned)) ? qty(raw.activeEnergyBurned) : qty(raw.totalEnergy)
 
-      // Heart rate — v2 sends heartRate: { min, avg, max } or avgHeartRate/maxHeartRate
+      // Heart rate — try both {qty} nested objects (v2) and plain numbers with capitalized keys
+      function hrVal(obj: unknown): number {
+        if (obj == null) return NaN
+        if (typeof obj === 'number') return obj
+        if (typeof obj === 'object') {
+          const o = obj as Record<string, unknown>
+          if ('qty' in o) return Number(o.qty)
+        }
+        return NaN
+      }
       let avgHR = NaN, minHR = NaN, maxHR = NaN
       if (raw.heartRate && typeof raw.heartRate === 'object') {
         const hr = raw.heartRate as Record<string, unknown>
-        avgHR = qty(hr.avg)
-        minHR = qty(hr.min)
-        maxHR = qty(hr.max)
+        avgHR = hrVal(hr.avg ?? hr.Avg)
+        minHR = hrVal(hr.min ?? hr.Min)
+        maxHR = hrVal(hr.max ?? hr.Max)
       }
-      if (isNaN(avgHR)) avgHR = qty(raw.avgHeartRate)
-      if (isNaN(maxHR)) maxHR = qty(raw.maxHeartRate)
+      if (isNaN(avgHR)) avgHR = hrVal(raw.avgHeartRate)
+      if (isNaN(maxHR)) maxHR = hrVal(raw.maxHeartRate)
 
       // HR time-series — heartRateData[]: [{ date, Avg, Min, Max }]
       const hrSamples: Array<{ offsetSec: number; bpm: number }> = []
@@ -126,7 +163,6 @@ export async function POST(req: NextRequest) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
           const bpm = Math.round(Number(s.Avg ?? s.avg ?? s.qty ?? s.value ?? NaN))
           if (isNaN(ts) || isNaN(bpm) || bpm <= 0) continue
-          if (ts < startTs || ts > endTs) continue
           hrSamples.push({ offsetSec: Math.round((ts - startTs) / 1000), bpm })
         }
       }
@@ -148,17 +184,22 @@ export async function POST(req: NextRequest) {
 
       const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'cardio' : 'run'
 
-      const sessionRes = await db.execute({
-        sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
-        args: [userId, date],
-      })
-      const sessionId = sessionRes.rows[0].id as number
+      let blockId: number
+      if (existingBlockId !== null) {
+        blockId = existingBlockId
+      } else {
+        const sessionRes = await db.execute({
+          sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
+          args: [userId, date],
+        })
+        const sessionId = sessionRes.rows[0].id as number
 
-      const blockRes = await db.execute({
-        sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, 0) RETURNING id',
-        args: [sessionId, blockType],
-      })
-      const blockId = blockRes.rows[0].id as number
+        const blockRes = await db.execute({
+          sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, 0) RETURNING id',
+          args: [sessionId, blockType],
+        })
+        blockId = blockRes.rows[0].id as number
+      }
 
       const cardioRes = await db.execute({
         sql: `INSERT INTO cardio
