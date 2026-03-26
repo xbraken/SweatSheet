@@ -532,14 +532,15 @@ export default function LogPage() {
     refreshCurrent()
   }
 
-  // Delete a logged block
-  const deleteBlock = async (blockId: number) => {
-    await fetch('/api/log', {
+  // Delete a logged block — optimistic: remove from UI immediately
+  const deleteBlock = (blockId: number) => {
+    setLoggedLifts(prev => prev.filter(l => l.block_id !== blockId))
+    setLoggedCardio(prev => prev.filter(c => c.block_id !== blockId))
+    fetch('/api/log', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blockId }),
     })
-    refreshCurrent()
   }
 
   // ── List view ───────────────────────────────────────────────────────────────
