@@ -43,3 +43,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     distanceSamples: distSamplesRes.rows,
   })
 }
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const cardioId = parseInt(id)
+  if (isNaN(cardioId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+
+  const { activity } = await req.json()
+  if (!['Run', 'Indoor run', 'Interval run'].includes(activity)) {
+    return NextResponse.json({ error: 'Invalid activity' }, { status: 400 })
+  }
+
+  await db.execute({
+    sql: `UPDATE cardio SET activity = ?
+          WHERE id = ? AND block_id IN (
+            SELECT b.id FROM blocks b
+            JOIN sessions s ON s.id = b.session_id
+            WHERE s.user_id = ?
+          )`,
+    args: [activity, cardioId, session.userId],
+  })
+
+  return NextResponse.json({ ok: true, activity })
+}

@@ -97,6 +97,7 @@ function RunDetailSheet({
   const [compareSearch, setCompareSearch] = useState('')
   const [chartHoveredIdx, setChartHoveredIdx] = useState<number | null>(null)
   const [paceHoveredIdx, setPaceHoveredIdx] = useState<number | null>(null)
+  const [togglingInterval, setTogglingInterval] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -317,9 +318,31 @@ function RunDetailSheet({
               {detail.calories && <span className="text-sm text-[#a48b83]">{detail.calories} kcal</span>}
             </div>
           </div>
-          <button onClick={onClose} className="p-1">
-            <span className="material-symbols-outlined text-[#a48b83]">close</span>
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button onClick={onClose} className="p-1">
+              <span className="material-symbols-outlined text-[#a48b83]">close</span>
+            </button>
+            {detail && ['Run', 'Indoor run', 'Interval run'].includes(detail.activity) && (
+              <button
+                disabled={togglingInterval}
+                onClick={async () => {
+                  if (!detail) return
+                  const newActivity = detail.activity === 'Interval run' ? 'Run' : 'Interval run'
+                  setTogglingInterval(true)
+                  await fetch(`/api/run/${runId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ activity: newActivity }),
+                  })
+                  setDetail({ ...detail, activity: newActivity })
+                  setTogglingInterval(false)
+                }}
+                className="text-[10px] font-bold font-label uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-[#4bdece]/10 text-[#4bdece]"
+              >
+                {detail.activity === 'Interval run' ? 'Unmark interval' : 'Mark as interval'}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-32 md:pb-8 md:max-w-3xl md:mx-auto md:w-full">
