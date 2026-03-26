@@ -109,19 +109,19 @@ export async function POST(req: NextRequest) {
       let avgHR = NaN, minHR = NaN, maxHR = NaN
       if (raw.heartRate && typeof raw.heartRate === 'object') {
         const hr = raw.heartRate as Record<string, unknown>
-        avgHR = Number(hr.avg ?? NaN)
-        minHR = Number(hr.min ?? NaN)
-        maxHR = Number(hr.max ?? NaN)
+        avgHR = qty(hr.avg)
+        minHR = qty(hr.min)
+        maxHR = qty(hr.max)
       }
-      if (isNaN(avgHR)) avgHR = Number(raw.avgHeartRate ?? NaN)
-      if (isNaN(maxHR)) maxHR = Number(raw.maxHeartRate ?? NaN)
+      if (isNaN(avgHR)) avgHR = qty(raw.avgHeartRate)
+      if (isNaN(maxHR)) maxHR = qty(raw.maxHeartRate)
 
-      // HR time-series — heartRateData[]: [{ date, qty }]
+      // HR time-series — heartRateData[]: [{ date, Avg, Min, Max }]
       const hrSamples: Array<{ offsetSec: number; bpm: number }> = []
       if (Array.isArray(raw.heartRateData)) {
         for (const s of raw.heartRateData as Record<string, unknown>[]) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
-          const bpm = Math.round(Number(s.qty ?? s.value ?? NaN))
+          const bpm = Math.round(Number(s.Avg ?? s.avg ?? s.qty ?? s.value ?? NaN))
           if (isNaN(ts) || isNaN(bpm) || bpm <= 0) continue
           if (ts < startTs || ts > endTs) continue
           hrSamples.push({ offsetSec: Math.round((ts - startTs) / 1000), bpm })
