@@ -20,7 +20,7 @@ function ActivityLabel({ activity, className }: { activity: string; className?: 
   )
 }
 
-type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number }
+type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number; rows: { weight: number; reps: number }[] }
 type CardioEntry = {
   cardio_id: number
   date: string
@@ -1699,23 +1699,34 @@ export default function ProgressPage() {
               sortedLifts.slice(0, visibleCount).map((s, i) => {
                 const isPb = s.date === pbDate
                 return (
-                  <div key={i} className={`bg-surface-container p-5 flex justify-between items-center hover:bg-surface-container-high transition-all cursor-pointer rounded-lg ${isPb ? 'border border-primary-container/30' : ''}`}>
-                    <div className="flex flex-col gap-1">
-                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-black font-headline text-on-surface">
-                          {Number(s.max_weight)}{' '}
-                          <span className="text-xs font-normal text-on-surface-variant">kg</span>
-                        </span>
-                        {isPb && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-primary-container text-[#752805] uppercase tracking-wide">PB</span>
-                        )}
+                  <div key={i} className={`bg-surface-container p-4 flex flex-col gap-3 rounded-lg ${isPb ? 'border border-primary-container/30' : ''}`}>
+                    <div className="flex justify-between items-center">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-black font-headline text-on-surface">
+                            {Number(s.max_weight)}{' '}
+                            <span className="text-xs font-normal text-on-surface-variant">kg</span>
+                          </span>
+                          {isPb && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-primary-container text-[#752805] uppercase tracking-wide">PB</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase mb-1">Volume</p>
+                        <p className="font-bold text-on-surface">{Number(s.volume).toFixed(0)} kg</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase mb-1">Volume</p>
-                      <p className="font-bold text-on-surface">{Number(s.volume).toFixed(0)} kg</p>
-                    </div>
+                    {s.rows?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {s.rows.map((r, j) => (
+                          <span key={j} className="bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg">
+                            {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })

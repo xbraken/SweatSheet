@@ -27,21 +27,32 @@ export async function GET(req: NextRequest) {
     let liftHistory: object[] = []
     if (exercise) {
       const liftRes = await db.execute({
-        sql: `
-          SELECT s.date,
-            MAX(st.weight) as max_weight,
-            SUM(st.weight * st.reps) as volume,
-            COUNT(*) as set_count
-          FROM sets st
-          JOIN blocks b ON st.block_id = b.id
-          JOIN sessions s ON b.session_id = s.id
-          WHERE st.exercise = ? AND s.user_id = ?
-          GROUP BY s.date
-          ORDER BY s.date DESC
-        `,
+        sql: `SELECT s.date, st.weight, st.reps
+              FROM sets st
+              JOIN blocks b ON st.block_id = b.id
+              JOIN sessions s ON b.session_id = s.id
+              WHERE st.exercise = ? AND s.user_id = ?
+              ORDER BY s.date DESC, b.id, st.id`,
         args: [exercise, userId],
       })
-      liftHistory = liftRes.rows
+      const dateMap = new Map<string, { max_weight: number; volume: number; rows: { weight: number; reps: number }[] }>()
+      for (const r of liftRes.rows) {
+        const date = r.date as string
+        const weight = Number(r.weight)
+        const reps = Number(r.reps)
+        const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, rows: [] }
+        cur.max_weight = Math.max(cur.max_weight, weight)
+        cur.volume += weight * reps
+        cur.rows.push({ weight, reps })
+        dateMap.set(date, cur)
+      }
+      liftHistory = Array.from(dateMap.entries()).map(([date, d]) => ({
+        date,
+        max_weight: d.max_weight,
+        volume: Math.round(d.volume),
+        set_count: d.rows.length,
+        rows: d.rows,
+      }))
     }
 
     // Cardio history — all entries for trend analysis
