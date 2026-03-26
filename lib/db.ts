@@ -123,5 +123,15 @@ async function _runInit() {
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(follower_id, following_id)
   )`)
+
+  // Indexes for common query patterns
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_user_date ON sessions(user_id, date)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_blocks_session ON blocks(session_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sets_block ON sets(block_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sets_exercise ON sets(exercise)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_cardio_block ON cardio(block_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_hr_samples_cardio ON cardio_hr_samples(cardio_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_dist_samples_cardio ON cardio_distance_samples(cardio_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)`)
 }
 

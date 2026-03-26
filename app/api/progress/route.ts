@@ -13,28 +13,62 @@ export async function GET(req: NextRequest) {
   const userId = session.userId
 
   try {
-    // Distinct exercises that have been logged by this user
-    const exercisesRes = await db.execute({
-      sql: `SELECT DISTINCT st.exercise FROM sets st
-            JOIN blocks b ON st.block_id = b.id
-            JOIN sessions s ON b.session_id = s.id
-            WHERE s.user_id = ? ORDER BY st.exercise`,
-      args: [userId],
-    })
-    const exercises = exercisesRes.rows.map(r => r.exercise as string)
-
-    // Lift history for the selected exercise
-    let liftHistory: object[] = []
-    if (exercise) {
-      const liftRes = await db.execute({
-        sql: `SELECT s.date, st.id, st.weight, st.reps, st.logged_at
-              FROM sets st
+    // Run independent queries in parallel
+    const [exercisesRes, cardioRes, calendarRes, liftRes] = await Promise.all([
+      db.execute({
+        sql: `SELECT DISTINCT st.exercise FROM sets st
               JOIN blocks b ON st.block_id = b.id
               JOIN sessions s ON b.session_id = s.id
-              WHERE st.exercise = ? AND s.user_id = ?
-              ORDER BY s.date DESC, b.id, st.id`,
-        args: [exercise, userId],
-      })
+              WHERE s.user_id = ? ORDER BY st.exercise`,
+        args: [userId],
+      }),
+      db.execute({
+        sql: `SELECT c.id as cardio_id, s.date, c.activity, c.distance, c.duration, c.pace, c.calories, c.heart_rate, COALESCE(c.started_at, s.created_at) as started_at
+              FROM cardio c
+              JOIN blocks b ON c.block_id = b.id
+              JOIN sessions s ON b.session_id = s.id
+              WHERE s.user_id = ?
+              ORDER BY s.date DESC
+              LIMIT 500`,
+        args: [userId],
+      }),
+      db.execute({
+        sql: `SELECT s.date,
+                MAX(lft.max_weight) as max_weight,
+                SUM(crd.total_distance) as total_distance,
+                COALESCE(SUM(crd.cardio_count), 0) as cardio_count
+              FROM sessions s
+              LEFT JOIN (
+                SELECT b.session_id, MAX(st.weight) as max_weight
+                FROM sets st JOIN blocks b ON st.block_id = b.id AND b.type = 'lift'
+                GROUP BY b.session_id
+              ) lft ON lft.session_id = s.id
+              LEFT JOIN (
+                SELECT b.session_id, SUM(c.distance) as total_distance, COUNT(*) as cardio_count
+                FROM cardio c JOIN blocks b ON c.block_id = b.id
+                GROUP BY b.session_id
+              ) crd ON crd.session_id = s.id
+              WHERE s.user_id = ?
+              GROUP BY s.date`,
+        args: [userId],
+      }),
+      exercise
+        ? db.execute({
+            sql: `SELECT s.date, st.id, st.weight, st.reps, st.logged_at
+                  FROM sets st
+                  JOIN blocks b ON st.block_id = b.id
+                  JOIN sessions s ON b.session_id = s.id
+                  WHERE st.exercise = ? AND s.user_id = ?
+                  ORDER BY s.date DESC, b.id, st.id`,
+            args: [exercise, userId],
+          })
+        : Promise.resolve({ rows: [] }),
+    ])
+
+    const exercises = exercisesRes.rows.map(r => r.exercise as string)
+
+    let liftHistory: object[] = []
+    if (exercise && liftRes.rows.length > 0) {
       const dateMap = new Map<string, { max_weight: number; volume: number; rows: { id: number; weight: number; reps: number; logged_at: string | null }[]; first_logged_at: string | null }>()
       for (const r of liftRes.rows) {
         const date = r.date as string
@@ -58,39 +92,6 @@ export async function GET(req: NextRequest) {
         first_logged_at: d.first_logged_at,
       }))
     }
-
-    // Cardio history — all entries for trend analysis
-    const cardioRes = await db.execute({
-      sql: `SELECT c.id as cardio_id, s.date, c.activity, c.distance, c.duration, c.pace, c.calories, c.heart_rate, COALESCE(c.started_at, s.created_at) as started_at
-            FROM cardio c
-            JOIN blocks b ON c.block_id = b.id
-            JOIN sessions s ON b.session_id = s.id
-            WHERE s.user_id = ?
-            ORDER BY s.date DESC`,
-      args: [userId],
-    })
-
-    // Calendar data — per day, using subqueries to avoid cross-product between sets and cardio
-    const calendarRes = await db.execute({
-      sql: `SELECT s.date,
-              MAX(lft.max_weight) as max_weight,
-              SUM(crd.total_distance) as total_distance,
-              COALESCE(SUM(crd.cardio_count), 0) as cardio_count
-            FROM sessions s
-            LEFT JOIN (
-              SELECT b.session_id, MAX(st.weight) as max_weight
-              FROM sets st JOIN blocks b ON st.block_id = b.id AND b.type = 'lift'
-              GROUP BY b.session_id
-            ) lft ON lft.session_id = s.id
-            LEFT JOIN (
-              SELECT b.session_id, SUM(c.distance) as total_distance, COUNT(*) as cardio_count
-              FROM cardio c JOIN blocks b ON c.block_id = b.id
-              GROUP BY b.session_id
-            ) crd ON crd.session_id = s.id
-            WHERE s.user_id = ?
-            GROUP BY s.date`,
-      args: [userId],
-    })
 
     return NextResponse.json({
       exercises,

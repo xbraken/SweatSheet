@@ -12,31 +12,31 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const cardioId = parseInt(id)
   if (isNaN(cardioId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const runRes = await db.execute({
-    sql: `SELECT c.id as cardio_id, c.activity, c.distance, c.duration, c.pace,
-                 c.calories, c.heart_rate, c.hr_min, c.hr_max, s.date,
-                 COALESCE(c.started_at, s.created_at) as started_at
-          FROM cardio c
-          JOIN blocks b ON c.block_id = b.id
-          JOIN sessions s ON b.session_id = s.id
-          WHERE c.id = ? AND s.user_id = ?
-          LIMIT 1`,
-    args: [cardioId, session.userId],
-  })
+  const [runRes, samplesRes, distSamplesRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT c.id as cardio_id, c.activity, c.distance, c.duration, c.pace,
+                   c.calories, c.heart_rate, c.hr_min, c.hr_max, s.date,
+                   COALESCE(c.started_at, s.created_at) as started_at
+            FROM cardio c
+            JOIN blocks b ON c.block_id = b.id
+            JOIN sessions s ON b.session_id = s.id
+            WHERE c.id = ? AND s.user_id = ?
+            LIMIT 1`,
+      args: [cardioId, session.userId],
+    }),
+    db.execute({
+      sql: `SELECT time_offset_sec, hr_bpm FROM cardio_hr_samples
+            WHERE cardio_id = ? ORDER BY time_offset_sec`,
+      args: [cardioId],
+    }),
+    db.execute({
+      sql: `SELECT time_offset_sec, distance_km FROM cardio_distance_samples
+            WHERE cardio_id = ? ORDER BY time_offset_sec`,
+      args: [cardioId],
+    }),
+  ])
 
   if (runRes.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const samplesRes = await db.execute({
-    sql: `SELECT time_offset_sec, hr_bpm FROM cardio_hr_samples
-          WHERE cardio_id = ? ORDER BY time_offset_sec`,
-    args: [cardioId],
-  })
-
-  const distSamplesRes = await db.execute({
-    sql: `SELECT time_offset_sec, distance_km FROM cardio_distance_samples
-          WHERE cardio_id = ? ORDER BY time_offset_sec`,
-    args: [cardioId],
-  })
 
   return NextResponse.json({
     ...runRes.rows[0],

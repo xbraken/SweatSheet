@@ -12,44 +12,45 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const today = searchParams.get('date') ?? new Date().toISOString().split('T')[0]
 
-  const liftRes = await db.execute({
-    sql: `SELECT b.id as block_id, st.exercise,
-            COUNT(st.id) as set_count,
-            MAX(st.weight) as max_weight
-          FROM blocks b
-          JOIN sessions s ON b.session_id = s.id
-          JOIN sets st ON st.block_id = b.id
-          WHERE s.user_id = ? AND s.date = ? AND b.type = 'lift'
-          GROUP BY b.id, st.exercise
-          ORDER BY b.id DESC`,
-    args: [session.userId, today],
-  })
+  const [liftRes, setsRes, cardioRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT b.id as block_id, st.exercise,
+              COUNT(st.id) as set_count,
+              MAX(st.weight) as max_weight
+            FROM blocks b
+            JOIN sessions s ON b.session_id = s.id
+            JOIN sets st ON st.block_id = b.id
+            WHERE s.user_id = ? AND s.date = ? AND b.type = 'lift'
+            GROUP BY b.id, st.exercise
+            ORDER BY b.id DESC`,
+      args: [session.userId, today],
+    }),
+    db.execute({
+      sql: `SELECT st.id, st.block_id, st.weight, st.reps
+            FROM sets st
+            JOIN blocks b ON st.block_id = b.id
+            JOIN sessions s ON b.session_id = s.id
+            WHERE s.user_id = ? AND s.date = ?
+            ORDER BY b.id, st.position`,
+      args: [session.userId, today],
+    }),
+    db.execute({
+      sql: `SELECT b.id as block_id, c.id as cardio_id, c.activity, c.distance, c.duration, c.pace
+            FROM blocks b
+            JOIN sessions s ON b.session_id = s.id
+            JOIN cardio c ON c.block_id = b.id
+            WHERE s.user_id = ? AND s.date = ?
+            ORDER BY b.id DESC`,
+      args: [session.userId, today],
+    }),
+  ])
 
-  const setsRes = await db.execute({
-    sql: `SELECT st.id, st.block_id, st.weight, st.reps
-          FROM sets st
-          JOIN blocks b ON st.block_id = b.id
-          JOIN sessions s ON b.session_id = s.id
-          WHERE s.user_id = ? AND s.date = ?
-          ORDER BY b.id, st.position`,
-    args: [session.userId, today],
-  })
   const setsByBlock: Record<number, {id: number; weight: number; reps: number}[]> = {}
   for (const r of setsRes.rows) {
     const bid = r.block_id as number
     if (!setsByBlock[bid]) setsByBlock[bid] = []
     setsByBlock[bid].push({ id: r.id as number, weight: Number(r.weight), reps: Number(r.reps) })
   }
-
-  const cardioRes = await db.execute({
-    sql: `SELECT b.id as block_id, c.id as cardio_id, c.activity, c.distance, c.duration, c.pace
-          FROM blocks b
-          JOIN sessions s ON b.session_id = s.id
-          JOIN cardio c ON c.block_id = b.id
-          WHERE s.user_id = ? AND s.date = ?
-          ORDER BY b.id DESC`,
-    args: [session.userId, today],
-  })
 
   return NextResponse.json({
     lifts: liftRes.rows.map(r => ({ ...r, sets: setsByBlock[r.block_id as number] ?? [] })),
@@ -102,13 +103,12 @@ export async function POST(req: NextRequest) {
       })
       const blockId = blockRes.rows[0].id as number
 
-      for (let j = 0; j < doneSets.length; j++) {
-        const s = doneSets[j]
-        await db.execute({
+      await Promise.all(doneSets.map((s: { weight: number; reps: number }, j: number) =>
+        db.execute({
           sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))',
           args: [blockId, exercise, s.weight, s.reps, j],
         })
-      }
+      ))
 
       // PR detection
       const maxNew = Math.max(...doneSets.map((s: { weight: number }) => s.weight))
@@ -188,8 +188,10 @@ export async function DELETE(req: NextRequest) {
   })
   if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await db.execute({ sql: 'DELETE FROM sets WHERE block_id = ?', args: [blockId] })
-  await db.execute({ sql: 'DELETE FROM cardio WHERE block_id = ?', args: [blockId] })
+  await Promise.all([
+    db.execute({ sql: 'DELETE FROM sets WHERE block_id = ?', args: [blockId] }),
+    db.execute({ sql: 'DELETE FROM cardio WHERE block_id = ?', args: [blockId] }),
+  ])
   await db.execute({ sql: 'DELETE FROM blocks WHERE id = ?', args: [blockId] })
 
   return NextResponse.json({ ok: true })
