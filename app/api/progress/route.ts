@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
     // Cardio history — all entries for trend analysis
     const cardioRes = await db.execute({
-      sql: `SELECT c.id as cardio_id, s.date, c.activity, c.distance, c.duration, c.pace, c.calories, c.heart_rate, c.started_at
+      sql: `SELECT c.id as cardio_id, s.date, c.activity, c.distance, c.duration, c.pace, c.calories, c.heart_rate, COALESCE(c.started_at, s.created_at) as started_at
             FROM cardio c
             JOIN blocks b ON c.block_id = b.id
             JOIN sessions s ON b.session_id = s.id

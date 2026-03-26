@@ -1874,10 +1874,10 @@ export default function ProgressPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
                         {s.started_at && (() => {
-                          try {
-                            const t = new Date(s.started_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-                            return <p className="text-[10px] font-mono text-on-surface-variant/50">{t}</p>
-                          } catch { return null }
+                          const raw = s.started_at
+                          const normalized = /[Z+\-]\d*$/.test(raw) ? raw : raw.replace(' ', 'T') + 'Z'
+                          const t = new Date(normalized).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                          return <p className="text-[10px] font-mono text-on-surface-variant/50">{t}</p>
                         })()}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
