@@ -77,18 +77,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
     const cardioBlocks = blocks.filter(b => b.type !== 'lift')
 
     let totalVolume = 0, totalSets = 0
-    const exMap = new Map<string, { volume: number; sets: number }>()
+    const exMap = new Map<string, { volume: number; rows: Array<{ weight: number; reps: number }> }>()
     for (const b of liftBlocks) {
       for (const s of setsByBlock.get(b.id as number) ?? []) {
-        const vol = (s.weight as number) * (s.reps as number)
+        const weight = s.weight as number
+        const reps = s.reps as number
+        const vol = weight * reps
         totalVolume += vol
         totalSets++
         const ex = s.exercise as string
-        const cur = exMap.get(ex) ?? { volume: 0, sets: 0 }
-        exMap.set(ex, { volume: cur.volume + vol, sets: cur.sets + 1 })
+        const cur = exMap.get(ex) ?? { volume: 0, rows: [] }
+        cur.volume += vol
+        cur.rows.push({ weight, reps })
+        exMap.set(ex, cur)
       }
     }
-    const exercises = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: Math.round(st.volume), sets: st.sets }))
+    const exercises = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: Math.round(st.volume), rows: st.rows }))
 
     const cardioList = cardioBlocks.map(b => cardioByBlock.get(b.id as number)).filter(Boolean) as Record<string, unknown>[]
 
