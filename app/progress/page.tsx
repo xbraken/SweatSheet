@@ -6,22 +6,16 @@ function baseActivity(activity: string) {
   return activity.toLowerCase().includes('run') ? 'Run' : activity
 }
 
-function runSubtype(activity: string): 'interval' | 'indoor' | 'outdoor' {
-  const a = activity.toLowerCase()
-  if (a === 'interval run') return 'interval'
-  if (a === 'indoor run') return 'indoor'
-  return 'outdoor'
+function runSubtype(activity: string): 'interval' | 'run' {
+  return activity.toLowerCase() === 'interval run' ? 'interval' : 'run'
 }
 
-function ActivityLabel({ activity, showOutdoor = false, className }: { activity: string; showOutdoor?: boolean; className?: string }) {
-  const sub = runSubtype(activity)
-  const isRun = activity.toLowerCase().includes('run')
+function ActivityLabel({ activity, className }: { activity: string; className?: string }) {
+  const isInterval = activity.toLowerCase() === 'interval run'
   return (
     <span className={`inline-flex items-center gap-1.5 ${className ?? ''}`}>
       {baseActivity(activity)}
-      {isRun && sub === 'interval' && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
-      {isRun && sub === 'indoor' && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#a48b83]/20 text-[#a48b83] uppercase tracking-wide leading-none">INDOOR</span>}
-      {isRun && sub === 'outdoor' && showOutdoor && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#ff9066]/10 text-[#ff9066] uppercase tracking-wide leading-none">OUTDOOR</span>}
+      {isInterval && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
     </span>
   )
 }
@@ -895,7 +889,7 @@ export default function ProgressPage() {
   const [liftHistory, setLiftHistory] = useState<LiftEntry[]>([])
   const [cardioHistory, setCardioHistory] = useState<CardioEntry[]>([])
   const [cardioActivity, setCardioActivity] = useState('')
-  const [runSubFilter, setRunSubFilter] = useState<'all' | 'outdoor' | 'indoor' | 'interval'>('all')
+  const [runSubFilter, setRunSubFilter] = useState<'all' | 'interval' | 'run'>('all')
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
   const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>(() =>
@@ -1016,9 +1010,9 @@ export default function ProgressPage() {
     [cardioHistory]
   )
   const filteredCardioHistory = useMemo(() => {
-    let result = cardioActivity ? cardioHistory.filter(e => baseActivity(e.activity) === cardioActivity) : cardioHistory
+    const result = cardioActivity ? cardioHistory.filter(e => baseActivity(e.activity) === cardioActivity) : cardioHistory
     if (cardioActivity === 'Run' && runSubFilter !== 'all') {
-      result = result.filter(e => runSubtype(e.activity) === runSubFilter)
+      return result.filter(e => runSubtype(e.activity) === runSubFilter)
     }
     return result
   }, [cardioHistory, cardioActivity, runSubFilter])
@@ -1088,10 +1082,10 @@ export default function ProgressPage() {
     return arr
   }, [liftHistory, liftSort])
 
-  const hasMultipleRunSubtypes = useMemo(() => {
-    const subtypes = new Set(cardioHistory.filter(e => baseActivity(e.activity) === 'Run').map(e => runSubtype(e.activity)))
-    return subtypes.size > 1
-  }, [cardioHistory])
+  const hasIntervalRuns = useMemo(
+    () => cardioHistory.some(e => runSubtype(e.activity) === 'interval'),
+    [cardioHistory]
+  )
 
   const sortedCardio = useMemo(() => {
     const arr = [...filteredCardioHistory]
@@ -1615,26 +1609,22 @@ export default function ProgressPage() {
           )}
         </div>
 
-        {/* Run sub-filter pills */}
-        {tab === 'cardio' && cardioActivity === 'Run' && (() => {
-          const subtypes = [...new Set(cardioHistory.filter(e => baseActivity(e.activity) === 'Run').map(e => runSubtype(e.activity)))]
-          if (subtypes.length <= 1) return null
-          return (
-            <div className="flex gap-2 flex-wrap">
-              {(['all', ...subtypes] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setRunSubFilter(s as typeof runSubFilter)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
-                    runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
-                  }`}
-                >
-                  {s === 'all' ? 'All' : s}
-                </button>
-              ))}
-            </div>
-          )
-        })()}
+        {/* Run sub-filter pills — only show if there are interval runs */}
+        {tab === 'cardio' && cardioActivity === 'Run' && hasIntervalRuns && (
+          <div className="flex gap-2">
+            {(['all', 'run', 'interval'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setRunSubFilter(s)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+                  runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
+                }`}
+              >
+                {s === 'all' ? 'All' : s === 'run' ? 'Regular' : 'Interval'}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Bulk delete bar */}
         {selectMode && selectedIds.size > 0 && (
@@ -1732,7 +1722,7 @@ export default function ProgressPage() {
                     </div>
                     </div>
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
-                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} showOutdoor={hasMultipleRunSubtypes} /></p>
+                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} /></p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
                       {s.heart_rate && <p className="text-xs text-[#ff9066]">♥ {s.heart_rate} avg</p>}
