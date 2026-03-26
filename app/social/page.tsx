@@ -9,7 +9,7 @@ interface FeedItem {
   sessionId: number
   date: string
   createdAt: string
-  lift: { volume: number; sets: number; exercises: string[] } | null
+  lift: { volume: number; sets: number; exercises: Array<{ name: string; volume: number; sets: number }> } | null
   cardio: Array<{ activity: string }> | null
 }
 
@@ -29,7 +29,7 @@ function timeAgo(utcStr: string): string {
 function feedSubtitle(item: FeedItem): string {
   if (item.cardio) return `${item.cardio[0]?.activity ?? 'Cardio'} · ${timeAgo(item.createdAt)}`
   if (item.lift) {
-    const label = item.lift.exercises.slice(0, 2).join(', ') || 'Lift'
+    const label = item.lift.exercises.slice(0, 2).map(e => e.name).join(', ') || 'Lift'
     return `${label} · ${timeAgo(item.createdAt)}`
   }
   return `Workout · ${timeAgo(item.createdAt)}`

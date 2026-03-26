@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 
 interface CardioRow { activity: string; distance: number | null; duration: string | null; pace: string | null; heart_rate: number | null }
+interface ExerciseStat { name: string; volume: number; sets: number }
 interface SessionItem {
   sessionId: number
   date: string
   createdAt: string
-  lift: { volume: number; sets: number; exercises: string[] } | null
+  lift: { volume: number; sets: number; exercises: ExerciseStat[] } | null
   cardio: CardioRow[] | null
 }
 interface ProfileData {
@@ -21,7 +22,7 @@ interface ProfileData {
 interface DayGroup {
   date: string
   cardio: CardioRow[] | null
-  lift: { volume: number; sets: number; exercises: string[] } | null
+  lift: { volume: number; sets: number; exercises: ExerciseStat[] } | null
 }
 
 function formatDate(dateStr: string): string {
@@ -34,15 +35,15 @@ function dayTitle(g: DayGroup): string {
   if (g.cardio) parts.push(g.cardio[0]?.activity ?? 'Cardio')
   if (g.lift) {
     const ex = g.lift.exercises
-    parts.push(ex.length > 0 ? ex.slice(0, 2).join(' · ') : 'Lift')
+    parts.push(ex.length > 0 ? ex.slice(0, 2).map(e => e.name).join(' · ') : 'Lift')
   }
   return parts.join(' + ') || 'Workout'
 }
 
 function dayBadges(g: DayGroup): Array<{ label: string; className: string }> {
   const badges: Array<{ label: string; className: string }> = []
-  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
-  if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
+  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
+  if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
   return badges
 }
 
@@ -78,17 +79,19 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
     return Array.from(map.entries()).map(([date, sessions]) => {
       const allCardio = sessions.flatMap(s => s.cardio ?? [])
       let volume = 0, sets = 0
-      const exercises: string[] = []
+      const exMap = new Map<string, { volume: number; sets: number }>()
       const hasLift = sessions.some(s => s.lift !== null)
       for (const s of sessions) {
         if (s.lift) {
           volume += s.lift.volume
           sets += s.lift.sets
           for (const e of s.lift.exercises) {
-            if (!exercises.includes(e)) exercises.push(e)
+            const cur = exMap.get(e.name) ?? { volume: 0, sets: 0 }
+            exMap.set(e.name, { volume: cur.volume + e.volume, sets: cur.sets + e.sets })
           }
         }
       }
+      const exercises: ExerciseStat[] = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: st.volume, sets: st.sets }))
       return {
         date,
         cardio: allCardio.length > 0 ? allCardio : null,
@@ -252,13 +255,18 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                                 </div>
                               </div>
                               {g.lift.exercises.length > 0 && (
-                                <div>
-                                  <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-2">Exercises</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {g.lift.exercises.map((e, i) => (
-                                      <span key={i} className="bg-[#4bdece]/10 text-[#4bdece] text-[11px] font-bold px-2.5 py-1 rounded-full">{e}</span>
-                                    ))}
-                                  </div>
+                                <div className="space-y-2">
+                                  {g.lift.exercises.map((e, i) => (
+                                    <div key={i} className="flex items-center justify-between">
+                                      <span className="text-[#e5e2e1] text-sm font-medium">{e.name}</span>
+                                      <div className="flex items-center gap-3 text-right">
+                                        <span className="text-[#a48b83] text-xs">{e.sets} sets</span>
+                                        <span className="text-[#ff9066] text-sm font-bold">
+                                          {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k` : e.volume} kg
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
                             </div>

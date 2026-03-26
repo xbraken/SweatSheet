@@ -86,15 +86,18 @@ export async function GET() {
 
     let totalVolume = 0
     let totalSets = 0
-    const exercises: string[] = []
+    const exMap = new Map<string, { volume: number; sets: number }>()
     for (const b of liftBlocks) {
-      const sets = setsByBlock.get(b.id as number) ?? []
-      for (const s of sets) {
-        totalVolume += (s.weight as number) * (s.reps as number)
+      for (const s of setsByBlock.get(b.id as number) ?? []) {
+        const vol = (s.weight as number) * (s.reps as number)
+        totalVolume += vol
         totalSets++
-        if (!exercises.includes(s.exercise as string)) exercises.push(s.exercise as string)
+        const ex = s.exercise as string
+        const cur = exMap.get(ex) ?? { volume: 0, sets: 0 }
+        exMap.set(ex, { volume: cur.volume + vol, sets: cur.sets + 1 })
       }
     }
+    const exercises = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: Math.round(st.volume), sets: st.sets }))
 
     const cardioList = cardioBlocks
       .map(b => cardioByBlock.get(b.id as number))
