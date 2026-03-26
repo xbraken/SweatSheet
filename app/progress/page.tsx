@@ -2,16 +2,25 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import BottomNav from '@/components/BottomNav'
 
+function baseActivity(activity: string) {
+  return activity.toLowerCase().includes('run') ? 'Run' : activity
+}
+
+function runSubtype(activity: string): 'interval' | 'indoor' | 'outdoor' {
+  const a = activity.toLowerCase()
+  if (a === 'interval run') return 'interval'
+  if (a === 'indoor run') return 'indoor'
+  return 'outdoor'
+}
+
 function ActivityLabel({ activity, className }: { activity: string; className?: string }) {
-  const base = activity.toLowerCase()
-  const isInterval = base === 'interval run'
-  const isIndoor = base === 'indoor run'
-  const label = base.includes('run') ? 'Run' : activity
+  const sub = runSubtype(activity)
+  const isRun = activity.toLowerCase().includes('run')
   return (
-    <span className={`inline-flex items-center gap-1 ${className ?? ''}`}>
-      {label}
-      {isInterval && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
-      {isIndoor && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#a48b83]/20 text-[#a48b83] uppercase tracking-wide leading-none">INDOOR</span>}
+    <span className={`inline-flex items-center gap-1.5 ${className ?? ''}`}>
+      {baseActivity(activity)}
+      {isRun && sub === 'interval' && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
+      {isRun && sub === 'indoor' && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#a48b83]/20 text-[#a48b83] uppercase tracking-wide leading-none">INDOOR</span>}
     </span>
   )
 }
@@ -885,6 +894,7 @@ export default function ProgressPage() {
   const [liftHistory, setLiftHistory] = useState<LiftEntry[]>([])
   const [cardioHistory, setCardioHistory] = useState<CardioEntry[]>([])
   const [cardioActivity, setCardioActivity] = useState('')
+  const [runSubFilter, setRunSubFilter] = useState<'all' | 'outdoor' | 'indoor' | 'interval'>('all')
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
   const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>(() =>
@@ -940,11 +950,11 @@ export default function ProgressPage() {
         setCalendarData(data.calendarData ?? [])
 
         // Restore saved cardio activity if still valid, else pick default
-        const activities = [...new Set((ch as CardioEntry[]).map(e => e.activity))]
+        const baseActivities = [...new Set((ch as CardioEntry[]).map(e => baseActivity(e.activity)))]
         const savedActivity = localStorage.getItem('ss_prog_cardio_activity')
-        const restoredActivity = savedActivity && activities.includes(savedActivity)
+        const restoredActivity = savedActivity && baseActivities.includes(savedActivity)
           ? savedActivity
-          : (activities.find(a => a === 'Run') ?? activities.find(a => a === 'Outdoor run') ?? activities[0] ?? '')
+          : (baseActivities.find(a => a === 'Run') ?? baseActivities[0] ?? '')
         setCardioActivity(restoredActivity)
 
         // Restore saved exercise if still valid, else pick first
@@ -1000,11 +1010,17 @@ export default function ProgressPage() {
   const peakWeight = liftHistory.length > 0 ? Math.max(...liftHistory.map(e => Number(e.max_weight))) : null
 
   // ── Cardio activity filter ───────────────────────────────────────────────────
-  const cardioActivities = useMemo(() => [...new Set(cardioHistory.map(e => e.activity))], [cardioHistory])
-  const filteredCardioHistory = useMemo(
-    () => cardioActivity ? cardioHistory.filter(e => e.activity === cardioActivity) : cardioHistory,
-    [cardioHistory, cardioActivity]
+  const cardioActivities = useMemo(
+    () => [...new Set(cardioHistory.map(e => baseActivity(e.activity)))],
+    [cardioHistory]
   )
+  const filteredCardioHistory = useMemo(() => {
+    let result = cardioActivity ? cardioHistory.filter(e => baseActivity(e.activity) === cardioActivity) : cardioHistory
+    if (cardioActivity === 'Run' && runSubFilter !== 'all') {
+      result = result.filter(e => runSubtype(e.activity) === runSubFilter)
+    }
+    return result
+  }, [cardioHistory, cardioActivity, runSubFilter])
 
   // ── Cardio chart ────────────────────────────────────────────────────────────
   const cardioChartData = useMemo(() => {
@@ -1237,7 +1253,7 @@ export default function ProgressPage() {
             >
               <div>
                 <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#4bdece] mb-1">Activity</p>
-                <h2 className="font-headline text-xl font-bold"><ActivityLabel activity={cardioActivity} /></h2>
+                <h2 className="font-headline text-xl font-bold">{cardioActivity}</h2>
               </div>
               <span className="material-symbols-outlined text-[#4bdece]">expand_more</span>
             </div>
@@ -1246,16 +1262,37 @@ export default function ProgressPage() {
                 {cardioActivities.map(a => (
                   <button
                     key={a}
-                    onClick={() => { setCardioActivity(a); setCardioOpen(false) }}
-                    className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors flex items-center gap-2"
+                    onClick={() => { setCardioActivity(a); setRunSubFilter('all'); setCardioOpen(false) }}
+                    className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors"
                   >
-                    <ActivityLabel activity={a} />
+                    {a}
                   </button>
                 ))}
               </div>
             )}
           </div>
         )}
+
+        {/* Run sub-filter */}
+        {tab === 'cardio' && cardioActivity === 'Run' && (() => {
+          const subtypes = [...new Set(cardioHistory.filter(e => baseActivity(e.activity) === 'Run').map(e => runSubtype(e.activity)))]
+          if (subtypes.length <= 1) return null
+          return (
+            <div className="flex gap-2 flex-wrap">
+              {(['all', ...subtypes] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setRunSubFilter(s as typeof runSubFilter)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+                    runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
+                  }`}
+                >
+                  {s === 'all' ? 'All runs' : s}
+                </button>
+              ))}
+            </div>
+          )
+        })()}
 
         {tab === 'cardio' && !loading && cardioHistory.length === 0 && (
           <p className="text-sm text-on-surface-variant text-center py-4">
