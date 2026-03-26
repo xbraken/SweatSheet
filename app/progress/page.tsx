@@ -21,7 +21,7 @@ function ActivityLabel({ activity, className }: { activity: string; className?: 
   )
 }
 
-type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number; rows: { weight: number; reps: number }[] }
+type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number; rows: { weight: number; reps: number; logged_at?: string | null }[]; first_logged_at?: string | null }
 type CardioEntry = {
   cardio_id: number
   date: string
@@ -1714,7 +1714,14 @@ export default function ProgressPage() {
                   <div key={i} className={`bg-surface-container p-4 flex flex-col gap-3 rounded-lg ${isPb ? 'border border-primary-container/30' : ''}`}>
                     <div className="flex justify-between items-center">
                       <div className="flex flex-col gap-1">
-                        <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
+                          {s.first_logged_at && (
+                            <p className="text-[10px] font-mono text-on-surface-variant/50">
+                              {new Date(s.first_logged_at + 'Z').toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className="text-2xl font-black font-headline text-on-surface">
                             {Number(s.max_weight)}{' '}
