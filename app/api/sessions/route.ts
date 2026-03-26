@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
       // Map client-side 'cardio' type to DB-compatible type based on activity
       const blockType = block.type === 'lift' ? 'lift'
         : block.activity === 'Cycling' ? 'cycle'
-        : block.activity === 'Walking' ? 'cardio'
         : 'run'
 
       const blockRes = await db.execute({

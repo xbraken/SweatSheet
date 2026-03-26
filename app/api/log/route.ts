@@ -106,8 +106,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Cardio
       const { activity, distance, time, pace } = body
-      const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'cardio' : 'run'
-      // blockType: 'run' for Run/Interval run, 'cycle' for Cycling, 'cardio' for Walking
+      const blockType = activity === 'Cycling' ? 'cycle' : 'run'
 
       const blockRes = await db.execute({
         sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
