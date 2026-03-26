@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation'
 const tabs = [
   { href: '/',         icon: 'calendar_today', label: 'Today' },
   { href: '/log',      icon: 'edit_note',      label: 'Log' },
+  { href: '/social',   icon: 'group',          label: 'Friends' },
   { href: '/progress', icon: 'insights',       label: 'Progress' },
-  { href: '/import',   icon: 'ios_share',      label: 'Import' },
   { href: '/account',  icon: 'person',         label: 'Account' },
 ]
 

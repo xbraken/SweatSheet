@@ -102,5 +102,14 @@ export async function initDb() {
     time_offset_sec INTEGER NOT NULL,
     distance_km REAL NOT NULL
   )`)
+
+  // Social follows
+  await db.execute(`CREATE TABLE IF NOT EXISTS follows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(follower_id, following_id)
+  )`)
 }
 
