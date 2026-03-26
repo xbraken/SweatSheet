@@ -13,7 +13,7 @@ function runSubtype(activity: string): 'interval' | 'indoor' | 'outdoor' {
   return 'outdoor'
 }
 
-function ActivityLabel({ activity, className }: { activity: string; className?: string }) {
+function ActivityLabel({ activity, showOutdoor = false, className }: { activity: string; showOutdoor?: boolean; className?: string }) {
   const sub = runSubtype(activity)
   const isRun = activity.toLowerCase().includes('run')
   return (
@@ -21,6 +21,7 @@ function ActivityLabel({ activity, className }: { activity: string; className?: 
       {baseActivity(activity)}
       {isRun && sub === 'interval' && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
       {isRun && sub === 'indoor' && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#a48b83]/20 text-[#a48b83] uppercase tracking-wide leading-none">INDOOR</span>}
+      {isRun && sub === 'outdoor' && showOutdoor && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#ff9066]/10 text-[#ff9066] uppercase tracking-wide leading-none">OUTDOOR</span>}
     </span>
   )
 }
@@ -1087,6 +1088,11 @@ export default function ProgressPage() {
     return arr
   }, [liftHistory, liftSort])
 
+  const hasMultipleRunSubtypes = useMemo(() => {
+    const subtypes = new Set(cardioHistory.filter(e => baseActivity(e.activity) === 'Run').map(e => runSubtype(e.activity)))
+    return subtypes.size > 1
+  }, [cardioHistory])
+
   const sortedCardio = useMemo(() => {
     const arr = [...filteredCardioHistory]
     if (cardioSort === 'distance') return arr.sort((a, b) => (parseFloat(b.distance ?? '0') || 0) - (parseFloat(a.distance ?? '0') || 0))
@@ -1273,26 +1279,6 @@ export default function ProgressPage() {
           </div>
         )}
 
-        {/* Run sub-filter */}
-        {tab === 'cardio' && cardioActivity === 'Run' && (() => {
-          const subtypes = [...new Set(cardioHistory.filter(e => baseActivity(e.activity) === 'Run').map(e => runSubtype(e.activity)))]
-          if (subtypes.length <= 1) return null
-          return (
-            <div className="flex gap-2 flex-wrap">
-              {(['all', ...subtypes] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setRunSubFilter(s as typeof runSubFilter)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
-                    runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
-                  }`}
-                >
-                  {s === 'all' ? 'All runs' : s}
-                </button>
-              ))}
-            </div>
-          )
-        })()}
 
         {tab === 'cardio' && !loading && cardioHistory.length === 0 && (
           <p className="text-sm text-on-surface-variant text-center py-4">
@@ -1629,6 +1615,27 @@ export default function ProgressPage() {
           )}
         </div>
 
+        {/* Run sub-filter pills */}
+        {tab === 'cardio' && cardioActivity === 'Run' && (() => {
+          const subtypes = [...new Set(cardioHistory.filter(e => baseActivity(e.activity) === 'Run').map(e => runSubtype(e.activity)))]
+          if (subtypes.length <= 1) return null
+          return (
+            <div className="flex gap-2 flex-wrap">
+              {(['all', ...subtypes] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setRunSubFilter(s as typeof runSubFilter)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+                    runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
+                  }`}
+                >
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Bulk delete bar */}
         {selectMode && selectedIds.size > 0 && (
           <button
@@ -1725,7 +1732,7 @@ export default function ProgressPage() {
                     </div>
                     </div>
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
-                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} /></p>
+                      <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} showOutdoor={hasMultipleRunSubtypes} /></p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
                       {s.heart_rate && <p className="text-xs text-[#ff9066]">♥ {s.heart_rate} avg</p>}
