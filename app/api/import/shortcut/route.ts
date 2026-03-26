@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
         samples.push({ offsetSec: Math.round((s.ts - startTs) / 1000), bpm: s.bpm })
       }
 
-      const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'cardio' : 'run'
+      const blockType = activity === 'Cycling' ? 'cycle' : 'run'
 
       const sessionRes = await db.execute({
         sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',

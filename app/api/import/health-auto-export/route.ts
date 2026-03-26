@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'cardio' : 'run'
+      const blockType = activity === 'Cycling' ? 'cycle' : 'run'
 
       let blockId: number
       if (existingBlockId !== null) {
