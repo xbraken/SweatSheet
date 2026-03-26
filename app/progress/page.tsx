@@ -309,6 +309,9 @@ function RunDetailSheet({
   const best5KSec = hasPace ? findBestSegment(distSamples, 5.0) : null
   const best10KSec = hasPace ? findBestSegment(distSamples, 10.0) : null
 
+  // ── Km splits ──────────────────────────────────────────────────────────────
+  const kmSplits = hasPace ? computeKmSplits(distSamples) : []
+
   function fmtSegTime(sec: number): string {
     const h = Math.floor(sec / 3600)
     const m = Math.floor((sec % 3600) / 60)
@@ -321,6 +324,34 @@ function RunDetailSheet({
     return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   }
 
+  function computeKmSplits(samples: DistanceSample[]): { km: number; paceSec: number; partial?: boolean }[] {
+    if (samples.length < 2) return []
+    const totalDist = samples[samples.length - 1].distance_km
+    function timeAtDist(d: number): number {
+      if (d <= samples[0].distance_km) return samples[0].time_offset_sec
+      const j = samples.findIndex(s => s.distance_km >= d)
+      if (j < 0) return samples[samples.length - 1].time_offset_sec
+      if (j === 0) return samples[0].time_offset_sec
+      const a = samples[j - 1], b = samples[j]
+      const span = b.distance_km - a.distance_km
+      const frac = span > 0 ? (d - a.distance_km) / span : 0
+      return a.time_offset_sec + frac * (b.time_offset_sec - a.time_offset_sec)
+    }
+    const fullKms = Math.floor(totalDist)
+    const splits: { km: number; paceSec: number; partial?: boolean }[] = []
+    for (let k = 1; k <= fullKms; k++) {
+      const t0 = timeAtDist(k - 1)
+      const t1 = timeAtDist(k)
+      splits.push({ km: k, paceSec: Math.round(t1 - t0) })
+    }
+    const partial = totalDist - fullKms
+    if (partial > 0.1) {
+      const t0 = timeAtDist(fullKms)
+      const t1 = samples[samples.length - 1].time_offset_sec
+      splits.push({ km: fullKms + 1, paceSec: Math.round((t1 - t0) / partial), partial: true })
+    }
+    return splits
+  }
 
   const durationLabel = detail.duration ?? ''
   const distLabel = detail.distance ? `${parseFloat(detail.distance).toFixed(2)} km` : ''
@@ -612,6 +643,41 @@ function RunDetailSheet({
               )}
             </div>
           )}
+
+          {/* Km Splits */}
+          {kmSplits.length > 0 && (() => {
+            const splitMin = Math.min(...kmSplits.map(s => s.paceSec))
+            const splitMax = Math.max(...kmSplits.map(s => s.paceSec))
+            const splitAvg = paceAvgSec ?? Math.round(kmSplits.reduce((a, b) => a + b.paceSec, 0) / kmSplits.length)
+            return (
+              <div className="mt-4 bg-[#131313] rounded-2xl p-4">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Km splits</p>
+                <div className="space-y-1.5">
+                  {kmSplits.map(({ km, paceSec, partial }) => {
+                    const barPct = splitMax > splitMin
+                      ? ((splitMax - paceSec) / (splitMax - splitMin)) * 65 + 30
+                      : 65
+                    const isFast = paceSec < splitAvg * 0.97
+                    const isSlow = paceSec > splitAvg * 1.03
+                    const barColor = isFast ? '#4bdece' : isSlow ? '#ff9066' : '#dcc1b8'
+                    return (
+                      <div key={km} className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-[#a48b83] w-6 text-right shrink-0">{km}</span>
+                        <div className="flex-1 h-4 flex items-center">
+                          <div className="h-2.5 rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor, opacity: 0.8 }} />
+                        </div>
+                        <span className="text-xs font-bold font-headline shrink-0 w-12 text-right" style={{ color: barColor }}>
+                          {fmtPaceSec(paceSec)}
+                        </span>
+                        {partial && <span className="text-[9px] text-[#a48b83] shrink-0">~</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-[#a48b83] mt-2 text-right">avg {fmtPaceSec(splitAvg)} /km</p>
+              </div>
+            )
+          })()}
 
           {/* HR Chart */}
           {hasHr ? (

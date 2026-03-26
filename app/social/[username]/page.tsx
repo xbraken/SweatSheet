@@ -22,6 +22,7 @@ interface ProfileData {
 }
 interface DayGroup {
   date: string
+  startTime: string | null
   cardio: CardioRow[] | null
   lift: { volume: number; sets: number; exercises: ExerciseStat[] } | null
 }
@@ -29,6 +30,12 @@ interface DayGroup {
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
   return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' + d.getDate()
+}
+
+function formatTime(ts: string | null): string | null {
+  if (!ts) return null
+  const normalized = ts.includes('T') || ts.includes('Z') ? ts : ts.replace(' ', 'T') + 'Z'
+  return new Date(normalized).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
 function dayTitle(g: DayGroup): string {
@@ -94,8 +101,10 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
         }
       }
       const exercises: ExerciseStat[] = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: st.volume, rows: st.rows }))
+      const earliestCreatedAt = sessions.map(s => s.createdAt).filter(Boolean).sort()[0] ?? null
       return {
         date,
+        startTime: formatTime(earliestCreatedAt),
         cardio: allCardio.length > 0 ? allCardio : null,
         lift: hasLift ? { volume, sets, exercises } : null,
       }
@@ -188,7 +197,10 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                         onClick={() => setExpandedDate(expanded ? null : g.date)}
                       >
                         <div className="flex flex-col flex-1 min-w-0">
-                          <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                            {g.startTime && <span className="text-[#a48b83] text-[10px] font-mono">{g.startTime}</span>}
+                          </div>
                           <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{dayTitle(g)}</span>
                         </div>
                         <div className="flex gap-1 shrink-0">
