@@ -27,8 +27,12 @@ function timeAgo(utcStr: string): string {
 }
 
 function feedSubtitle(item: FeedItem): string {
-  const type = item.cardio ? (item.cardio[0]?.activity ?? 'Cardio') : item.lift ? 'Lift' : 'Workout'
-  return `${type} · ${timeAgo(item.createdAt)}`
+  if (item.cardio) return `${item.cardio[0]?.activity ?? 'Cardio'} · ${timeAgo(item.createdAt)}`
+  if (item.lift) {
+    const label = item.lift.exercises.slice(0, 2).join(', ') || 'Lift'
+    return `${label} · ${timeAgo(item.createdAt)}`
+  }
+  return `Workout · ${timeAgo(item.createdAt)}`
 }
 
 export default function SocialPage() {

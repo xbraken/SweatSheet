@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 
@@ -18,65 +18,53 @@ interface ProfileData {
   isOwnProfile: boolean
   sessions: SessionItem[]
 }
+interface DayGroup {
+  date: string
+  cardio: CardioRow[] | null
+  lift: { volume: number; sets: number; exercises: string[] } | null
+}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
   return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' + d.getDate()
 }
 
-function sessionTitle(s: SessionItem): string {
-  if (s.cardio && s.lift) return (s.cardio[0]?.activity ?? 'Cardio') + ' + Lift'
-  if (s.cardio) return s.cardio[0]?.activity ?? 'Cardio'
-  if (s.lift) {
-    const ex = s.lift.exercises
-    if (ex.length === 0) return 'Lift Session'
-    return ex.slice(0, 2).join(' · ')
+function dayTitle(g: DayGroup): string {
+  const parts: string[] = []
+  if (g.cardio) parts.push(g.cardio[0]?.activity ?? 'Cardio')
+  if (g.lift) {
+    const ex = g.lift.exercises
+    parts.push(ex.length > 0 ? ex.slice(0, 2).join(' · ') : 'Lift')
   }
-  return 'Workout'
+  return parts.join(' + ') || 'Workout'
 }
 
-function sessionBadge(s: SessionItem): { label: string; className: string } {
-  if (s.cardio) {
-    const act = s.cardio[0]?.activity ?? ''
-    if (act.toLowerCase().includes('run') || act.toLowerCase().includes('interval')) return { label: 'Run', className: 'bg-[#ff9066]/20 text-[#ff9066]' }
-    if (act.toLowerCase().includes('cycl') || act.toLowerCase().includes('bike')) return { label: 'Cycle', className: 'bg-[#f7b8a2]/20 text-[#f7b8a2]' }
-    return { label: act || 'Cardio', className: 'bg-[#ff9066]/20 text-[#ff9066]' }
+function dayBadges(g: DayGroup): Array<{ label: string; className: string }> {
+  const badges: Array<{ label: string; className: string }> = []
+  if (g.cardio) {
+    const act = (g.cardio[0]?.activity ?? '').toLowerCase()
+    if (act.includes('cycl') || act.includes('bike'))
+      badges.push({ label: 'Cycle', className: 'bg-[#f7b8a2]/20 text-[#f7b8a2]' })
+    else if (act === 'walking')
+      badges.push({ label: 'Walk', className: 'bg-[#a8d5a2]/20 text-[#a8d5a2]' })
+    else
+      badges.push({ label: g.cardio[0]?.activity || 'Cardio', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
   }
-  return { label: 'Lift', className: 'bg-[#4bdece]/20 text-[#4bdece]' }
+  if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
+  return badges
 }
 
-function sessionKeyStat(s: SessionItem): string {
-  if (s.cardio) {
-    const c = s.cardio[0]
-    if (c?.distance && Number(c.distance) > 0) return `${Number(c.distance).toFixed(1)} km`
-    if (c?.duration) return c.duration
-    return '—'
+function dayKeyStat(g: DayGroup): { value: string; className: string } {
+  if (g.lift) {
+    const v = g.lift.volume
+    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}k kg` : `${v} kg`, className: 'text-[#4bdece]' }
   }
-  if (s.lift) {
-    const v = s.lift.volume
-    return v >= 1000 ? `${(v / 1000).toFixed(1)}k kg` : `${v} kg`
+  if (g.cardio) {
+    const c = g.cardio[0]
+    if (c?.distance && Number(c.distance) > 0) return { value: `${Number(c.distance).toFixed(1)} km`, className: 'text-[#ff9066]' }
+    if (c?.duration) return { value: c.duration, className: 'text-[#ff9066]' }
   }
-  return '—'
-}
-
-function sessionStats(s: SessionItem): Array<{ label: string; value: string }> {
-  if (s.cardio) {
-    const c = s.cardio[0]
-    const stats = []
-    if (c?.pace) stats.push({ label: 'Pace', value: `${c.pace} /km` })
-    if (c?.duration) stats.push({ label: 'Time', value: c.duration })
-    if (c?.heart_rate) stats.push({ label: 'HR Avg', value: `${c.heart_rate} bpm` })
-    while (stats.length < 3) stats.push({ label: '', value: '—' })
-    return stats.slice(0, 3)
-  }
-  if (s.lift) {
-    return [
-      { label: 'Volume', value: s.lift.volume >= 1000 ? `${(s.lift.volume / 1000).toFixed(1)}k kg` : `${s.lift.volume} kg` },
-      { label: 'Sets', value: String(s.lift.sets) },
-      { label: 'Exercises', value: String(s.lift.exercises.length) },
-    ]
-  }
-  return []
+  return { value: '—', className: 'text-[#a48b83]' }
 }
 
 export default function FriendProfilePage({ params }: { params: Promise<{ username: string }> }) {
@@ -84,9 +72,38 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [username, setUsername] = useState('')
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [following, setFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
+
+  const dayGroups = useMemo<DayGroup[]>(() => {
+    if (!profile) return []
+    const map = new Map<string, SessionItem[]>()
+    for (const s of profile.sessions) {
+      if (!map.has(s.date)) map.set(s.date, [])
+      map.get(s.date)!.push(s)
+    }
+    return Array.from(map.entries()).map(([date, sessions]) => {
+      const allCardio = sessions.flatMap(s => s.cardio ?? [])
+      let volume = 0, sets = 0
+      const exercises: string[] = []
+      const hasLift = sessions.some(s => s.lift !== null)
+      for (const s of sessions) {
+        if (s.lift) {
+          volume += s.lift.volume
+          sets += s.lift.sets
+          for (const e of s.lift.exercises) {
+            if (!exercises.includes(e)) exercises.push(e)
+          }
+        }
+      }
+      return {
+        date,
+        cardio: allCardio.length > 0 ? allCardio : null,
+        lift: hasLift ? { volume, sets, exercises } : null,
+      }
+    })
+  }, [profile])
 
   useEffect(() => {
     params.then(p => {
@@ -96,7 +113,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
         .then(d => {
           setProfile(d)
           setFollowing(d.isFollowing)
-          if (d.sessions?.length > 0) setExpandedId(d.sessions[0].sessionId)
+          if (d.sessions?.length > 0) setExpandedDate(d.sessions[0].date)
         })
         .finally(() => setLoading(false))
     })
@@ -147,7 +164,6 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
           <p className="text-center text-[#a48b83] pt-20">User not found</p>
         ) : (
           <>
-            {/* Profile header */}
             <section className="flex flex-col items-center pt-8 pb-8">
               <div className="w-24 h-24 rounded-full bg-[#2a2a2a] flex items-center justify-center border-2 border-[#ff9066]/20 mb-4">
                 <span className="font-headline text-3xl font-black text-[#ffb9a0]">
@@ -158,52 +174,103 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
               <p className="text-[#a48b83] text-sm font-medium">{profile.totalWorkouts} Workouts</p>
             </section>
 
-            {/* Workouts */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-headline text-base font-bold text-[#e5e2e1]">Recent Workouts</h3>
-            </div>
+            <h3 className="font-headline text-base font-bold text-[#e5e2e1] mb-4">Recent Workouts</h3>
 
-            {profile.sessions.length === 0 ? (
+            {dayGroups.length === 0 ? (
               <p className="text-center text-[#a48b83] text-sm py-10">No workouts yet</p>
             ) : (
               <div className="space-y-3">
-                {profile.sessions.map(s => {
-                  const badge = sessionBadge(s)
-                  const expanded = expandedId === s.sessionId
-                  const stats = sessionStats(s)
+                {dayGroups.map(g => {
+                  const badges = dayBadges(g)
+                  const keyStat = dayKeyStat(g)
+                  const expanded = expandedDate === g.date
                   return (
-                    <div
-                      key={s.sessionId}
-                      className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
-                        expanded ? 'bg-[#131313] border-[#201f1f] shadow-xl' : 'bg-[#131313] border-[#201f1f]/60'
-                      }`}
-                    >
+                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f]">
                       <button
-                        className="w-full p-4 flex items-center justify-between gap-3 text-left"
-                        onClick={() => setExpandedId(expanded ? null : s.sessionId)}
+                        className="w-full p-4 flex items-center gap-3 text-left"
+                        onClick={() => setExpandedDate(expanded ? null : g.date)}
                       >
-                        <div className="flex flex-col min-w-[52px]">
-                          <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(s.date)}</span>
-                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5">{sessionTitle(s)}</span>
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{dayTitle(g)}</span>
                         </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest shrink-0 ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                        <span className={`font-headline font-bold text-base ml-auto shrink-0 ${
-                          s.lift && !s.cardio ? 'text-[#4bdece]' : 'text-[#ff9066]'
-                        }`}>
-                          {sessionKeyStat(s)}
+                        <div className="flex gap-1 shrink-0">
+                          {badges.map((b, i) => (
+                            <span key={i} className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${b.className}`}>{b.label}</span>
+                          ))}
+                        </div>
+                        <span className={`font-headline font-bold text-base shrink-0 ${keyStat.className}`}>
+                          {keyStat.value}
                         </span>
                       </button>
 
-                      {expanded && stats.length > 0 && (
-                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 grid grid-cols-3 gap-3">
-                          {stats.map((st, i) => (
+                      {expanded && (
+                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4">
+                          {g.cardio && g.cardio.map((c, i) => (
                             <div key={i}>
-                              <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">{st.label}</p>
-                              <p className="font-headline font-bold text-lg text-[#e5e2e1]">{st.value}</p>
+                              {g.cardio!.length > 1 && (
+                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-2">{c.activity}</p>
+                              )}
+                              <div className="grid grid-cols-3 gap-3">
+                                {c.distance && Number(c.distance) > 0 && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Dist</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{Number(c.distance).toFixed(1)} km</p>
+                                  </div>
+                                )}
+                                {c.pace && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Pace</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.pace}/km</p>
+                                  </div>
+                                )}
+                                {c.duration && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Time</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.duration}</p>
+                                  </div>
+                                )}
+                                {c.heart_rate && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">HR Avg</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.heart_rate} bpm</p>
+                                  </div>
+                                )}
+                                {!c.pace && !c.duration && !c.distance && !c.heart_rate && (
+                                  <p className="col-span-3 text-[#a48b83] text-sm">No stats recorded</p>
+                                )}
+                              </div>
                             </div>
                           ))}
+
+                          {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
+
+                          {g.lift && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Volume</p>
+                                  <p className="font-headline font-bold text-lg text-[#e5e2e1]">
+                                    {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}k kg` : `${g.lift.volume} kg`}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Sets</p>
+                                  <p className="font-headline font-bold text-lg text-[#e5e2e1]">{g.lift.sets}</p>
+                                </div>
+                              </div>
+                              {g.lift.exercises.length > 0 && (
+                                <div>
+                                  <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-2">Exercises</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {g.lift.exercises.map((e, i) => (
+                                      <span key={i} className="bg-[#4bdece]/10 text-[#4bdece] text-[11px] font-bold px-2.5 py-1 rounded-full">{e}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
