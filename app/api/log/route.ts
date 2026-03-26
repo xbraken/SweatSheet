@@ -4,12 +4,13 @@ import { getSession } from '@/lib/auth'
 
 await initDb()
 
-/** GET — return today's logged blocks for the log page */
-export async function GET() {
+/** GET — return logged blocks for a given date (defaults to today) */
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const today = new Date().toISOString().split('T')[0]
+  const { searchParams } = new URL(req.url)
+  const today = searchParams.get('date') ?? new Date().toISOString().split('T')[0]
 
   const liftRes = await db.execute({
     sql: `SELECT b.id as block_id, st.exercise,

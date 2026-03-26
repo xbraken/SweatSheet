@@ -225,6 +225,62 @@ function CardioPicker({ onSelect, onClose }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Calendar Sheet ────────────────────────────────────────────────────────────
+function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNext, onClose }: {
+  month: Date; workoutDates: Set<string>; today: string
+  onSelectDate: (date: string) => void; onPrev: () => void; onNext: () => void; onClose: () => void
+}) {
+  const year = month.getFullYear()
+  const m = month.getMonth()
+  const firstDay = new Date(year, m, 1).getDay()
+  const daysInMonth = new Date(year, m + 1, 0).getDate()
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={onPrev} className="w-8 h-8 flex items-center justify-center">
+            <span className="material-symbols-outlined text-[#a48b83]">chevron_left</span>
+          </button>
+          <p className="font-headline font-bold text-[#e5e2e1]">
+            {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          </p>
+          <button onClick={onNext} disabled={month >= new Date(new Date().getFullYear(), new Date().getMonth(), 1)} className="w-8 h-8 flex items-center justify-center disabled:opacity-30">
+            <span className="material-symbols-outlined text-[#a48b83]">chevron_right</span>
+          </button>
+        </div>
+        <div className="grid grid-cols-7 mb-1">
+          {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+            <div key={d} className="text-center text-[10px] font-bold font-label text-[#56423c] py-1">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-y-1">
+          {Array.from({ length: firstDay }).map((_, i) => <div key={`p${i}`} />)}
+          {Array.from({ length: daysInMonth }, (_, i) => {
+            const day = i + 1
+            const date = `${year}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+            const hasWorkout = workoutDates.has(date)
+            const isToday = date === today
+            const isFuture = date > today
+            return (
+              <button
+                key={date}
+                disabled={isFuture}
+                onClick={() => { onSelectDate(date); onClose() }}
+                className={`flex flex-col items-center justify-center py-1.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-20 active:scale-95
+                  ${isToday ? 'bg-[#ff9066]/20 text-[#ff9066]' : hasWorkout ? 'text-[#e5e2e1] hover:bg-[#2a2a2a]' : 'text-[#353534]'}`}
+              >
+                {day}
+                {hasWorkout && <div className="w-1 h-1 rounded-full bg-[#4bdece] mt-0.5" />}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
+}
+
 type View =
   | { type: 'list' }
   | { type: 'lift'; exercise: string }
@@ -289,6 +345,13 @@ export default function LogPage() {
   const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
   const [editSaving, setEditSaving] = useState(false)
 
+  // Calendar / history browsing
+  const browsedDateRef = useRef<string | null>(null)
+  const [browsedDate, setBrowsedDate] = useState<string | null>(null)
+  const [calOpen, setCalOpen] = useState(false)
+  const [calMonth, setCalMonth] = useState(() => new Date())
+  const [workoutDates, setWorkoutDates] = useState<Set<string>>(new Set())
+
   // Load rest duration from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('ss_rest_duration')
@@ -300,16 +363,30 @@ export default function LogPage() {
     localStorage.setItem('ss_rest_duration', String(v))
   }
 
-  // Fetch today's log
-  const refreshToday = useCallback(() => {
-    fetch('/api/log').then(r => r.json()).then(data => {
+  // Fetch log for current browsed date (or today)
+  const refreshCurrent = useCallback(() => {
+    const date = browsedDateRef.current
+    const url = date ? `/api/log?date=${date}` : '/api/log'
+    setLoadingToday(true)
+    fetch(url).then(r => r.json()).then(data => {
       setLoggedLifts(data.lifts ?? [])
       setLoggedCardio(data.cardio ?? [])
       setLoadingToday(false)
     }).catch(() => setLoadingToday(false))
   }, [])
 
-  useEffect(() => { refreshToday() }, [refreshToday])
+  // Keep ref in sync and reload when date changes
+  useEffect(() => {
+    browsedDateRef.current = browsedDate
+    refreshCurrent()
+  }, [browsedDate, refreshCurrent])
+
+  // Load workout dates for calendar dots
+  useEffect(() => {
+    fetch('/api/calendar').then(r => r.json()).then(d => {
+      if (d.dates) setWorkoutDates(new Set(d.dates as string[]))
+    }).catch(() => {})
+  }, [])
 
   // Fetch hints + starred
   useEffect(() => {
@@ -396,7 +473,7 @@ export default function LogPage() {
       })
       const data = await res.json()
       if (data.isPr) setPr({ exercise: data.exercise, weight: data.weight })
-      refreshToday()
+      refreshCurrent()
       setView({ type: 'list' })
     } finally {
       setSaving(false)
@@ -442,7 +519,7 @@ export default function LogPage() {
     ))
     setEditSaving(false)
     setEditLift(null)
-    refreshToday()
+    refreshCurrent()
   }
 
   const saveEditCardio = async () => {
@@ -452,7 +529,7 @@ export default function LogPage() {
     await fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardioId: editCardio.cardioId, distance: editCardio.distance, duration: editCardio.duration, pace }) })
     setEditSaving(false)
     setEditCardio(null)
-    refreshToday()
+    refreshCurrent()
   }
 
   // Delete a logged block
@@ -462,7 +539,7 @@ export default function LogPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blockId }),
     })
-    refreshToday()
+    refreshCurrent()
   }
 
   // ── List view ───────────────────────────────────────────────────────────────
@@ -481,9 +558,26 @@ export default function LogPage() {
           <CardioPicker onSelect={startCardio} onClose={() => setShowCardioPicker(false)} />
         )}
 
-        <header className="mb-6">
-          <p className="font-label text-[#a48b83] text-xs uppercase tracking-widest mb-1">Today</p>
-          <h1 className="font-headline text-2xl font-black text-[#e5e2e1]">Log</h1>
+        <header className="mb-6 flex items-start justify-between">
+          <div>
+            <p className="font-label text-[#a48b83] text-xs uppercase tracking-widest mb-1">
+              {browsedDate
+                ? new Date(browsedDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+                : 'Today'}
+            </p>
+            <h1 className="font-headline text-2xl font-black text-[#e5e2e1]">Log</h1>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            {browsedDate && (
+              <button onClick={() => { setBrowsedDate(null) }} className="text-xs text-[#a48b83] font-bold font-label flex items-center gap-1 px-2.5 py-1.5 bg-[#201f1f] rounded-lg">
+                <span className="material-symbols-outlined text-sm">today</span>
+                Back to today
+              </button>
+            )}
+            <button onClick={() => setCalOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f]">
+              <span className="material-symbols-outlined text-[#a48b83]">calendar_month</span>
+            </button>
+          </div>
         </header>
 
         {/* Today's logged exercises */}
@@ -494,28 +588,39 @@ export default function LogPage() {
         ) : (loggedLifts.length === 0 && loggedCardio.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-16 text-center flex-1">
             <span className="material-symbols-outlined text-5xl text-[#353534] mb-4">fitness_center</span>
-            <p className="font-headline font-bold text-lg text-[#dcc1b8]">Nothing logged yet</p>
-            <p className="text-sm text-[#a48b83] mt-1">Add a lift or cardio below</p>
+            <p className="font-headline font-bold text-lg text-[#dcc1b8]">{browsedDate ? 'Rest day' : 'Nothing logged yet'}</p>
+            <p className="text-sm text-[#a48b83] mt-1">{browsedDate ? 'No workout recorded for this day' : 'Add a lift or cardio below'}</p>
           </div>
         ) : (
           <div className="space-y-3 mb-6">
             {loggedLifts.map(l => (
-              <div key={l.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
-                  <div>
-                    <p className="font-headline font-bold text-[#e5e2e1]">{l.exercise}</p>
-                    <p className="text-xs text-[#a48b83]">{l.set_count} sets · {l.max_weight} kg peak</p>
+              <div key={l.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
+                    <div>
+                      <p className="font-headline font-bold text-[#e5e2e1]">{l.exercise}</p>
+                      <p className="text-xs text-[#a48b83]">{l.set_count} sets · {l.max_weight} kg peak</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets] })}>
+                      <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
+                    </button>
+                    <button onClick={() => deleteBlock(l.block_id)}>
+                      <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets] })}>
-                    <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
-                  </button>
-                  <button onClick={() => deleteBlock(l.block_id)}>
-                    <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
-                  </button>
-                </div>
+                {l.sets.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2.5 ml-9">
+                    {l.sets.map((s, i) => (
+                      <span key={s.id} className="text-[11px] bg-[#131313] text-[#a48b83] px-2 py-1 rounded-lg font-label">
+                        {i + 1}. {s.weight}kg × {s.reps}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             {loggedCardio.map(c => (
@@ -545,23 +650,25 @@ export default function LogPage() {
           </div>
         )}
 
-        {/* Add buttons */}
-        <div className="flex flex-col gap-3 mt-auto">
-          <button
-            onClick={() => setShowExPicker(true)}
-            className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40"
-          >
-            <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
-            <span className="font-headline font-bold text-[#dcc1b8]">Log exercise</span>
-          </button>
-          <button
-            onClick={() => setShowCardioPicker(true)}
-            className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#4bdece]/40"
-          >
-            <span className="material-symbols-outlined text-[#4bdece]">directions_run</span>
-            <span className="font-headline font-bold text-[#dcc1b8]">Log cardio</span>
-          </button>
-        </div>
+        {/* Add buttons — only shown for today */}
+        {!browsedDate && (
+          <div className="flex flex-col gap-3 mt-auto">
+            <button
+              onClick={() => setShowExPicker(true)}
+              className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40"
+            >
+              <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
+              <span className="font-headline font-bold text-[#dcc1b8]">Log exercise</span>
+            </button>
+            <button
+              onClick={() => setShowCardioPicker(true)}
+              className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#4bdece]/40"
+            >
+              <span className="material-symbols-outlined text-[#4bdece]">directions_run</span>
+              <span className="font-headline font-bold text-[#dcc1b8]">Log cardio</span>
+            </button>
+          </div>
+        )}
 
         {/* Edit lift sheet */}
         {editLift && (
@@ -637,6 +744,22 @@ export default function LogPage() {
               </button>
             </div>
           </>
+        )}
+
+        {/* Calendar sheet */}
+        {calOpen && (
+          <CalendarSheet
+            month={calMonth}
+            workoutDates={workoutDates}
+            today={new Date().toISOString().split('T')[0]}
+            onSelectDate={(date) => {
+              const todayStr = new Date().toISOString().split('T')[0]
+              setBrowsedDate(date === todayStr ? null : date)
+            }}
+            onPrev={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+            onNext={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+            onClose={() => setCalOpen(false)}
+          />
         )}
 
         <BottomNav />
