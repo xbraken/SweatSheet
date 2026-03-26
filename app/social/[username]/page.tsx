@@ -41,15 +41,7 @@ function dayTitle(g: DayGroup): string {
 
 function dayBadges(g: DayGroup): Array<{ label: string; className: string }> {
   const badges: Array<{ label: string; className: string }> = []
-  if (g.cardio) {
-    const act = (g.cardio[0]?.activity ?? '').toLowerCase()
-    if (act.includes('cycl') || act.includes('bike'))
-      badges.push({ label: 'Cycle', className: 'bg-[#f7b8a2]/20 text-[#f7b8a2]' })
-    else if (act === 'walking')
-      badges.push({ label: 'Walk', className: 'bg-[#a8d5a2]/20 text-[#a8d5a2]' })
-    else
-      badges.push({ label: g.cardio[0]?.activity || 'Cardio', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
-  }
+  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
   if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
   return badges
 }
