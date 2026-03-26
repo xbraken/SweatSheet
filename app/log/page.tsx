@@ -343,7 +343,6 @@ export default function LogPage() {
   // Edit sheets
   const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number}[]} | null>(null)
   const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
-  const [editSaving, setEditSaving] = useState(false)
 
   // Calendar / history browsing
   const browsedDateRef = useRef<string | null>(null)
@@ -511,25 +510,29 @@ export default function LogPage() {
     setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s) } : prev)
   }
 
-  const saveEditLift = async () => {
+  const saveEditLift = () => {
     if (!editLift) return
-    setEditSaving(true)
-    await Promise.all(editLift.sets.map(s =>
+    const { blockId, sets } = editLift
+    setLoggedLifts(prev => prev.map(l => l.block_id !== blockId ? l : {
+      ...l,
+      sets,
+      max_weight: Math.max(...sets.map(s => s.weight)),
+    }))
+    setEditLift(null)
+    Promise.all(sets.map(s =>
       fetch('/api/sets', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, weight: s.weight, reps: s.reps }) })
     ))
-    setEditSaving(false)
-    setEditLift(null)
-    refreshCurrent()
   }
 
-  const saveEditCardio = async () => {
+  const saveEditCardio = () => {
     if (!editCardio) return
-    setEditSaving(true)
-    const pace = calcPace(editCardio.distance, editCardio.duration)
-    await fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardioId: editCardio.cardioId, distance: editCardio.distance, duration: editCardio.duration, pace }) })
-    setEditSaving(false)
+    const { blockId, cardioId, distance, duration } = editCardio
+    const pace = calcPace(distance, duration)
+    setLoggedCardio(prev => prev.map(c => c.block_id !== blockId ? c : {
+      ...c, distance: distance || null, duration: duration || null, pace: pace || null,
+    }))
     setEditCardio(null)
-    refreshCurrent()
+    fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardioId, distance, duration, pace }) })
   }
 
   // Delete a logged block — optimistic: remove from UI immediately
@@ -705,8 +708,8 @@ export default function LogPage() {
                   </div>
                 ))}
               </div>
-              <button onClick={saveEditLift} disabled={editSaving} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-50">
-                {editSaving ? 'Saving…' : 'Save changes'}
+              <button onClick={saveEditLift} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
+                Save changes
               </button>
             </div>
           </>
@@ -740,8 +743,8 @@ export default function LogPage() {
                   </div>
                 ) : null
               })()}
-              <button onClick={saveEditCardio} disabled={editSaving} className="w-full py-3.5 bg-[#4bdece] text-[#003732] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-50">
-                {editSaving ? 'Saving…' : 'Save changes'}
+              <button onClick={saveEditCardio} className="w-full py-3.5 bg-[#4bdece] text-[#003732] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
+                Save changes
               </button>
             </div>
           </>

@@ -121,12 +121,11 @@ function RunDetailSheet({
   const [compareSearch, setCompareSearch] = useState('')
   const [chartHoveredIdx, setChartHoveredIdx] = useState<number | null>(null)
   const [paceHoveredIdx, setPaceHoveredIdx] = useState<number | null>(null)
-  const [togglingInterval, setTogglingInterval] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+
   const [editingStats, setEditingStats] = useState(false)
   const [editDist, setEditDist] = useState('')
   const [editDuration, setEditDuration] = useState('')
-  const [savingStats, setSavingStats] = useState(false)
+
 
   useEffect(() => {
     setLoading(true)
@@ -393,18 +392,15 @@ function RunDetailSheet({
             </button>
             {detail && ['Run', 'Indoor run', 'Interval run'].includes(detail.activity) && (
               <button
-                disabled={togglingInterval}
                 onClick={async () => {
                   if (!detail) return
                   const newActivity = detail.activity === 'Interval run' ? 'Run' : 'Interval run'
-                  setTogglingInterval(true)
-                  await fetch(`/api/run/${runId}`, {
+                  setDetail({ ...detail, activity: newActivity })
+                  fetch(`/api/run/${runId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ activity: newActivity }),
                   })
-                  setDetail({ ...detail, activity: newActivity })
-                  setTogglingInterval(false)
                 }}
                 className="text-[10px] font-bold font-label uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-[#4bdece]/10 text-[#4bdece]"
               >
@@ -966,9 +962,7 @@ function RunDetailSheet({
               <div className="flex gap-2">
                 <button onClick={() => setEditingStats(false)} className="flex-1 py-2.5 rounded-xl border border-[#353534] text-[#a48b83] text-sm font-bold transition-colors hover:bg-[#201f1f]">Cancel</button>
                 <button
-                  disabled={savingStats}
-                  onClick={async () => {
-                    setSavingStats(true)
+                  onClick={() => {
                     const dist = parseFloat(editDist)
                     let pace: string | null = null
                     if (dist > 0 && editDuration) {
@@ -976,14 +970,13 @@ function RunDetailSheet({
                       const totalSecs = parts.length === 3 ? parts[0]*3600+parts[1]*60+parts[2] : parts[0]*60+(parts[1]??0)
                       if (totalSecs > 0) { const spm = totalSecs / dist; pace = `${Math.floor(spm/60)}:${String(Math.round(spm%60)).padStart(2,'0')}` }
                     }
-                    await fetch(`/api/run/${runId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ distance: editDist || null, duration: editDuration || null, pace }) })
                     setDetail({ ...detail, distance: editDist || null, duration: editDuration || null, pace })
-                    setSavingStats(false)
                     setEditingStats(false)
+                    fetch(`/api/run/${runId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ distance: editDist || null, duration: editDuration || null, pace }) })
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-[#4bdece] text-[#003732] text-sm font-bold disabled:opacity-50 transition-opacity"
+                  className="flex-1 py-2.5 rounded-xl bg-[#4bdece] text-[#003732] text-sm font-bold"
                 >
-                  {savingStats ? 'Saving…' : 'Save'}
+                  Save
                 </button>
               </div>
             </div>
@@ -991,18 +984,16 @@ function RunDetailSheet({
 
           {/* Delete */}
           <button
-            disabled={deleting}
             onClick={async () => {
               if (!confirm('Delete this workout? This can\'t be undone.')) return
-              setDeleting(true)
-              await fetch(`/api/run/${runId}`, { method: 'DELETE' })
               onDeleted?.(runId)
               onClose()
+              fetch(`/api/run/${runId}`, { method: 'DELETE' })
             }}
-            className="mt-6 w-full py-3 rounded-xl border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 hover:bg-red-950/30 transition-colors disabled:opacity-50"
+            className="mt-6 w-full py-3 rounded-xl border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 hover:bg-red-950/30 transition-colors"
           >
             <span className="material-symbols-outlined text-base">delete</span>
-            {deleting ? 'Deleting…' : 'Delete workout'}
+            Delete workout
           </button>
         </div>
       </div>
@@ -1046,15 +1037,12 @@ export default function ProgressPage() {
   )
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
-  const [bwSaving, setBwSaving] = useState(false)
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [visibleCount, setVisibleCount] = useState(10)
   const [editSetModal, setEditSetModal] = useState<{id: number; weight: number; reps: number} | null>(null)
-  const [editSetSaving, setEditSetSaving] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Persist UI preferences to localStorage
@@ -1118,17 +1106,16 @@ export default function ProgressPage() {
       .finally(() => setLoading(false))
   }, [exercise, refreshKey])
 
-  const saveEditSet = async () => {
+  const saveEditSet = () => {
     if (!editSetModal) return
-    setEditSetSaving(true)
-    await fetch('/api/sets', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: editSetModal.id, weight: editSetModal.weight, reps: editSetModal.reps }),
-    })
-    setEditSetSaving(false)
+    const { id, weight, reps } = editSetModal
     setEditSetModal(null)
     setRefreshKey(k => k + 1)
+    fetch('/api/sets', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, weight, reps }),
+    })
   }
 
   // ── Chart range cutoff ───────────────────────────────────────────────────────
@@ -1794,7 +1781,6 @@ export default function ProgressPage() {
         {selectMode && selectedIds.size > 0 && (
           <div className="flex gap-2">
             {runSubFilter !== 'all' && <button
-              disabled={bulkDeleting}
               onClick={async () => {
                 const ids = [...selectedIds]
                 const allInterval = ids.every(id => {
@@ -1802,23 +1788,21 @@ export default function ProgressPage() {
                   return entry && runSubtype(entry.activity) === 'interval'
                 })
                 const newActivity = allInterval ? 'Run' : 'Interval run'
-                setBulkDeleting(true)
-                await fetch('/api/run/bulk-patch', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ids, activity: newActivity }),
-                })
                 setCardioHistory(prev => prev.map(e =>
                   selectedIds.has(e.cardio_id!) ? { ...e, activity: newActivity } : e
                 ))
                 setSelectedIds(new Set())
                 setSelectMode(false)
-                setBulkDeleting(false)
+                fetch('/api/run/bulk-patch', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids, activity: newActivity }),
+                })
               }}
               className="flex-1 py-3 rounded-xl bg-[#4bdece]/10 border border-[#4bdece]/30 text-[#4bdece] text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-[#4bdece]/20"
             >
               <span className="material-symbols-outlined text-base">timer</span>
-              {bulkDeleting ? '…' : (() => {
+              {(() => {
                 const ids = [...selectedIds]
                 const allInterval = ids.every(id => {
                   const entry = cardioHistory.find(e => e.cardio_id === id)
@@ -1828,24 +1812,22 @@ export default function ProgressPage() {
               })()}
             </button>}
             <button
-              disabled={bulkDeleting}
               onClick={async () => {
                 if (!confirm(`Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return
-                setBulkDeleting(true)
-                await fetch('/api/run/bulk-delete', {
-                  method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ids: [...selectedIds] }),
-                })
-                setCardioHistory(prev => prev.filter(e => !selectedIds.has(e.cardio_id!)))
+                const deletedIds = new Set(selectedIds)
+                setCardioHistory(prev => prev.filter(e => !deletedIds.has(e.cardio_id!)))
                 setSelectedIds(new Set())
                 setSelectMode(false)
-                setBulkDeleting(false)
+                fetch('/api/run/bulk-delete', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: [...deletedIds] }),
+                })
               }}
               className="flex-1 py-3 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-red-950/60"
             >
               <span className="material-symbols-outlined text-base">delete</span>
-              {bulkDeleting ? '…' : `Delete ${selectedIds.size}`}
+              {`Delete ${selectedIds.size}`}
             </button>
           </div>
         )}
@@ -2028,24 +2010,24 @@ export default function ProgressPage() {
           />
           <span className="text-sm text-on-surface-variant font-bold">kg</span>
           <button
-            disabled={!bwInput || bwSaving}
-            onClick={async () => {
-              setBwSaving(true)
+            disabled={!bwInput}
+            onClick={() => {
               const today = new Date().toISOString().split('T')[0]
-              await fetch('/api/bodyweight', {
+              const weight_kg = parseFloat(bwInput)
+              setBodyWeightLog(prev => {
+                const filtered = prev.filter(e => e.date !== today)
+                return [...filtered, { date: today, weight_kg }].sort((a, b) => a.date < b.date ? -1 : 1)
+              })
+              setBwInput('')
+              fetch('/api/bodyweight', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date: today, weight_kg: parseFloat(bwInput) }),
+                body: JSON.stringify({ date: today, weight_kg }),
               })
-              const res = await fetch('/api/bodyweight')
-              const data = await res.json()
-              if (Array.isArray(data)) setBodyWeightLog([...data].reverse())
-              setBwInput('')
-              setBwSaving(false)
             }}
             className="px-4 py-2 bg-primary-container/20 text-primary-container rounded-xl text-sm font-bold font-label disabled:opacity-30 transition-colors"
           >
-            {bwSaving ? '…' : 'Log'}
+            Log
           </button>
         </div>
 
@@ -2098,9 +2080,9 @@ export default function ProgressPage() {
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">{formatDate(entry.date)}</span>
                 <div className="flex items-center gap-3">
                   <span className="font-headline font-bold">{entry.weight_kg.toFixed(1)} <span className="text-xs font-normal text-on-surface-variant">kg</span></span>
-                  <button onClick={async () => {
-                    await fetch('/api/bodyweight', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: entry.date }) })
+                  <button onClick={() => {
                     setBodyWeightLog(prev => prev.filter(e => e.date !== entry.date))
+                    fetch('/api/bodyweight', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: entry.date }) })
                   }} className="text-on-surface-variant/40 hover:text-red-400 transition-colors">
                     <span className="material-symbols-outlined text-base">close</span>
                   </button>
@@ -2175,8 +2157,8 @@ export default function ProgressPage() {
                 </div>
               </div>
             </div>
-            <button onClick={saveEditSet} disabled={editSetSaving} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-50">
-              {editSetSaving ? 'Saving…' : 'Save'}
+            <button onClick={saveEditSet} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
+              Save
             </button>
           </div>
         </>

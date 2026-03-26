@@ -76,7 +76,6 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [following, setFollowing] = useState(false)
-  const [followLoading, setFollowLoading] = useState(false)
 
   const dayGroups = useMemo<DayGroup[]>(() => {
     if (!profile) return []
@@ -125,17 +124,15 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
     })
   }, [params])
 
-  async function toggleFollow() {
+  function toggleFollow() {
     if (!profile) return
-    setFollowLoading(true)
-    if (following) {
-      await fetch(`/api/social/follow?username=${encodeURIComponent(username)}`, { method: 'DELETE' })
-      setFollowing(false)
+    const next = !following
+    setFollowing(next)
+    if (!next) {
+      fetch(`/api/social/follow?username=${encodeURIComponent(username)}`, { method: 'DELETE' })
     } else {
-      await fetch('/api/social/follow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) })
-      setFollowing(true)
+      fetch('/api/social/follow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) })
     }
-    setFollowLoading(false)
   }
 
   return (
@@ -150,7 +147,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
         {profile && !profile.isOwnProfile && (
           <button
             onClick={toggleFollow}
-            disabled={followLoading}
+            disabled={!profile}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
               following ? 'bg-[#201f1f] text-[#a48b83]' : 'bg-[#ff9066] text-[#0e0e0e]'
             }`}
