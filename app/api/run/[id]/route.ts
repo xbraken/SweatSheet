@@ -44,6 +44,41 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   })
 }
 
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const cardioId = parseInt(id)
+  if (isNaN(cardioId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+
+  // Get block + session IDs, verify ownership
+  const res = await db.execute({
+    sql: `SELECT b.id as block_id, s.id as session_id FROM cardio c
+          JOIN blocks b ON b.id = c.block_id
+          JOIN sessions s ON s.id = b.session_id
+          WHERE c.id = ? AND s.user_id = ?`,
+    args: [cardioId, session.userId],
+  })
+  if (res.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const row = res.rows[0] as unknown as { block_id: number; session_id: number }
+
+  await db.execute({ sql: `DELETE FROM cardio WHERE id = ?`, args: [cardioId] })
+
+  // Clean up empty block and session
+  const blockEmpty = await db.execute({ sql: `SELECT COUNT(*) as n FROM cardio WHERE block_id = ?`, args: [row.block_id] })
+  if ((blockEmpty.rows[0].n as number) === 0) {
+    await db.execute({ sql: `DELETE FROM blocks WHERE id = ?`, args: [row.block_id] })
+    const sessionEmpty = await db.execute({ sql: `SELECT COUNT(*) as n FROM blocks WHERE session_id = ?`, args: [row.session_id] })
+    if ((sessionEmpty.rows[0].n as number) === 0) {
+      await db.execute({ sql: `DELETE FROM sessions WHERE id = ?`, args: [row.session_id] })
+    }
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

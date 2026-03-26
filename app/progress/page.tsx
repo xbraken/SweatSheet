@@ -84,10 +84,12 @@ function RunDetailSheet({
   runId,
   allCardio,
   onClose,
+  onDeleted,
 }: {
   runId: number
   allCardio: CardioEntry[]
   onClose: () => void
+  onDeleted?: (id: number) => void
 }) {
   const [detail, setDetail] = useState<RunDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -98,6 +100,7 @@ function RunDetailSheet({
   const [chartHoveredIdx, setChartHoveredIdx] = useState<number | null>(null)
   const [paceHoveredIdx, setPaceHoveredIdx] = useState<number | null>(null)
   const [togglingInterval, setTogglingInterval] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -835,6 +838,22 @@ function RunDetailSheet({
               </div>
             )}
           </div>
+
+          {/* Delete */}
+          <button
+            disabled={deleting}
+            onClick={async () => {
+              if (!confirm('Delete this workout? This can\'t be undone.')) return
+              setDeleting(true)
+              await fetch(`/api/run/${runId}`, { method: 'DELETE' })
+              onDeleted?.(runId)
+              onClose()
+            }}
+            className="mt-6 w-full py-3 rounded-xl border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 hover:bg-red-950/30 transition-colors disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">delete</span>
+            {deleting ? 'Deleting…' : 'Delete workout'}
+          </button>
         </div>
       </div>
     </>
@@ -877,6 +896,9 @@ export default function ProgressPage() {
   const [bwSaving, setBwSaving] = useState(false)
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   // Persist UI preferences to localStorage
   useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
@@ -1546,7 +1568,40 @@ export default function ProgressPage() {
                   ))
             }
           </div>
+          {tab === 'cardio' && (
+            <button
+              onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()) }}
+              className={`px-2 py-1 rounded-lg text-[10px] font-bold font-label uppercase tracking-wide transition-colors ${selectMode ? 'bg-red-900/30 text-red-400' : 'text-on-surface-variant/40 hover:text-on-surface-variant'}`}
+            >
+              {selectMode ? 'Cancel' : 'Select'}
+            </button>
+          )}
         </div>
+
+        {/* Bulk delete bar */}
+        {selectMode && selectedIds.size > 0 && (
+          <button
+            disabled={bulkDeleting}
+            onClick={async () => {
+              if (!confirm(`Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return
+              setBulkDeleting(true)
+              await fetch('/api/run/bulk-delete', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: [...selectedIds] }),
+              })
+              setCardioHistory(prev => prev.filter(e => !selectedIds.has(e.cardio_id!)))
+              setSelectedIds(new Set())
+              setSelectMode(false)
+              setBulkDeleting(false)
+            }}
+            className="w-full py-3 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-red-950/60"
+          >
+            <span className="material-symbols-outlined text-base">delete</span>
+            {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}`}
+          </button>
+        )}
+
 
         <div className="flex flex-col gap-[0.35rem]">
           {tab === 'lifts' ? (
@@ -1581,13 +1636,32 @@ export default function ProgressPage() {
             sortedCardio.length > 0 ? (
               sortedCardio.map((s, i) => {
                 const isFastest = !!(fastestRunEntry && s.date === fastestRunEntry.date && s.pace === fastestRunEntry.pace)
+                const isSelected = s.cardio_id ? selectedIds.has(s.cardio_id) : false
                 return (
                   <button
                     key={i}
-                    onClick={() => s.cardio_id && setSelectedRunId(s.cardio_id)}
-                    className={`w-full bg-surface-container p-5 flex justify-between items-start hover:bg-surface-container-high active:scale-[0.99] transition-all rounded-lg text-left ${isFastest ? 'border border-[#4bdece]/30' : ''}`}
+                    onClick={() => {
+                      if (selectMode && s.cardio_id) {
+                        setSelectedIds(prev => {
+                          const next = new Set(prev)
+                          next.has(s.cardio_id!) ? next.delete(s.cardio_id!) : next.add(s.cardio_id!)
+                          return next
+                        })
+                      } else {
+                        s.cardio_id && setSelectedRunId(s.cardio_id)
+                      }
+                    }}
+                    className={`w-full p-5 flex justify-between items-start transition-all rounded-lg text-left ${
+                      isSelected ? 'bg-red-950/30 border border-red-900/40' : `bg-surface-container hover:bg-surface-container-high active:scale-[0.99] ${isFastest ? 'border border-[#4bdece]/30' : ''}`
+                    }`}
                   >
-                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {selectMode && (
+                        <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-red-500 border-red-500' : 'border-[#a48b83]'}`}>
+                          {isSelected && <span className="material-symbols-outlined text-white text-xs">check</span>}
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{formatDate(s.date)}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-2xl font-black font-headline text-on-surface">
@@ -1597,6 +1671,7 @@ export default function ProgressPage() {
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-[#4bdece] text-[#003732] uppercase tracking-wide">Fastest</span>
                         )}
                       </div>
+                    </div>
                     </div>
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase">{s.activity}</p>
@@ -1741,6 +1816,10 @@ export default function ProgressPage() {
           runId={selectedRunId}
           allCardio={cardioHistory as CardioEntry[]}
           onClose={() => setSelectedRunId(null)}
+          onDeleted={(id) => {
+            setCardioHistory(prev => (prev as CardioEntry[]).filter(e => e.cardio_id !== id))
+            setSelectedRunId(null)
+          }}
         />
       )}
     </main>
