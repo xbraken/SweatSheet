@@ -1601,12 +1601,7 @@ export default function ProgressPage() {
           </div>
           {tab === 'cardio' && (
             <button
-              onClick={() => {
-                const next = !selectMode
-                setSelectMode(next)
-                setSelectedIds(new Set())
-                if (next && runSubFilter === 'all') setRunSubFilter('run')
-              }}
+              onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()) }}
               className={`px-2 py-1 rounded-lg text-[10px] font-bold font-label uppercase tracking-wide transition-colors ${selectMode ? 'bg-red-900/30 text-red-400' : 'text-on-surface-variant/40 hover:text-on-surface-variant'}`}
             >
               {selectMode ? 'Cancel' : 'Select'}
@@ -1634,7 +1629,7 @@ export default function ProgressPage() {
         {/* Bulk action bar */}
         {selectMode && selectedIds.size > 0 && (
           <div className="flex gap-2">
-            <button
+            {runSubFilter !== 'all' && <button
               disabled={bulkDeleting}
               onClick={async () => {
                 const ids = [...selectedIds]
@@ -1667,7 +1662,7 @@ export default function ProgressPage() {
                 })
                 return allInterval ? 'Unmark interval' : 'Mark interval'
               })()}
-            </button>
+            </button>}
             <button
               disabled={bulkDeleting}
               onClick={async () => {
