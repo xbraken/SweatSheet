@@ -72,8 +72,11 @@ export async function POST(req: NextRequest) {
 
   for (const raw of rawWorkouts) {
     try {
-      // Skip non-Apple Watch workouts (intensity is exclusive to Apple Watch)
-      if (!raw.intensity) continue
+      // Skip non-Apple Watch workouts for run/cycle (intensity is exclusive to Apple Watch).
+      // Walking is iPhone-recorded so skip the intensity check for it.
+      const typeStrEarly = String(raw.name ?? '').toLowerCase().trim()
+      const isWalking = typeStrEarly === 'walking'
+      if (!raw.intensity && !isWalking) continue
 
       const typeStr = String(raw.name ?? '').toLowerCase().trim()
       let activity = ACTIVITY_MAP[typeStr]

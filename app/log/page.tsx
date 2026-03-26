@@ -718,7 +718,7 @@ export default function LogPage() {
       <div className="px-4 pb-8 pt-6">
         <button
           onClick={saveCardio}
-          disabled={saving || (!cardioDistance && !cardioTime)}
+          disabled={saving}
           className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
         >
           {saving ? 'Saving…' : 'Save'}
