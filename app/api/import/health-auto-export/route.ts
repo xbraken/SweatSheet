@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
 
   for (const raw of rawWorkouts) {
     try {
-      // Skip non-Apple Watch workouts (Zepp etc. lack temperature/humidity/intensity)
-      if (!raw.temperature && !raw.humidity && !raw.intensity) continue
+      // Skip non-Apple Watch workouts (intensity is exclusive to Apple Watch)
+      if (!raw.intensity) continue
 
       const typeStr = String(raw.name ?? '').toLowerCase().trim()
       let activity = ACTIVITY_MAP[typeStr]
