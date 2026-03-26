@@ -5,7 +5,15 @@ export const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN!,
 })
 
-export async function initDb() {
+let _initPromise: Promise<void> | null = null
+
+export function initDb(): Promise<void> {
+  if (_initPromise) return _initPromise
+  _initPromise = _runInit()
+  return _initPromise
+}
+
+async function _runInit() {
   // Core tables
   await db.execute(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
