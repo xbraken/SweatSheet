@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 
@@ -1045,6 +1045,21 @@ export default function ProgressPage() {
   const [editSetModal, setEditSetModal] = useState<{id: number; weight: number; reps: number} | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [fadingRunIds, setFadingRunIds] = useState<Set<number>>(new Set())
+  const [chartAlpha, setChartAlpha] = useState(1)
+  const [listAlpha, setListAlpha] = useState(1)
+  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Fade chart and/or list out, swap content, fade back in
+  const fadeThen = useCallback((fn: () => void, target: 'chart' | 'list' | 'both' = 'both') => {
+    if (fadeTimer.current) clearTimeout(fadeTimer.current)
+    if (target !== 'list') setChartAlpha(0)
+    if (target !== 'chart') setListAlpha(0)
+    fadeTimer.current = setTimeout(() => {
+      fn()
+      if (target !== 'list') setChartAlpha(1)
+      if (target !== 'chart') setListAlpha(1)
+    }, 130)
+  }, [])
 
   // Persist UI preferences to localStorage
   useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
@@ -1329,8 +1344,14 @@ export default function ProgressPage() {
     return calendarMap.get(selectedCalDate) ?? null
   }, [selectedCalDate, calendarMap])
 
+  if (loading) return (
+    <main key="loading" className="w-full max-w-[390px] md:max-w-3xl mx-auto min-h-screen flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+    </main>
+  )
+
   return (
-    <main className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-8">
+    <main key="content" className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-8 animate-fade-in-view">
       {/* Header */}
       <header className="flex justify-between items-center py-4">
         <h1 className="text-2xl font-black text-primary tracking-tighter font-headline">SweatSheet</h1>
@@ -1405,7 +1426,7 @@ export default function ProgressPage() {
                 {cardioActivities.map(a => (
                   <button
                     key={a}
-                    onClick={() => { setCardioActivity(a); setRunSubFilter('all'); setCardioOpen(false) }}
+                    onClick={() => { fadeThen(() => { setCardioActivity(a); setRunSubFilter('all') }, 'both'); setCardioOpen(false) }}
                     className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors"
                   >
                     {a}
@@ -1424,13 +1445,15 @@ export default function ProgressPage() {
         )}
       </section>
 
+      <div key={tab} className="flex flex-col gap-8 animate-fade-in-view">
+
       {/* Lift metric toggle */}
       {tab === 'lifts' && liftHistory.length > 0 && (
         <div className="flex gap-2">
           {(['weight', 'volume'] as const).map(m => (
             <button
               key={m}
-              onClick={() => { setLiftMetric(m); setHoveredIdx(null) }}
+              onClick={() => { fadeThen(() => setLiftMetric(m), 'chart'); setHoveredIdx(null) }}
               className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
                 liftMetric === m ? 'bg-primary-container text-[#752805]' : 'bg-surface-container text-on-surface-variant'
               }`}
@@ -1447,7 +1470,7 @@ export default function ProgressPage() {
           {(['pace', 'distance'] as const).map(m => (
             <button
               key={m}
-              onClick={() => setCardioMetric(m)}
+              onClick={() => fadeThen(() => setCardioMetric(m), 'chart')}
               className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
                 cardioMetric === m ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
               }`}
@@ -1491,7 +1514,7 @@ export default function ProgressPage() {
             {(['week', 'month', 'year', 'all'] as const).map(r => (
               <button
                 key={r}
-                onClick={() => { setChartRange(r); setHoveredIdx(null) }}
+                onClick={() => { fadeThen(() => setChartRange(r), 'chart'); setHoveredIdx(null) }}
                 className={`px-2 py-1 rounded-full text-[10px] font-bold font-label uppercase tracking-widest transition-colors ${
                   chartRange === r
                     ? tab === 'lifts' ? 'bg-primary-container/30 text-primary-container' : 'bg-[#4bdece]/20 text-[#4bdece]'
@@ -1504,6 +1527,7 @@ export default function ProgressPage() {
           </div>
         </div>
         <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] md:aspect-[3/2] relative overflow-hidden flex flex-col justify-end">
+        <div style={{ opacity: chartAlpha, transition: 'opacity 0.15s ease-in-out' }} className="flex-1 relative flex flex-col justify-end">
 
           {/* Peak stat / hovered value */}
           {tab === 'lifts' && liftPts.length > 0 && (() => {
@@ -1627,6 +1651,7 @@ export default function ProgressPage() {
               </div>
             )
           )}
+        </div>{/* end keyed chart content */}
         </div>
       </section>
 
@@ -1728,7 +1753,7 @@ export default function ProgressPage() {
               ? (['date', 'weight', 'volume'] as const).map(s => (
                   <button
                     key={s}
-                    onClick={() => setLiftSort(s)}
+                    onClick={() => fadeThen(() => setLiftSort(s), 'list')}
                     className={`px-2 py-1 rounded-lg text-[10px] font-bold font-label uppercase tracking-wide transition-colors ${
                       liftSort === s ? 'bg-primary-container/20 text-primary-container' : 'text-on-surface-variant/40'
                     }`}
@@ -1741,7 +1766,7 @@ export default function ProgressPage() {
                   .map(s => (
                     <button
                       key={s}
-                      onClick={() => setCardioSort(s)}
+                      onClick={() => fadeThen(() => setCardioSort(s), 'list')}
                       className={`px-2 py-1 rounded-lg text-[10px] font-bold font-label uppercase tracking-wide transition-colors ${
                         cardioSort === s ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'text-on-surface-variant/40'
                       }`}
@@ -1767,7 +1792,7 @@ export default function ProgressPage() {
             {(['all', 'run', 'interval'] as const).map(s => (
               <button
                 key={s}
-                onClick={() => { setRunSubFilter(s); setSelectedIds(new Set()) }}
+                onClick={() => { fadeThen(() => setRunSubFilter(s), 'both'); setSelectedIds(new Set()) }}
                 className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
                   runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
                 }`}
@@ -1838,7 +1863,7 @@ export default function ProgressPage() {
         )}
 
 
-        <div className="flex flex-col gap-[0.35rem]">
+        <div style={{ opacity: listAlpha, transition: 'opacity 0.15s ease-in-out' }} className="flex flex-col gap-[0.35rem]">
           {tab === 'lifts' ? (
             sortedLifts.length > 0 ? (
               sortedLifts.slice(0, visibleCount).map((s, i) => {
@@ -2000,6 +2025,8 @@ export default function ProgressPage() {
       </section>
 
       </div>{/* end desktop two-column */}
+
+      </div>{/* end tab content */}
 
       {/* Body weight section */}
       <section className="flex flex-col gap-3">

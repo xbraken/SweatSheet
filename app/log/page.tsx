@@ -554,7 +554,7 @@ export default function LogPage() {
   // ── List view ───────────────────────────────────────────────────────────────
   if (view.type === 'list') {
     return (
-      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col px-4 pt-6">
+      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col px-4 pt-6 animate-fade-in-view">
         {pr && <PrToast exercise={pr.exercise} weight={pr.weight} onDone={() => setPr(null)} />}
         {showExPicker && (
           <ExercisePicker
@@ -782,7 +782,7 @@ export default function LogPage() {
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
 
     return (
-      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
+      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
         {/* Header */}
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
@@ -905,7 +905,7 @@ export default function LogPage() {
 
   // ── Cardio logging view ─────────────────────────────────────────────────────
   return (
-    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col">
+    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
       <div className="sticky top-0 z-40 px-4 py-4 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
         <div className="flex items-center justify-between">
           <button onClick={() => setView({ type: 'list' })} className="flex items-center gap-1 text-[#a48b83]">

@@ -54,13 +54,13 @@ export default function AccountPage() {
   }
 
   if (loading) return (
-    <main className="max-w-[390px] mx-auto min-h-screen flex items-center justify-center">
+    <main key="loading" className="max-w-[390px] mx-auto min-h-screen flex items-center justify-center">
       <div className="w-6 h-6 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
     </main>
   )
 
   return (
-    <main className="max-w-[390px] md:max-w-xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12">
+    <main key="content" className="max-w-[390px] md:max-w-xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12 animate-fade-in-view">
       <header className="mb-10">
         <h1 className="font-headline text-3xl font-black tracking-tight text-[#e5e2e1]">Account</h1>
         <p className="text-sm text-[#a48b83] mt-1">@{username}</p>
@@ -100,7 +100,7 @@ export default function AccountPage() {
 
       {/* Data cleanup */}
       {invalidExercises.length > 0 && (
-        <section className="flex flex-col gap-3 mb-8">
+        <section className="flex flex-col gap-3 mb-8 animate-fade-in">
           <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Data cleanup</h3>
           <div className="bg-[#201f1f] rounded-2xl p-5">
             <p className="text-sm text-[#a48b83] mb-3">

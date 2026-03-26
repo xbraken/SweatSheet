@@ -79,9 +79,9 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
             <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
         ) : isEmpty ? (
-          <p className="text-center text-[#a48b83] pt-20">No workout recorded for this day</p>
+          <p className="text-center text-[#a48b83] pt-20 animate-fade-in">No workout recorded for this day</p>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fade-in">
             {data!.sessions.map((sess, si) => {
               const time = formatTime(sess.createdAt)
               // For cardio, prefer started_at if available for the time label

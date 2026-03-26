@@ -98,7 +98,7 @@ export default function SocialPage() {
             <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
         ) : feed.length === 0 ? (
-          <div className="flex flex-col items-center pt-24 gap-4 text-center">
+          <div className="flex flex-col items-center pt-24 gap-4 text-center animate-fade-in">
             <span className="material-symbols-outlined text-5xl text-[#a48b83]/30">group</span>
             <p className="font-headline font-bold text-lg text-[#e5e2e1]">No friends yet</p>
             <p className="text-[#a48b83] text-sm">Add friends to see their latest workouts</p>
@@ -112,7 +112,7 @@ export default function SocialPage() {
           </div>
         ) : (
           <>
-            <div className="space-y-0">
+            <div className="space-y-0 animate-fade-in">
               {feed.map(item => (
                 <button
                   key={item.userId}
@@ -150,7 +150,7 @@ export default function SocialPage() {
 
       {/* Search Modal — full page so keyboard doesn't push input off screen */}
       {showSearch && (
-        <div className="fixed inset-0 z-50 bg-[#0e0e0e] flex flex-col max-w-[390px] mx-auto">
+        <div className="fixed inset-0 z-50 bg-[#0e0e0e] flex flex-col max-w-[390px] mx-auto animate-slide-up">
           <div className="flex items-center gap-3 px-5 py-4 border-b border-[#201f1f]">
             <button className="text-[#a48b83]" onClick={() => setShowSearch(false)}>
               <span className="material-symbols-outlined">arrow_back</span>
@@ -170,10 +170,10 @@ export default function SocialPage() {
           </div>
           <div className="overflow-y-auto flex-1">
             {searchResults.length === 0 && searchQuery.trim() && !searching && (
-              <p className="text-center text-[#a48b83] text-sm py-8">No users found</p>
+              <p className="text-center text-[#a48b83] text-sm py-8 animate-fade-in">No users found</p>
             )}
             {!searchQuery.trim() && (
-              <p className="text-center text-[#a48b83]/50 text-sm py-12">Type a username to search</p>
+              <p className="text-center text-[#a48b83]/50 text-sm py-12 animate-fade-in">Type a username to search</p>
             )}
             {searchResults.map(user => {
               const isFollowing = !!user.is_following || justFollowed.has(user.username)

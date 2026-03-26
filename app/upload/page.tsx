@@ -118,7 +118,7 @@ export default function UploadPage() {
 
           <div className="bg-surface-container rounded-xl overflow-hidden p-1 space-y-1">
             {parsed ? (
-              <div className="bg-surface-container-high rounded-lg p-5 space-y-6">
+              <div className="bg-surface-container-high rounded-lg p-5 space-y-6 animate-fade-in">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">{parsed.type}</p>
