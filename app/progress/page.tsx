@@ -226,7 +226,7 @@ function RunDetailSheet({
     return (
       <>
         <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
-        <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex items-center justify-center">
+        <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex items-center justify-center animate-slide-up">
           <div className="w-8 h-8 border-2 border-[#4bdece] border-t-transparent rounded-full animate-spin" />
         </div>
       </>
@@ -364,7 +364,7 @@ function RunDetailSheet({
   return (
     <>
       <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden">
+      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up">
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-[#201f1f] flex items-start justify-between shrink-0">
           <div>
@@ -1044,6 +1044,7 @@ export default function ProgressPage() {
   const [visibleCount, setVisibleCount] = useState(10)
   const [editSetModal, setEditSetModal] = useState<{id: number; weight: number; reps: number} | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [fadingRunIds, setFadingRunIds] = useState<Set<number>>(new Set())
 
   // Persist UI preferences to localStorage
   useEffect(() => { localStorage.setItem('ss_prog_tab', tab) }, [tab])
@@ -1815,9 +1816,13 @@ export default function ProgressPage() {
               onClick={async () => {
                 if (!confirm(`Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return
                 const deletedIds = new Set(selectedIds)
-                setCardioHistory(prev => prev.filter(e => !deletedIds.has(e.cardio_id!)))
+                setFadingRunIds(prev => new Set([...prev, ...deletedIds]))
                 setSelectedIds(new Set())
                 setSelectMode(false)
+                setTimeout(() => {
+                  setCardioHistory(prev => prev.filter(e => !deletedIds.has(e.cardio_id!)))
+                  setFadingRunIds(prev => { const s = new Set(prev); deletedIds.forEach(id => s.delete(id)); return s })
+                }, 200)
                 fetch('/api/run/bulk-delete', {
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
@@ -1911,6 +1916,7 @@ export default function ProgressPage() {
               sortedCardio.slice(0, visibleCount).map((s, i) => {
                 const isFastest = !!(fastestRunEntry && s.date === fastestRunEntry.date && s.pace === fastestRunEntry.pace)
                 const isSelected = s.cardio_id ? selectedIds.has(s.cardio_id) : false
+                const isFading = s.cardio_id ? fadingRunIds.has(s.cardio_id) : false
                 return (
                   <button
                     key={i}
@@ -1925,7 +1931,7 @@ export default function ProgressPage() {
                         s.cardio_id && setSelectedRunId(s.cardio_id)
                       }
                     }}
-                    className={`w-full p-5 flex justify-between items-start transition-all rounded-lg text-left ${
+                    className={`w-full p-5 flex justify-between items-start transition-all rounded-lg text-left ${isFading ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'} ${
                       isSelected ? 'bg-red-950/30 border border-red-900/40' : `bg-surface-container hover:bg-surface-container-high active:scale-[0.99] ${isFastest ? 'border border-[#4bdece]/30' : ''}`
                     }`}
                   >
@@ -2116,8 +2122,12 @@ export default function ProgressPage() {
           allCardio={cardioHistory as CardioEntry[]}
           onClose={() => setSelectedRunId(null)}
           onDeleted={(id) => {
-            setCardioHistory(prev => (prev as CardioEntry[]).filter(e => e.cardio_id !== id))
+            setFadingRunIds(prev => new Set([...prev, id]))
             setSelectedRunId(null)
+            setTimeout(() => {
+              setCardioHistory(prev => (prev as CardioEntry[]).filter(e => e.cardio_id !== id))
+              setFadingRunIds(prev => { const s = new Set(prev); s.delete(id); return s })
+            }, 200)
           }}
         />
       )}
@@ -2126,7 +2136,7 @@ export default function ProgressPage() {
       {editSetModal && (
         <>
           <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm" onClick={() => setEditSetModal(null)} />
-          <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10">
+          <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10 animate-slide-up">
             <div className="flex items-center justify-between mb-5">
               <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Edit set</p>
               <button onClick={() => setEditSetModal(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>

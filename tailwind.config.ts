@@ -41,6 +41,16 @@ const config: Config = {
         body: ['Manrope', 'sans-serif'],
         label: ['Manrope', 'sans-serif'],
       },
+      keyframes: {
+        'fade-in': { '0%': { opacity: '0', transform: 'translateY(6px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+        'fade-out': { '0%': { opacity: '1', transform: 'translateY(0)' }, '100%': { opacity: '0', transform: 'translateY(6px)' } },
+        'slide-up': { '0%': { transform: 'translateY(100%)' }, '100%': { transform: 'translateY(0)' } },
+      },
+      animation: {
+        'fade-in': 'fade-in 0.18s ease-out both',
+        'fade-out': 'fade-out 0.18s ease-out both',
+        'slide-up': 'slide-up 0.25s cubic-bezier(0.32,0.72,0,1) both',
+      },
       borderRadius: {
         DEFAULT: '0.125rem',
         lg: '0.25rem',

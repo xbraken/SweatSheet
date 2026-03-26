@@ -124,7 +124,7 @@ function ExercisePicker({
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-[#131313] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden">
+      <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-[#131313] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up">
         <div className="px-5 pt-5 pb-3 border-b border-[#201f1f]">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-headline text-lg font-bold">Choose exercise</h2>
@@ -202,7 +202,7 @@ function CardioPicker({ onSelect, onClose }: {
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-6 shadow-2xl overflow-y-auto max-h-[70vh]">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-lg md:left-[calc(50%+7rem)] md:rounded-2xl md:bottom-4 z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-6 shadow-2xl overflow-y-auto max-h-[70vh] animate-slide-up">
         <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
         <div className="flex flex-col gap-3">
@@ -237,7 +237,7 @@ function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNex
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[env(safe-area-inset-bottom,16px)] max-h-[85vh] overflow-y-auto">
+      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[env(safe-area-inset-bottom,16px)] max-h-[85vh] overflow-y-auto animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <button onClick={onPrev} className="w-8 h-8 flex items-center justify-center">
             <span className="material-symbols-outlined text-[#a48b83]">chevron_left</span>
@@ -343,6 +343,7 @@ export default function LogPage() {
   // Edit sheets
   const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number}[]} | null>(null)
   const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
+  const [fadingBlocks, setFadingBlocks] = useState<Set<number>>(new Set())
 
   // Calendar / history browsing
   const browsedDateRef = useRef<string | null>(null)
@@ -535,10 +536,14 @@ export default function LogPage() {
     fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardioId, distance, duration, pace }) })
   }
 
-  // Delete a logged block — optimistic: remove from UI immediately
+  // Delete a logged block — fade out then remove
   const deleteBlock = (blockId: number) => {
-    setLoggedLifts(prev => prev.filter(l => l.block_id !== blockId))
-    setLoggedCardio(prev => prev.filter(c => c.block_id !== blockId))
+    setFadingBlocks(prev => new Set([...prev, blockId]))
+    setTimeout(() => {
+      setLoggedLifts(prev => prev.filter(l => l.block_id !== blockId))
+      setLoggedCardio(prev => prev.filter(c => c.block_id !== blockId))
+      setFadingBlocks(prev => { const s = new Set(prev); s.delete(blockId); return s })
+    }, 200)
     fetch('/api/log', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -598,7 +603,7 @@ export default function LogPage() {
         ) : (
           <div className="space-y-3 mb-6">
             {loggedLifts.map(l => (
-              <div key={l.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5">
+              <div key={l.block_id} className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 ${fadingBlocks.has(l.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
@@ -628,7 +633,7 @@ export default function LogPage() {
               </div>
             ))}
             {loggedCardio.map(c => (
-              <div key={c.block_id} className="bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between">
+              <div key={c.block_id} className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[#4bdece]">
                     {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
@@ -678,7 +683,7 @@ export default function LogPage() {
         {editLift && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setEditLift(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12 animate-slide-up">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editLift.exercise}</h3>
                 <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
@@ -719,7 +724,7 @@ export default function LogPage() {
         {editCardio && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setEditCardio(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12 animate-slide-up">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editCardio.activity}</h3>
                 <button onClick={() => setEditCardio(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
