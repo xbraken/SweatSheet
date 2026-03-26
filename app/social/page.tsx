@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
+import BottomNav from '@/components/BottomNav'
 
 interface CardioBlock {
   activity: string
@@ -283,6 +284,8 @@ export default function SocialPage() {
           </div>
         </div>
       )}
+
+      <BottomNav />
     </>
   )
 }
