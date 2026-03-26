@@ -237,7 +237,7 @@ function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNex
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10">
+      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[env(safe-area-inset-bottom,16px)] max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <button onClick={onPrev} className="w-8 h-8 flex items-center justify-center">
             <span className="material-symbols-outlined text-[#a48b83]">chevron_left</span>
@@ -254,7 +254,7 @@ function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNex
             <div key={d} className="text-center text-[10px] font-bold font-label text-[#56423c] py-1">{d}</div>
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-y-1">
+        <div className="grid grid-cols-7 gap-y-0.5">
           {Array.from({ length: firstDay }).map((_, i) => <div key={`p${i}`} />)}
           {Array.from({ length: daysInMonth }, (_, i) => {
             const day = i + 1
@@ -267,7 +267,7 @@ function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNex
                 key={date}
                 disabled={isFuture}
                 onClick={() => { onSelectDate(date); onClose() }}
-                className={`flex flex-col items-center justify-center py-1.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-20 active:scale-95
+                className={`flex flex-col items-center justify-center py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-20 active:scale-95
                   ${isToday ? 'bg-[#ff9066]/20 text-[#ff9066]' : hasWorkout ? 'text-[#e5e2e1] hover:bg-[#2a2a2a]' : 'text-[#353534]'}`}
               >
                 {day}
