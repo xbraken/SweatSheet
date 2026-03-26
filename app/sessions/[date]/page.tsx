@@ -157,11 +157,15 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                     {sess.lifts.map((g, i) => {
                       const totalVol = g.sets.reduce((sum, s) => sum + s.weight * s.reps, 0)
                       const max1RM = Math.max(...g.sets.map(s => epley1RM(s.weight, s.reps)))
+                      const exTime = formatTime(g.sets[0]?.logged_at ?? null)
                       return (
                         <div key={i} className="rounded-2xl bg-[#131313] border border-[#201f1f] p-4">
                           <div className="flex items-start justify-between mb-3">
                             <div>
-                              <span className="bg-[#ff9066]/20 text-[#ff9066] text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Lift</span>
+                              <div className="flex items-center gap-2">
+                                <span className="bg-[#ff9066]/20 text-[#ff9066] text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Lift</span>
+                                {exTime && <span className="text-[#a48b83] text-xs font-mono">{exTime}</span>}
+                              </div>
                               <h3 className="font-headline font-bold text-base text-[#e5e2e1] mt-1">{g.exercise}</h3>
                             </div>
                             <div className="text-right">
