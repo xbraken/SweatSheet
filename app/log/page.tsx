@@ -203,9 +203,15 @@ function CardioPicker({ onSelect, onClose }: {
     { label: 'Interval run', icon: 'directions_run' },
   ]
   const dragY = useRef(0)
-  const [translateY, setTranslateY] = useState(0)
-  const translateYRef = useRef(0)
+  const dragDelta = useRef(0)
   const sheetRef = useRef<HTMLDivElement>(null)
+
+  function setSheetY(y: number, animated: boolean) {
+    const el = sheetRef.current
+    if (!el) return
+    el.style.transition = animated ? 'transform 0.3s ease' : 'none'
+    el.style.transform = `translateY(${y}px)`
+  }
 
   useEffect(() => {
     const el = sheetRef.current
@@ -214,8 +220,8 @@ function CardioPicker({ onSelect, onClose }: {
       const delta = e.touches[0].clientY - dragY.current
       if (delta > 0) {
         e.preventDefault()
-        translateYRef.current = delta
-        setTranslateY(delta)
+        dragDelta.current = delta
+        setSheetY(delta, false)
       }
     }
     el.addEventListener('touchmove', onTouchMove, { passive: false })
@@ -224,15 +230,16 @@ function CardioPicker({ onSelect, onClose }: {
 
   function handleTouchStart(e: React.TouchEvent) {
     dragY.current = e.touches[0].clientY
+    dragDelta.current = 0
   }
   function handleTouchEnd() {
-    if (translateYRef.current > 80) {
-      setTranslateY(window.innerHeight)
+    if (dragDelta.current > 80) {
+      setSheetY(window.innerHeight, true)
       setTimeout(onClose, 300)
     } else {
-      setTranslateY(0)
+      setSheetY(0, true)
     }
-    translateYRef.current = 0
+    dragDelta.current = 0
   }
 
   return (
@@ -241,7 +248,6 @@ function CardioPicker({ onSelect, onClose }: {
       <div
         ref={sheetRef}
         className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
-        style={{ transform: `translateY(${translateY}px)`, transition: translateY === 0 ? 'transform 0.3s ease' : 'none' }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
