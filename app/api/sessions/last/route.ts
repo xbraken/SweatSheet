@@ -24,7 +24,7 @@ export async function GET() {
     args: [sessionId],
   })
 
-  const blockIds = blocksRes.rows.map((b: { id: unknown }) => b.id as number)
+  const blockIds = blocksRes.rows.map(b => b.id as number)
   if (blockIds.length === 0) return NextResponse.json({ date: lastSession.date, blocks: [] })
 
   const placeholders = blockIds.map(() => '?').join(',')
@@ -59,7 +59,7 @@ export async function GET() {
       blocks.push({
         type: 'lift',
         exercise: sets[0].exercise as string,
-        sets: sets.map((s: { weight: unknown; reps: unknown }) => ({ weight: s.weight as number, reps: s.reps as number })),
+        sets: sets.map(s => ({ weight: s.weight as number, reps: s.reps as number })),
       })
     } else {
       const c = cardioByBlock[bid]
