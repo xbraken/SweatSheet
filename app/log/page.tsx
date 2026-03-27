@@ -769,6 +769,7 @@ export default function LogPage() {
                         inputMode="decimal"
                         value={s.weight}
                         onChange={e => setEditLiftField(s.id, 'weight', parseFloat(e.target.value) || 0)}
+                        onFocus={e => e.target.select()}
                         className="font-headline font-bold text-sm w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                       />
                       <button onClick={() => adjustEditLiftSet(s.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
@@ -784,6 +785,7 @@ export default function LogPage() {
                         inputMode="numeric"
                         value={s.reps}
                         onChange={e => setEditLiftField(s.id, 'reps', parseInt(e.target.value) || 0)}
+                        onFocus={e => e.target.select()}
                         className="font-headline font-bold text-sm w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                       />
                       <button onClick={() => adjustEditLiftSet(s.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
@@ -926,6 +928,7 @@ export default function LogPage() {
                             inputMode="decimal"
                             value={activeSet.weight}
                             onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value) || 0)}
+                            onFocus={e => e.target.select()}
                             className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                           />
                           <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
@@ -944,6 +947,7 @@ export default function LogPage() {
                             inputMode="numeric"
                             value={activeSet.reps}
                             onChange={e => setSetField(activeSet.id, 'reps', parseInt(e.target.value) || 0)}
+                            onFocus={e => e.target.select()}
                             className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                           />
                           <button onClick={() => updateSet(activeSet.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
