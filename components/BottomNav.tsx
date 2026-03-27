@@ -36,12 +36,6 @@ export default function BottomNav() {
             )
           })}
         </div>
-        <Link
-          href="/settings"
-          className={`absolute top-2 right-2 p-1.5 transition-all active:scale-90 ${path === '/settings' ? 'text-[#ff9066]' : 'text-[#e5e2e1]/30 hover:text-[#e5e2e1]/60'}`}
-        >
-          <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: path === '/settings' ? "'FILL' 1" : "'FILL' 0" }}>settings</span>
-        </Link>
       </nav>
 
       {/* Desktop sidebar */}
