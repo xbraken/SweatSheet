@@ -145,12 +145,11 @@ export default function ProfilePage() {
   }, [allDayGroups, filter])
 
   async function shareDay(g: DayGroup) {
-    const text = buildShareText(username, g)
     const url = `${window.location.origin}/sessions/${g.date}`
     if (navigator.share) {
-      await navigator.share({ title: dayTitle(g), text, url })
+      await navigator.share({ title: dayTitle(g), url })
     } else {
-      await navigator.clipboard.writeText(`${text}\n\n${url}`)
+      await navigator.clipboard.writeText(url)
       setCopiedDate(g.date)
       setTimeout(() => setCopiedDate(null), 2000)
     }
