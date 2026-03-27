@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
     const blockResults = await db.batch(blockStmts)
 
     // Collect all set and cardio inserts
-    const setStmts: { sql: string; args: unknown[] }[] = []
-    const cardioStmts: { sql: string; args: unknown[] }[] = []
+    const setStmts: { sql: string; args: (string | number | null)[] }[] = []
+    const cardioStmts: { sql: string; args: (string | number | null)[] }[] = []
 
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i]
