@@ -160,14 +160,14 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
 
       <main className="max-w-[390px] mx-auto px-4 pb-32">
         {loading ? (
-          <div className="flex justify-center pt-20">
+          <div key="loading" className="flex justify-center pt-20">
             <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
         ) : !profile ? (
-          <p className="text-center text-[#a48b83] pt-20">User not found</p>
+          <p key="not-found" className="text-center text-[#a48b83] pt-20 animate-fade-in">User not found</p>
         ) : (
           <>
-            <section className="flex flex-col items-center pt-8 pb-8">
+            <section className="flex flex-col items-center pt-8 pb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
               <div className="w-24 h-24 rounded-full bg-[#2a2a2a] flex items-center justify-center border-2 border-[#ff9066]/20 mb-4">
                 <span className="font-headline text-3xl font-black text-[#ffb9a0]">
                   {profile.username.slice(0, 2).toUpperCase()}
@@ -177,18 +177,18 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
               <p className="text-[#a48b83] text-sm font-medium">{profile.totalWorkouts} Workouts</p>
             </section>
 
-            <h3 className="font-headline text-base font-bold text-[#e5e2e1] mb-4">Recent Workouts</h3>
+            <h3 className="font-headline text-base font-bold text-[#e5e2e1] mb-4 animate-fade-in" style={{ animationDelay: '60ms' }}>Recent Workouts</h3>
 
             {dayGroups.length === 0 ? (
-              <p className="text-center text-[#a48b83] text-sm py-10">No workouts yet</p>
+              <p className="text-center text-[#a48b83] text-sm py-10 animate-fade-in" style={{ animationDelay: '100ms' }}>No workouts yet</p>
             ) : (
               <div className="space-y-3">
-                {dayGroups.map(g => {
+                {dayGroups.map((g, i) => {
                   const badges = dayBadges(g)
                   const keyStat = dayKeyStat(g)
                   const expanded = expandedDate === g.date
                   return (
-                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f]">
+                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 55 + 80}ms` }}>
                       <button
                         className="w-full p-4 flex items-center gap-3 text-left"
                         onClick={() => setExpandedDate(expanded ? null : g.date)}
@@ -211,7 +211,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                       </button>
 
                       {expanded && (
-                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4">
+                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">
                           {g.cardio && g.cardio.map((c, i) => (
                             <div key={i}>
                               {g.cardio!.length > 1 && (

@@ -125,7 +125,12 @@ function RunDetailSheet({
   const [editingStats, setEditingStats] = useState(false)
   const [editDist, setEditDist] = useState('')
   const [editDuration, setEditDuration] = useState('')
+  const [isClosing, setIsClosing] = useState(false)
 
+  function handleClose() {
+    setIsClosing(true)
+    setTimeout(() => onClose(), 200)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -363,8 +368,8 @@ function RunDetailSheet({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up">
+      <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={handleClose} style={{ opacity: isClosing ? 0 : 1, transition: isClosing ? 'opacity 0.2s ease-out' : undefined }} />
+      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up" style={{ opacity: isClosing ? 0 : 1, transform: isClosing ? 'translateY(16px)' : undefined, transition: isClosing ? 'opacity 0.2s ease-out, transform 0.2s ease-out' : undefined }}>
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-[#201f1f] flex items-start justify-between shrink-0">
           <div>
@@ -387,7 +392,7 @@ function RunDetailSheet({
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <button onClick={onClose} className="p-1">
+            <button onClick={handleClose} className="p-1">
               <span className="material-symbols-outlined text-[#a48b83]">close</span>
             </button>
             {detail && ['Run', 'Indoor run', 'Interval run'].includes(detail.activity) && (
@@ -413,7 +418,7 @@ function RunDetailSheet({
         <div className="flex-1 overflow-y-auto px-5 pb-32 md:pb-8 md:max-w-3xl md:mx-auto md:w-full">
           {/* HR badges */}
           {(detail.heart_rate || detail.hr_min || detail.hr_max) && (
-            <div className="flex gap-2 mt-4 flex-wrap">
+            <div className="flex gap-2 mt-4 flex-wrap animate-fade-in" style={{ animationDelay: '0ms' }}>
               {mainAvg && (
                 <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
                   <span className="text-xl font-black font-headline text-[#ff9066]">{mainAvg}</span>
@@ -437,7 +442,7 @@ function RunDetailSheet({
 
           {/* Pace Chart */}
           {hasPace && (
-            <div className="mt-5 bg-[#131313] rounded-2xl p-4">
+            <div className="mt-5 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '60ms' }}>
               {(() => {
                 const maxT = paceMaxT
                 const interval = maxT > 1800 ? 600 : 300
@@ -639,7 +644,7 @@ function RunDetailSheet({
 
           {/* Best Segments */}
           {(best5KSec !== null || best10KSec !== null) && (
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex gap-2 animate-fade-in" style={{ animationDelay: '120ms' }}>
               {best5KSec !== null && (
                 <div className="flex-1 bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
                   <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Best 5K</span>
@@ -661,7 +666,7 @@ function RunDetailSheet({
             const splitMax = Math.max(...kmSplits.map(s => s.paceSec))
             const splitAvg = paceAvgSec ?? Math.round(kmSplits.reduce((a, b) => a + b.paceSec, 0) / kmSplits.length)
             return (
-              <div className="mt-4 bg-[#131313] rounded-2xl p-4">
+              <div className="mt-4 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '160ms' }}>
                 <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Km splits</p>
                 <div className="space-y-1.5">
                   {kmSplits.map(({ km, paceSec, partial }) => {
@@ -692,7 +697,7 @@ function RunDetailSheet({
 
           {/* HR Chart */}
           {hasHr ? (
-            <div className="mt-5 bg-[#131313] rounded-2xl p-4">
+            <div className="mt-5 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
               {(() => {
                 const maxT = hasHr ? detail.hrSamples[detail.hrSamples.length - 1].time_offset_sec : 0
                 const interval = maxT > 1800 ? 600 : 300
@@ -860,14 +865,14 @@ function RunDetailSheet({
               )}
             </div>
           ) : (
-            <div className="mt-4 bg-[#131313] rounded-2xl p-5 text-center">
+            <div className="mt-4 bg-[#131313] rounded-2xl p-5 text-center animate-fade-in" style={{ animationDelay: '200ms' }}>
               <span className="material-symbols-outlined text-3xl text-[#353534]">monitor_heart</span>
               <p className="text-sm text-[#a48b83] mt-2">No HR data — re-import from Apple Health to get your full heart rate curve</p>
             </div>
           )}
 
           {/* Compare button */}
-          <div className="mt-4">
+          <div className="mt-4 animate-fade-in" style={{ animationDelay: '240ms' }}>
             {!showComparePicker && !compareDetail && (
               <button
                 onClick={() => setShowComparePicker(true)}
@@ -1047,17 +1052,25 @@ export default function ProgressPage() {
   const [fadingRunIds, setFadingRunIds] = useState<Set<number>>(new Set())
   const [chartAlpha, setChartAlpha] = useState(1)
   const [listAlpha, setListAlpha] = useState(1)
+  const [listVersion, setListVersion] = useState(0)
+  const [listAnimateFrom, setListAnimateFrom] = useState(0)
+  const listFadingOut = useRef(false)
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Fade chart and/or list out, swap content, fade back in
+  // Fade chart and/or list out, swap content, then fade chart back / stagger list items in
   const fadeThen = useCallback((fn: () => void, target: 'chart' | 'list' | 'both' = 'both') => {
     if (fadeTimer.current) clearTimeout(fadeTimer.current)
     if (target !== 'list') setChartAlpha(0)
-    if (target !== 'chart') setListAlpha(0)
+    if (target !== 'chart') { listFadingOut.current = true; setListAlpha(0) }
     fadeTimer.current = setTimeout(() => {
       fn()
       if (target !== 'list') setChartAlpha(1)
-      if (target !== 'chart') setListAlpha(1)
+      if (target !== 'chart') {
+        listFadingOut.current = false
+        setListAnimateFrom(0)
+        setListVersion(v => v + 1)
+        setListAlpha(1)
+      }
     }, 130)
   }, [])
 
@@ -1863,13 +1876,13 @@ export default function ProgressPage() {
         )}
 
 
-        <div style={{ opacity: listAlpha, transition: 'opacity 0.15s ease-in-out' }} className="flex flex-col gap-[0.35rem]">
+        <div style={{ opacity: listAlpha, transition: listFadingOut.current ? 'opacity 0.12s ease-in-out' : 'none' }} className="flex flex-col gap-[0.35rem]">
           {tab === 'lifts' ? (
             sortedLifts.length > 0 ? (
               sortedLifts.slice(0, visibleCount).map((s, i) => {
                 const isPb = s.date === pbDate
                 return (
-                  <div key={i} className={`bg-surface-container p-4 flex flex-col gap-3 rounded-lg ${isPb ? 'border border-primary-container/30' : ''}`}>
+                  <div key={`${listVersion}-${i}`} className={`bg-surface-container p-4 flex flex-col gap-3 rounded-lg animate-fade-in ${isPb ? 'border border-primary-container/30' : ''}`} style={{ animationDelay: `${Math.max(0, Math.min(i - listAnimateFrom, 7)) * 55}ms` }}>
                     <div className="flex justify-between items-center">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
@@ -1944,7 +1957,8 @@ export default function ProgressPage() {
                 const isFading = s.cardio_id ? fadingRunIds.has(s.cardio_id) : false
                 return (
                   <button
-                    key={i}
+                    key={`${listVersion}-${i}`}
+                    style={isFading ? undefined : { animationDelay: `${Math.max(0, Math.min(i - listAnimateFrom, 7)) * 55}ms` }}
                     onClick={() => {
                       if (selectMode && s.cardio_id) {
                         setSelectedIds(prev => {
@@ -2009,7 +2023,7 @@ export default function ProgressPage() {
             const total = tab === 'lifts' ? sortedLifts.length : sortedCardio.length
             return total > visibleCount ? (
               <button
-                onClick={() => setVisibleCount(c => c + 10)}
+                onClick={() => { setListAnimateFrom(visibleCount); setVisibleCount(c => c + 10) }}
                 className="mt-2 w-full py-3 rounded-xl bg-surface-container text-on-surface-variant text-sm font-bold font-label hover:bg-surface-container-high transition-colors"
               >
                 Load more ({total - visibleCount} remaining)

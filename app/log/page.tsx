@@ -41,7 +41,7 @@ function RestButton({ seconds, total, onSkip }: { seconds: number; total: number
   return (
     <button
       onClick={onSkip}
-      className="relative w-full py-3.5 rounded-xl font-headline font-bold text-sm overflow-hidden flex items-center justify-center gap-2 text-[#a48b83] border border-[#353534]"
+      className="relative w-full py-3.5 rounded-xl font-headline font-bold text-sm overflow-hidden flex items-center justify-center gap-2 text-[#a48b83] border border-[#353534] animate-fade-in"
     >
       <span
         className="absolute inset-0 bg-[#ff9066]/20"
@@ -55,13 +55,17 @@ function RestButton({ seconds, total, onSkip }: { seconds: number; total: number
 
 // ── PR Toast ──────────────────────────────────────────────────────────────────
 function PrToast({ exercise, weight, onDone }: { exercise: string; weight: number; onDone: () => void }) {
+  const [fading, setFading] = useState(false)
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
   useEffect(() => {
-    const t = setTimeout(onDone, 3500)
-    return () => clearTimeout(t)
-  }, [onDone])
+    const fadeTimer = setTimeout(() => setFading(true), 4600)
+    const doneTimer = setTimeout(() => onDoneRef.current(), 5000)
+    return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer) }
+  }, [])
   return (
-    <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50">
-      <div className="bg-[#ff9066] text-[#752805] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 font-headline font-bold text-sm">
+    <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50" style={{ opacity: fading ? 0 : 1, transition: fading ? 'opacity 0.4s ease-out' : undefined }}>
+      <div className="bg-[#ff9066] text-[#752805] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 font-headline font-bold text-sm animate-slide-up">
         <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
         New PR! {exercise} — {weight} kg
       </div>
@@ -813,7 +817,7 @@ export default function LogPage() {
         <div className="flex-grow px-4 pt-6 space-y-2">
           {/* Done sets */}
           {sets.filter(s => s.done).map((set, i) => (
-            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1">
+            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
               <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
               <div className="flex-1 flex gap-6">
                 <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
@@ -827,7 +831,7 @@ export default function LogPage() {
 
           {/* Active set */}
           {activeSet && (
-            <div className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20">
+            <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
               {restingId !== null ? (
                 <RestButton seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
               ) : (

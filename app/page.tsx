@@ -72,7 +72,7 @@ export default async function TodayPage() {
   const todayIdx = (now.getDay() + 6) % 7
 
   return (
-    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12">
+    <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12 animate-fade-in-view">
       {/* Header */}
       <header className="mb-10 flex justify-between items-start">
         <div>
