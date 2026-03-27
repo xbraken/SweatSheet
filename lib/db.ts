@@ -5,6 +5,9 @@ export const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN!,
 })
 
+// Increment this whenever new migrations are added
+const SCHEMA_VERSION = 3
+
 let _initPromise: Promise<void> | null = null
 
 export function initDb(): Promise<void> {
@@ -14,6 +17,13 @@ export function initDb(): Promise<void> {
 }
 
 async function _runInit() {
+  // Fast path: single read to check if schema is already current
+  // Avoids firing 30+ DDL write-transactions on every cold start
+  try {
+    const v = await db.execute(`SELECT value FROM _meta WHERE key = 'schema_version'`)
+    if (v.rows.length > 0 && Number(v.rows[0].value) >= SCHEMA_VERSION) return
+  } catch { /* _meta table doesn't exist yet — first run */ }
+
   // Core tables
   await db.execute(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,5 +143,11 @@ async function _runInit() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_hr_samples_cardio ON cardio_hr_samples(cardio_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_dist_samples_cardio ON cardio_distance_samples(cardio_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_blocks_session_type ON blocks(session_id, type)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sets_exercise_block ON sets(exercise, block_id)`)
+
+  // Mark schema as current — future cold starts skip all DDL above
+  await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)
+  await db.execute({ sql: `INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`, args: [String(SCHEMA_VERSION)] })
 }
 
