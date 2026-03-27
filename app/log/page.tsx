@@ -747,7 +747,7 @@ export default function LogPage() {
         {editLift && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setEditLift(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12 animate-slide-up">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editLift.exercise}</h3>
                 <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
@@ -788,7 +788,7 @@ export default function LogPage() {
         {editCardio && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setEditCardio(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-12 animate-slide-up">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editCardio.activity}</h3>
                 <button onClick={() => setEditCardio(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
