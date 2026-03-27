@@ -202,10 +202,34 @@ function CardioPicker({ onSelect, onClose }: {
     { label: 'Cycling', icon: 'directions_bike' },
     { label: 'Interval run', icon: 'directions_run' },
   ]
+  const dragY = useRef(0)
+  const [translateY, setTranslateY] = useState(0)
+
+  function handleTouchStart(e: React.TouchEvent) {
+    dragY.current = e.touches[0].clientY
+  }
+  function handleTouchMove(e: React.TouchEvent) {
+    const delta = e.touches[0].clientY - dragY.current
+    if (delta > 0) setTranslateY(delta)
+  }
+  function handleTouchEnd() {
+    if (translateY > 80) {
+      onClose()
+    } else {
+      setTranslateY(0)
+    }
+  }
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up">
+      <div
+        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
+        style={{ transform: `translateY(${translateY}px)`, transition: translateY === 0 ? 'transform 0.3s ease' : 'none' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
         <div className="flex flex-col gap-3">
