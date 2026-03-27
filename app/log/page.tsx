@@ -210,6 +210,7 @@ function CardioPicker({ onSelect, onClose }: {
   function setSheetY(y: number, animated: boolean) {
     const el = sheetRef.current
     if (!el) return
+    el.style.animation = 'none'
     el.style.transition = animated ? 'transform 0.3s ease' : 'none'
     el.style.transform = `translateY(${y}px)`
   }
@@ -257,7 +258,7 @@ function CardioPicker({ onSelect, onClose }: {
         ref={sheetRef}
         className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
       >
-        <div ref={handleRef} className="w-full flex justify-center py-2 mb-4 cursor-grab active:cursor-grabbing">
+        <div ref={handleRef} className="w-full flex justify-center py-2 mb-4 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
           <div className="w-10 h-1 bg-[#353534] rounded-full" />
         </div>
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
