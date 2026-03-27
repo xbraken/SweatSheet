@@ -1085,52 +1085,59 @@ export default function ProgressPage() {
   useEffect(() => { if (exercise) localStorage.setItem('ss_prog_exercise', exercise) }, [exercise])
   useEffect(() => { if (cardioActivity) localStorage.setItem('ss_prog_cardio_activity', cardioActivity) }, [cardioActivity])
 
-  useEffect(() => {
-    fetch('/api/bodyweight').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setBodyWeightLog([...data].reverse())
-    }).catch(() => {})
-  }, [])
+  const skipNextExerciseFetch = useRef(false)
 
   useEffect(() => {
-    fetch('/api/progress')
-      .then(r => r.json())
-      .then(data => {
-        setExercises(data.exercises ?? [])
-        const ch = data.cardioHistory ?? []
-        setCardioHistory(ch)
-        setCalendarData(data.calendarData ?? [])
+    // Include saved exercise in the initial request to avoid a second round-trip
+    const savedExercise = localStorage.getItem('ss_prog_exercise')
+    const url = savedExercise
+      ? `/api/progress?exercise=${encodeURIComponent(savedExercise)}`
+      : '/api/progress'
 
-        // Restore saved cardio activity if still valid, else pick default
-        const baseActivities = [...new Set((ch as CardioEntry[]).map(e => baseActivity(e.activity)))]
-        const savedActivity = localStorage.getItem('ss_prog_cardio_activity')
-        const restoredActivity = savedActivity && baseActivities.includes(savedActivity)
-          ? savedActivity
-          : (baseActivities.find(a => a === 'Run') ?? baseActivities[0] ?? '')
-        setCardioActivity(restoredActivity)
+    Promise.all([
+      fetch(url).then(r => r.json()),
+      fetch('/api/bodyweight').then(r => r.json()).catch(() => []),
+    ]).then(([data, bwData]) => {
+      setExercises(data.exercises ?? [])
+      const ch = data.cardioHistory ?? []
+      setCardioHistory(ch)
+      setCalendarData(data.calendarData ?? [])
+      setLiftHistory(data.liftHistory ?? [])
 
-        // Restore saved exercise if still valid, else pick first
-        const savedExercise = localStorage.getItem('ss_prog_exercise')
-        const restoredExercise = savedExercise && (data.exercises ?? []).includes(savedExercise)
-          ? savedExercise
-          : data.exercises?.[0] ?? ''
-        if (restoredExercise) {
-          setExercise(restoredExercise)
-        } else {
-          setLoading(false)
-        }
-      })
-      .catch(() => setLoading(false))
+      if (Array.isArray(bwData)) setBodyWeightLog([...bwData].reverse())
+
+      // Restore saved cardio activity if still valid, else pick default
+      const baseActivities = [...new Set((ch as CardioEntry[]).map(e => baseActivity(e.activity)))]
+      const savedActivity = localStorage.getItem('ss_prog_cardio_activity')
+      const restoredActivity = savedActivity && baseActivities.includes(savedActivity)
+        ? savedActivity
+        : (baseActivities.find(a => a === 'Run') ?? baseActivities[0] ?? '')
+      setCardioActivity(restoredActivity)
+
+      // Restore saved exercise if still valid, else pick first
+      const restoredExercise = savedExercise && (data.exercises ?? []).includes(savedExercise)
+        ? savedExercise
+        : data.exercises?.[0] ?? ''
+      if (restoredExercise) {
+        // Skip the exercise useEffect re-fetch — we already have the data
+        skipNextExerciseFetch.current = true
+        setExercise(restoredExercise)
+      }
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
   useEffect(() => {
     if (!exercise) return
+    if (skipNextExerciseFetch.current) {
+      skipNextExerciseFetch.current = false
+      return
+    }
     setLoading(true)
-    fetch(`/api/progress?exercise=${encodeURIComponent(exercise)}`)
+    fetch(`/api/progress?exercise=${encodeURIComponent(exercise)}&liftOnly=1`)
       .then(r => r.json())
       .then(data => {
         setLiftHistory(data.liftHistory ?? [])
-        setCardioHistory(data.cardioHistory ?? [])
-        setCalendarData(data.calendarData ?? [])
       })
       .finally(() => setLoading(false))
   }, [exercise, refreshKey])

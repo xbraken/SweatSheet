@@ -11,8 +11,9 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const today = searchParams.get('date') ?? new Date().toISOString().split('T')[0]
+  const includeAll = searchParams.get('include') === 'all'
 
-  const [liftRes, setsRes, cardioRes] = await Promise.all([
+  const [liftRes, setsRes, cardioRes, calendarRes, hintsRes, starredRes] = await Promise.all([
     db.execute({
       sql: `SELECT b.id as block_id, st.exercise,
               COUNT(st.id) as set_count,
@@ -43,6 +44,20 @@ export async function GET(req: NextRequest) {
             ORDER BY b.id DESC`,
       args: [session.userId, today],
     }),
+    includeAll
+      ? db.execute({ sql: 'SELECT DISTINCT date FROM sessions WHERE user_id = ? ORDER BY date DESC', args: [session.userId] })
+      : Promise.resolve({ rows: [] }),
+    includeAll
+      ? db.execute({
+          sql: `SELECT st.exercise, st.weight as last_weight, st.reps as last_reps
+                FROM sets st JOIN blocks b ON st.block_id = b.id JOIN sessions s ON b.session_id = s.id
+                WHERE s.user_id = ? GROUP BY st.exercise HAVING s.date = MAX(s.date) ORDER BY st.exercise`,
+          args: [session.userId],
+        })
+      : Promise.resolve({ rows: [] }),
+    includeAll
+      ? db.execute({ sql: 'SELECT exercise FROM starred_exercises WHERE user_id = ?', args: [session.userId] })
+      : Promise.resolve({ rows: [] }),
   ])
 
   const setsByBlock: Record<number, {id: number; weight: number; reps: number}[]> = {}
@@ -55,6 +70,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     lifts: liftRes.rows.map(r => ({ ...r, sets: setsByBlock[r.block_id as number] ?? [] })),
     cardio: cardioRes.rows,
+    ...(includeAll && {
+      dates: calendarRes.rows.map(r => r.date as string),
+      history: hintsRes.rows,
+      starred: starredRes.rows.map(r => r.exercise as string),
+    }),
   })
 }
 

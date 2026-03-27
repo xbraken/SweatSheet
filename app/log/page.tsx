@@ -379,26 +379,27 @@ export default function LogPage() {
     }).catch(() => setLoadingToday(false))
   }, [])
 
-  // Keep ref in sync and reload when date changes
+  // Initial load — single request gets log + calendar dates + exercise hints
+  const initialLoadDone = useRef(false)
   useEffect(() => {
-    browsedDateRef.current = browsedDate
-    refreshCurrent()
-  }, [browsedDate, refreshCurrent])
-
-  // Load workout dates for calendar dots
-  useEffect(() => {
-    fetch('/api/calendar').then(r => r.json()).then(d => {
-      if (d.dates) setWorkoutDates(new Set(d.dates as string[]))
-    }).catch(() => {})
-  }, [])
-
-  // Fetch hints + starred
-  useEffect(() => {
-    fetch('/api/exercises').then(r => r.json()).then(data => {
+    setLoadingToday(true)
+    fetch('/api/log?include=all').then(r => r.json()).then(data => {
+      setLoggedLifts(data.lifts ?? [])
+      setLoggedCardio(data.cardio ?? [])
+      if (data.dates) setWorkoutDates(new Set(data.dates as string[]))
       if (data.history) setHints(data.history)
       if (data.starred) setStarred(new Set(data.starred))
-    }).catch(() => {})
+      setLoadingToday(false)
+      initialLoadDone.current = true
+    }).catch(() => setLoadingToday(false))
   }, [])
+
+  // Keep ref in sync and reload when date changes (skip initial mount — handled above)
+  useEffect(() => {
+    browsedDateRef.current = browsedDate
+    if (!initialLoadDone.current) return
+    refreshCurrent()
+  }, [browsedDate, refreshCurrent])
 
   // Rest countdown
   useEffect(() => {
