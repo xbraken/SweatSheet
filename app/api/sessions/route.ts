@@ -43,32 +43,37 @@ export async function POST(req: NextRequest) {
     })
     const sessionId = sessionRes.rows[0].id as number
 
-    // Save each block
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i]
-
-      // Map client-side 'cardio' type to DB-compatible type based on activity
+    // Insert all blocks in a batch
+    const blockStmts = blocks.map((block: { type: string; activity?: string }, i: number) => {
       const blockType = block.type === 'lift' ? 'lift'
         : block.activity === 'Cycling' ? 'cycle'
         : 'run'
-
-      const blockRes = await db.execute({
+      return {
         sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
         args: [sessionId, blockType, i],
-      })
-      const blockId = blockRes.rows[0].id as number
+      }
+    })
+    const blockResults = await db.batch(blockStmts)
+
+    // Collect all set and cardio inserts
+    const setStmts: { sql: string; args: unknown[] }[] = []
+    const cardioStmts: { sql: string; args: unknown[] }[] = []
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]
+      const blockId = blockResults[i].rows[0].id as number
 
       if (block.type === 'lift') {
         for (let j = 0; j < block.sets.length; j++) {
           const set = block.sets[j]
-          if (!set.done) continue // only save completed sets
-          await db.execute({
+          if (!set.done) continue
+          setStmts.push({
             sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))',
             args: [blockId, block.exercise, set.weight, set.reps, j],
           })
         }
       } else {
-        await db.execute({
+        cardioStmts.push({
           sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace, calories, heart_rate, imported_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           args: [
             blockId,
@@ -84,22 +89,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Detect PRs: for each lift block, check if any set weight exceeds previous max
-    const prs: { exercise: string; weight: number }[] = []
-    for (const block of blocks) {
-      if (block.type !== 'lift') continue
-      const maxNew = Math.max(...block.sets.filter((s: { done: boolean }) => s.done).map((s: { weight: number }) => s.weight))
-      if (!isFinite(maxNew)) continue
-      const prevMax = await db.execute({
-        sql: `SELECT MAX(st.weight) as max_w FROM sets st
-              JOIN blocks b ON st.block_id = b.id
-              JOIN sessions s ON b.session_id = s.id
-              WHERE st.exercise = ? AND s.user_id = ? AND s.id != ?`,
-        args: [block.exercise, session.userId, sessionId],
+    // Batch insert all sets and cardio in parallel
+    await Promise.all([
+      setStmts.length > 0 ? db.batch(setStmts) : Promise.resolve(),
+      cardioStmts.length > 0 ? db.batch(cardioStmts) : Promise.resolve(),
+    ])
+
+    // Detect PRs: batch all exercise max queries in parallel
+    const liftBlocks = blocks.filter((b: { type: string }) => b.type === 'lift')
+    const prChecks = liftBlocks
+      .map((block: { sets: { done: boolean; weight: number }[]; exercise: string }) => {
+        const maxNew = Math.max(...block.sets.filter(s => s.done).map(s => s.weight))
+        if (!isFinite(maxNew)) return null
+        return { exercise: block.exercise, maxNew }
       })
-      const prev = prevMax.rows[0].max_w as number | null
-      if (prev === null || maxNew > prev) {
-        prs.push({ exercise: block.exercise, weight: maxNew })
+      .filter(Boolean) as { exercise: string; maxNew: number }[]
+
+    const prResults = prChecks.length > 0
+      ? await db.batch(prChecks.map(p => ({
+          sql: `SELECT MAX(st.weight) as max_w FROM sets st
+                JOIN blocks b ON st.block_id = b.id
+                JOIN sessions s ON b.session_id = s.id
+                WHERE st.exercise = ? AND s.user_id = ? AND s.id != ?`,
+          args: [p.exercise, session.userId, sessionId],
+        })))
+      : []
+
+    const prs: { exercise: string; weight: number }[] = []
+    for (let i = 0; i < prChecks.length; i++) {
+      const prev = prResults[i].rows[0].max_w as number | null
+      if (prev === null || prChecks[i].maxNew > prev) {
+        prs.push({ exercise: prChecks[i].exercise, weight: prChecks[i].maxNew })
       }
     }
 

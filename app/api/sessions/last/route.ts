@@ -24,30 +24,46 @@ export async function GET() {
     args: [sessionId],
   })
 
+  const blockIds = blocksRes.rows.map((b: { id: unknown }) => b.id as number)
+  if (blockIds.length === 0) return NextResponse.json({ date: lastSession.date, blocks: [] })
+
+  const placeholders = blockIds.map(() => '?').join(',')
+  const [setsRes, cardioRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT block_id, exercise, weight, reps FROM sets WHERE block_id IN (${placeholders}) ORDER BY block_id, position`,
+      args: blockIds,
+    }),
+    db.execute({
+      sql: `SELECT block_id, activity, distance, duration FROM cardio WHERE block_id IN (${placeholders})`,
+      args: blockIds,
+    }),
+  ])
+
+  const setsByBlock: Record<number, typeof setsRes.rows> = {}
+  for (const r of setsRes.rows) {
+    const bid = r.block_id as number
+    if (!setsByBlock[bid]) setsByBlock[bid] = []
+    setsByBlock[bid].push(r)
+  }
+  const cardioByBlock: Record<number, (typeof cardioRes.rows)[0]> = {}
+  for (const r of cardioRes.rows) {
+    cardioByBlock[r.block_id as number] = r
+  }
+
   const blocks = []
   for (const block of blocksRes.rows) {
+    const bid = block.id as number
     if (block.type === 'lift') {
-      const setsRes = await db.execute({
-        sql: `SELECT exercise, weight, reps FROM sets WHERE block_id = ? ORDER BY position`,
-        args: [block.id as number],
-      })
-      if (setsRes.rows.length === 0) continue
-      const exercise = setsRes.rows[0].exercise as string
+      const sets = setsByBlock[bid]
+      if (!sets || sets.length === 0) continue
       blocks.push({
         type: 'lift',
-        exercise,
-        sets: setsRes.rows.map(s => ({
-          weight: s.weight as number,
-          reps: s.reps as number,
-        })),
+        exercise: sets[0].exercise as string,
+        sets: sets.map((s: { weight: unknown; reps: unknown }) => ({ weight: s.weight as number, reps: s.reps as number })),
       })
     } else {
-      const cardioRes = await db.execute({
-        sql: `SELECT activity, distance, duration FROM cardio WHERE block_id = ?`,
-        args: [block.id as number],
-      })
-      if (cardioRes.rows.length === 0) continue
-      const c = cardioRes.rows[0]
+      const c = cardioByBlock[bid]
+      if (!c) continue
       blocks.push({
         type: 'cardio',
         activity: c.activity as string,

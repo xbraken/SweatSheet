@@ -67,55 +67,69 @@ export async function POST(req: NextRequest) {
 
   if (rawWorkouts.length === 0) return NextResponse.json({ error: 'No workouts provided' }, { status: 400 })
 
+  // Pre-parse all workouts
+  const parsed = rawWorkouts.map(raw => {
+    const typeStr = String(raw.name ?? '').toLowerCase().trim()
+    const isWalking = typeStr === 'walking'
+    if (!raw.intensity && !isWalking) return null
+
+    let activity = ACTIVITY_MAP[typeStr]
+    if (!activity) return null
+    if (raw.isIndoor && activity === 'Run') activity = 'Indoor run'
+
+    const startStr = String(raw.start ?? '')
+    const endStr = String(raw.end ?? '')
+    const startTs = new Date(startStr).getTime()
+    const endTs = new Date(endStr).getTime()
+    if (isNaN(startTs) || isNaN(endTs) || endTs <= startTs) return null
+
+    return { raw, activity, startStr, endStr, startTs, endTs, date: startStr.slice(0, 10) }
+  }).filter(Boolean) as Array<{
+    raw: Record<string, unknown>; activity: string; startStr: string; endStr: string; startTs: number; endTs: number; date: string
+  }>
+
+  // Batch duplicate check — one query for all start times
+  const allStartTimes = parsed.map(p => p.startStr)
+  const existingByStart = new Map<string, { cardioId: number; blockId: number; hasSamples: boolean }>()
+  if (allStartTimes.length > 0) {
+    for (let i = 0; i < allStartTimes.length; i += 500) {
+      const chunk = allStartTimes.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(',')
+      const dupRes = await db.execute({
+        sql: `SELECT c.id, c.block_id, c.started_at,
+                (SELECT COUNT(*) FROM cardio_hr_samples WHERE cardio_id = c.id) as hr_count
+              FROM cardio c
+              JOIN blocks b ON b.id = c.block_id
+              JOIN sessions s ON s.id = b.session_id
+              WHERE s.user_id = ? AND c.started_at IN (${placeholders})`,
+        args: [userId, ...chunk],
+      })
+      for (const r of dupRes.rows) {
+        existingByStart.set(r.started_at as string, {
+          cardioId: r.id as number,
+          blockId: r.block_id as number,
+          hasSamples: (r.hr_count as number) > 0,
+        })
+      }
+    }
+  }
+
   let imported = 0
   let duplicates = 0
 
-  for (const raw of rawWorkouts) {
+  for (const { raw, activity, startStr, endStr, startTs, endTs, date } of parsed) {
     try {
-      // Skip non-Apple Watch workouts for run/cycle (intensity is exclusive to Apple Watch).
-      // Walking is iPhone-recorded so skip the intensity check for it.
-      const typeStrEarly = String(raw.name ?? '').toLowerCase().trim()
-      const isWalking = typeStrEarly === 'walking'
-      if (!raw.intensity && !isWalking) continue
-
-      const typeStr = String(raw.name ?? '').toLowerCase().trim()
-      let activity = ACTIVITY_MAP[typeStr]
-      if (!activity) continue
-      if (raw.isIndoor && activity === 'Run') activity = 'Indoor run'
-
-      const startStr = String(raw.start ?? '')
-      const endStr = String(raw.end ?? '')
-      const startTs = new Date(startStr).getTime()
-      const endTs = new Date(endStr).getTime()
-      if (isNaN(startTs) || isNaN(endTs) || endTs <= startTs) continue
-
-      // Health Auto Export date format: "yyyy-MM-dd HH:mm:ss Z" — extract date part
-      const date = startStr.slice(0, 10)
-
-      // Duplicate check
-      const dupCheck = await db.execute({
-        sql: `SELECT c.id, c.block_id FROM cardio c
-              JOIN blocks b ON b.id = c.block_id
-              JOIN sessions s ON s.id = b.session_id
-              WHERE s.user_id = ? AND c.started_at = ?
-              LIMIT 1`,
-        args: [userId, startStr],
-      })
       let existingBlockId: number | null = null
-      if (dupCheck.rows.length > 0) {
-        const existingId = dupCheck.rows[0].id as number
-        // Check if the existing entry is missing HR samples
-        const hrCheck = await db.execute({
-          sql: `SELECT COUNT(*) as n FROM cardio_hr_samples WHERE cardio_id = ?`,
-          args: [existingId],
-        })
-        const hasSamples = (hrCheck.rows[0].n as number) > 0
-        if (!force && hasSamples) { duplicates++; continue }
+      const existing = existingByStart.get(startStr)
+      if (existing) {
+        if (!force && existing.hasSamples) { duplicates++; continue }
         // Re-import: wipe cardio + samples, reuse existing block/session
-        existingBlockId = dupCheck.rows[0].block_id as number
-        await db.execute({ sql: `DELETE FROM cardio_hr_samples WHERE cardio_id = ?`, args: [existingId] })
-        await db.execute({ sql: `DELETE FROM cardio_distance_samples WHERE cardio_id = ?`, args: [existingId] })
-        await db.execute({ sql: `DELETE FROM cardio WHERE id = ?`, args: [existingId] })
+        existingBlockId = existing.blockId
+        await Promise.all([
+          db.execute({ sql: `DELETE FROM cardio_hr_samples WHERE cardio_id = ?`, args: [existing.cardioId] }),
+          db.execute({ sql: `DELETE FROM cardio_distance_samples WHERE cardio_id = ?`, args: [existing.cardioId] }),
+          db.execute({ sql: `DELETE FROM cardio WHERE id = ?`, args: [existing.cardioId] }),
+        ])
       }
 
       // Duration (already in seconds in v2)

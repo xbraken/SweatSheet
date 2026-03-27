@@ -58,34 +58,49 @@ export async function POST(req: NextRequest) {
     .filter(Boolean) as Array<{ ts: number; bpm: number }>
   hrFlat.sort((a, b) => a.ts - b.ts)
 
+  // Pre-parse all workouts to extract start times for batch dup check
+  const parsed = rawWorkouts.map(raw => {
+    const typeStr = String(field(raw, 'type', 'workoutType', 'activity') ?? '').toLowerCase().trim()
+    let activity = ACTIVITY_MAP[typeStr]
+    if (!activity) return null
+    if (raw.isIndoor && activity === 'Outdoor run') activity = 'Indoor run'
+
+    const startStr = String(field(raw, 'startDate', 'start', 'startedAt') ?? '')
+    const endStr = String(field(raw, 'endDate', 'end', 'endedAt') ?? '')
+    const startTs = new Date(startStr).getTime()
+    const endTs = new Date(endStr).getTime()
+    if (isNaN(startTs) || isNaN(endTs) || endTs <= startTs) return null
+
+    return { raw, activity, startStr, endStr, startTs, endTs, date: startStr.split('T')[0] }
+  }).filter(Boolean) as Array<{
+    raw: Record<string, unknown>; activity: string; startStr: string; endStr: string; startTs: number; endTs: number; date: string
+  }>
+
+  // Batch duplicate check — one query instead of N
+  const allStartTimes = parsed.map(p => p.startStr)
+  const existingStarts = new Set<string>()
+  if (allStartTimes.length > 0) {
+    // Check in chunks of 500 to avoid SQL parameter limits
+    for (let i = 0; i < allStartTimes.length; i += 500) {
+      const chunk = allStartTimes.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(',')
+      const dupRes = await db.execute({
+        sql: `SELECT DISTINCT c.started_at FROM cardio c
+              JOIN blocks b ON b.id = c.block_id
+              JOIN sessions s ON s.id = b.session_id
+              WHERE s.user_id = ? AND c.started_at IN (${placeholders})`,
+        args: [userId, ...chunk],
+      })
+      for (const r of dupRes.rows) existingStarts.add(r.started_at as string)
+    }
+  }
+
   let imported = 0
   let duplicates = 0
 
-  for (const raw of rawWorkouts) {
+  for (const { raw, activity, startStr, endStr, startTs, endTs, date } of parsed) {
     try {
-      const typeStr = String(field(raw, 'type', 'workoutType', 'activity') ?? '').toLowerCase().trim()
-      let activity = ACTIVITY_MAP[typeStr]
-      if (!activity) continue
-      if (raw.isIndoor && activity === 'Outdoor run') activity = 'Indoor run'
-
-      const startStr = String(field(raw, 'startDate', 'start', 'startedAt') ?? '')
-      const endStr = String(field(raw, 'endDate', 'end', 'endedAt') ?? '')
-      const startTs = new Date(startStr).getTime()
-      const endTs = new Date(endStr).getTime()
-      if (isNaN(startTs) || isNaN(endTs) || endTs <= startTs) continue
-
-      const date = startStr.split('T')[0]
-
-      // Duplicate check by started_at
-      const dupCheck = await db.execute({
-        sql: `SELECT c.id FROM cardio c
-              JOIN blocks b ON b.id = c.block_id
-              JOIN sessions s ON s.id = b.session_id
-              WHERE s.user_id = ? AND c.started_at = ?
-              LIMIT 1`,
-        args: [userId, startStr],
-      })
-      if (dupCheck.rows.length > 0) { duplicates++; continue }
+      if (existingStarts.has(startStr)) { duplicates++; continue }
 
       // Duration
       const durSec = field(raw, 'durationSec', 'duration')

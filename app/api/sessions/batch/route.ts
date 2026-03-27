@@ -30,22 +30,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No workouts provided' }, { status: 400 })
   }
 
-  let count = 0
-  let duplicates = 0
-  for (const w of workouts) {
-    try {
-      // Skip if a workout with the same start time already exists for this user
-      if (w.startedAt) {
-        const dup = await db.execute({
-          sql: `SELECT c.id FROM cardio c
-                JOIN blocks b ON b.id = c.block_id
-                JOIN sessions s ON s.id = b.session_id
-                WHERE s.user_id = ? AND c.started_at = ? LIMIT 1`,
-          args: [session.userId, w.startedAt],
-        })
-        if (dup.rows.length > 0) { duplicates++; continue }
-      }
+  // Batch duplicate check: fetch all existing started_at values in one query
+  const startTimes = workouts.map(w => w.startedAt).filter(Boolean) as string[]
+  const existingStarts = new Set<string>()
+  if (startTimes.length > 0) {
+    const placeholders = startTimes.map(() => '?').join(',')
+    const dupRes = await db.execute({
+      sql: `SELECT DISTINCT c.started_at FROM cardio c
+            JOIN blocks b ON b.id = c.block_id
+            JOIN sessions s ON s.id = b.session_id
+            WHERE s.user_id = ? AND c.started_at IN (${placeholders})`,
+      args: [session.userId, ...startTimes],
+    })
+    for (const r of dupRes.rows) existingStarts.add(r.started_at as string)
+  }
 
+  // Filter out duplicates
+  const newWorkouts = workouts.filter(w => !w.startedAt || !existingStarts.has(w.startedAt))
+  const duplicates = workouts.length - newWorkouts.length
+
+  let count = 0
+  for (const w of newWorkouts) {
+    try {
+      // Insert session + block + cardio sequentially (need RETURNING ids)
       const sessionRes = await db.execute({
         sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
         args: [session.userId, w.date],
@@ -78,24 +85,21 @@ export async function POST(req: NextRequest) {
       })
       const cardioId = cardioRes.rows[0].id as number
 
-      // Batch insert HR samples if present
-      if (w.hrSamples && w.hrSamples.length > 0) {
-        await db.batch(
-          w.hrSamples.map(s => ({
-            sql: 'INSERT INTO cardio_hr_samples (cardio_id, time_offset_sec, hr_bpm) VALUES (?, ?, ?)',
-            args: [cardioId, s.offsetSec, s.bpm],
-          }))
-        )
-      }
-      // Batch insert distance samples if present
-      if (w.distanceSamples && w.distanceSamples.length > 0) {
-        await db.batch(
-          w.distanceSamples.map(s => ({
-            sql: 'INSERT INTO cardio_distance_samples (cardio_id, time_offset_sec, distance_km) VALUES (?, ?, ?)',
-            args: [cardioId, s.offsetSec, s.distKm],
-          }))
-        )
-      }
+      // Batch insert HR and distance samples in parallel
+      await Promise.all([
+        w.hrSamples && w.hrSamples.length > 0
+          ? db.batch(w.hrSamples.map(s => ({
+              sql: 'INSERT INTO cardio_hr_samples (cardio_id, time_offset_sec, hr_bpm) VALUES (?, ?, ?)',
+              args: [cardioId, s.offsetSec, s.bpm],
+            })))
+          : Promise.resolve(),
+        w.distanceSamples && w.distanceSamples.length > 0
+          ? db.batch(w.distanceSamples.map(s => ({
+              sql: 'INSERT INTO cardio_distance_samples (cardio_id, time_offset_sec, distance_km) VALUES (?, ?, ?)',
+              args: [cardioId, s.offsetSec, s.distKm],
+            })))
+          : Promise.resolve(),
+      ])
       count++
     } catch { /* skip failed rows, continue */ }
   }
