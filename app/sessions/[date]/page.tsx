@@ -77,10 +77,11 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
   async function shareWorkout() {
     if (!data || data.sessions.length === 0) return
     const text = buildShareText(date, data.sessions)
+    const url = window.location.href
     if (navigator.share) {
-      await navigator.share({ text })
+      await navigator.share({ title: `Workout — ${date}`, text, url })
     } else {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(`${text}\n\n${url}`)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }

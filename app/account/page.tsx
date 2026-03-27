@@ -1,259 +1,339 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
 
-export default function AccountPage() {
-  const router = useRouter()
+interface CardioRow { activity: string; distance: number | null; duration: string | null; pace: string | null; heart_rate: number | null }
+interface SetRow { weight: number; reps: number }
+interface ExerciseStat { name: string; volume: number; rows: SetRow[] }
+interface SessionItem {
+  sessionId: number
+  date: string
+  createdAt: string
+  lift: { volume: number; sets: number; exercises: ExerciseStat[] } | null
+  cardio: CardioRow[] | null
+}
+interface DayGroup {
+  date: string
+  cardio: CardioRow[] | null
+  lift: { volume: number; sets: number; exercises: ExerciseStat[] } | null
+}
+
+type Filter = 'all' | 'week' | 'month' | 'year'
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function dayTitle(g: DayGroup): string {
+  const parts: string[] = []
+  if (g.cardio) parts.push(g.cardio[0]?.activity ?? 'Cardio')
+  if (g.lift) {
+    const ex = g.lift.exercises
+    parts.push(ex.length > 0 ? ex.slice(0, 2).map(e => e.name).join(' · ') : 'Lift')
+  }
+  return parts.join(' + ') || 'Workout'
+}
+
+function dayKeyStat(g: DayGroup): { value: string; className: string } {
+  if (g.lift) {
+    const v = g.lift.volume
+    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}k kg` : `${v} kg`, className: 'text-[#4bdece]' }
+  }
+  if (g.cardio) {
+    const c = g.cardio[0]
+    if (c?.distance && Number(c.distance) > 0) return { value: `${Number(c.distance).toFixed(1)} km`, className: 'text-[#ff9066]' }
+    if (c?.duration) return { value: c.duration, className: 'text-[#ff9066]' }
+  }
+  return { value: '—', className: 'text-[#a48b83]' }
+}
+
+function buildShareText(username: string, g: DayGroup): string {
+  const lines: string[] = [`💪 ${username}'s workout — ${formatDate(g.date)}`, '']
+  if (g.cardio) {
+    for (const c of g.cardio) {
+      lines.push(`🏃 ${c.activity}`)
+      const parts: string[] = []
+      if (c.distance && Number(c.distance) > 0) parts.push(`${Number(c.distance).toFixed(1)} km`)
+      if (c.duration) parts.push(c.duration)
+      if (c.pace) parts.push(`${c.pace}/km`)
+      if (c.heart_rate) parts.push(`${c.heart_rate} bpm avg`)
+      if (parts.length) lines.push(`  ${parts.join(' · ')}`)
+      lines.push('')
+    }
+  }
+  if (g.lift) {
+    for (const e of g.lift.exercises) {
+      lines.push(`🏋️ ${e.name}`)
+      lines.push(`  ${e.rows.map(r => `${r.weight}kg × ${r.reps}`).join(', ')}`)
+      lines.push('')
+    }
+  }
+  lines.push('Logged on SweatSheet')
+  return lines.join('\n')
+}
+
+const FILTERS: { label: string; value: Filter }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Year', value: 'year' },
+  { label: 'Month', value: 'month' },
+  { label: 'Week', value: 'week' },
+]
+
+export default function ProfilePage() {
   const [username, setUsername] = useState('')
-  const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [totalWorkouts, setTotalWorkouts] = useState(0)
+  const [sessions, setSessions] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [invalidExercises, setInvalidExercises] = useState<{ exercise: string; set_count: number }[]>([])
-  const [cleaning, setCleaning] = useState(false)
-  const [apiKey, setApiKey] = useState('')
-  const [keyCopied, setKeyCopied] = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [pwSaving, setPwSaving] = useState(false)
-  const [pwError, setPwError] = useState('')
-  const [pwSaved, setPwSaved] = useState(false)
+  const [expandedDate, setExpandedDate] = useState<string | null>(null)
+  const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
+  const [filter, setFilter] = useState<Filter>('all')
+  const [copiedDate, setCopiedDate] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/account').then(r => r.json()).then(data => {
-      setUsername(data.username ?? '')
-      setUnitPref(data.unit_pref === 'imperial' ? 'imperial' : 'metric')
-      setApiKey(data.api_key ?? '')
-      setLoading(false)
+    fetch('/api/account').then(r => r.json()).then(account => {
+      const name = account.username ?? ''
+      setUsername(name)
+      if (!name) { setLoading(false); return }
+      fetch(`/api/social/profile/${encodeURIComponent(name)}`)
+        .then(r => r.json())
+        .then(d => {
+          setSessions(d.sessions ?? [])
+          setTotalWorkouts(d.totalWorkouts ?? 0)
+          if (d.sessions?.length > 0) setExpandedDate(d.sessions[0].date)
+        })
+        .finally(() => setLoading(false))
     }).catch(() => setLoading(false))
-
-    fetch('/api/exercises/cleanup').then(r => r.json()).then(data => {
-      if (data.invalid) setInvalidExercises(data.invalid)
-    }).catch(() => {})
   }, [])
 
-  async function savePrefs() {
-    setSaving(true)
-    await fetch('/api/account', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ unit_pref: unitPref }),
+  const allDayGroups = useMemo<DayGroup[]>(() => {
+    const map = new Map<string, SessionItem[]>()
+    for (const s of sessions) {
+      if (!map.has(s.date)) map.set(s.date, [])
+      map.get(s.date)!.push(s)
+    }
+    return Array.from(map.entries()).map(([date, sess]) => {
+      const allCardio = sess.flatMap(s => s.cardio ?? [])
+      let volume = 0, sets = 0
+      const exMap = new Map<string, { volume: number; rows: SetRow[] }>()
+      const hasLift = sess.some(s => s.lift !== null)
+      for (const s of sess) {
+        if (s.lift) {
+          volume += s.lift.volume; sets += s.lift.sets
+          for (const e of s.lift.exercises) {
+            const cur = exMap.get(e.name) ?? { volume: 0, rows: [] }
+            exMap.set(e.name, { volume: cur.volume + e.volume, rows: [...cur.rows, ...e.rows] })
+          }
+        }
+      }
+      return {
+        date,
+        cardio: allCardio.length > 0 ? allCardio : null,
+        lift: hasLift ? { volume, sets, exercises: Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: st.volume, rows: st.rows })) } : null,
+      }
     })
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  }, [sessions])
 
-  async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/auth')
-    router.refresh()
-  }
+  const dayGroups = useMemo(() => {
+    if (filter === 'all') return allDayGroups
+    const now = new Date()
+    const cutoff = new Date(now)
+    if (filter === 'week') cutoff.setDate(now.getDate() - 7)
+    else if (filter === 'month') cutoff.setMonth(now.getMonth() - 1)
+    else if (filter === 'year') cutoff.setFullYear(now.getFullYear() - 1)
+    return allDayGroups.filter(g => new Date(g.date + 'T12:00:00') >= cutoff)
+  }, [allDayGroups, filter])
 
-  if (loading) return (
-    <main key="loading" className="max-w-[390px] mx-auto min-h-screen flex items-center justify-center">
-      <div className="w-6 h-6 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
-    </main>
-  )
+  async function shareDay(g: DayGroup) {
+    const text = buildShareText(username, g)
+    const url = `${window.location.origin}/sessions/${g.date}`
+    if (navigator.share) {
+      await navigator.share({ title: dayTitle(g), text, url })
+    } else {
+      await navigator.clipboard.writeText(`${text}\n\n${url}`)
+      setCopiedDate(g.date)
+      setTimeout(() => setCopiedDate(null), 2000)
+    }
+  }
 
   return (
-    <main key="content" className="max-w-[390px] md:max-w-xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12 animate-fade-in-view">
-      <header className="mb-10">
-        <h1 className="font-headline text-3xl font-black tracking-tight text-[#e5e2e1]">Account</h1>
-        <p className="text-sm text-[#a48b83] mt-1">@{username}</p>
+    <>
+      <header className="bg-[#0e0e0e]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-6 py-4 w-full max-w-[390px] mx-auto">
+        <h1 className="font-headline text-xl font-bold tracking-tight text-[#ffb9a0]">Profile</h1>
+        <Link href="/settings" className="text-[#a48b83] hover:text-[#e5e2e1] active:scale-95 transition-all">
+          <span className="material-symbols-outlined">settings</span>
+        </Link>
       </header>
 
-      {/* Preferences */}
-      <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Preferences</h3>
-
-        <div className="bg-[#201f1f] rounded-2xl p-5">
-          <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Units</p>
-          <div className="flex gap-2">
-            {(['metric', 'imperial'] as const).map(u => (
-              <button
-                key={u}
-                onClick={() => setUnitPref(u)}
-                className={`flex-1 py-3 rounded-xl text-sm font-bold font-label transition-colors ${
-                  unitPref === u
-                    ? 'bg-[#ff9066] text-[#752805]'
-                    : 'bg-[#2a2a2a] text-[#a48b83]'
-                }`}
-              >
-                {u === 'metric' ? 'Metric (kg / km)' : 'Imperial (lbs / mi)'}
-              </button>
-            ))}
+      <main className="max-w-[390px] mx-auto px-4 pb-32">
+        {loading ? (
+          <div className="flex justify-center pt-20">
+            <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
-        </div>
+        ) : (
+          <>
+            {/* Profile header */}
+            <section className="flex flex-col items-center pt-8 pb-6 animate-fade-in">
+              <div className="w-20 h-20 rounded-full bg-[#2a2a2a] flex items-center justify-center border-2 border-[#ff9066]/20 mb-3">
+                <span className="font-headline text-2xl font-black text-[#ffb9a0]">
+                  {username.slice(0, 2).toUpperCase()}
+                </span>
+              </div>
+              <h2 className="font-headline text-2xl font-extrabold text-[#e5e2e1] mb-1">{username}</h2>
+              <p className="text-[#a48b83] text-sm">{totalWorkouts} workouts</p>
+            </section>
 
-        <button
-          onClick={savePrefs}
-          disabled={saving}
-          className="w-full py-4 bg-[#ff9066]/20 text-[#ff9066] rounded-2xl font-headline font-bold transition-colors disabled:opacity-50"
-        >
-          {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save preferences'}
-        </button>
-      </section>
-
-      {/* Data cleanup */}
-      {invalidExercises.length > 0 && (
-        <section className="flex flex-col gap-3 mb-8 animate-fade-in">
-          <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Data cleanup</h3>
-          <div className="bg-[#201f1f] rounded-2xl p-5">
-            <p className="text-sm text-[#a48b83] mb-3">
-              {invalidExercises.length} exercise{invalidExercises.length > 1 ? 's' : ''} in your history don&apos;t match the exercise list:
-            </p>
-            <div className="flex flex-col gap-1.5 mb-4">
-              {invalidExercises.map(e => (
-                <div key={e.exercise} className="flex justify-between items-center px-3 py-2 bg-[#2a2a2a] rounded-lg text-sm">
-                  <span className="text-[#e5e2e1]">{e.exercise || '(empty name)'}</span>
-                  <span className="text-[#a48b83] text-xs">{e.set_count} sets</span>
-                </div>
+            {/* Date filter */}
+            <div className="flex gap-2 mb-4">
+              {FILTERS.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setFilter(f.value)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold font-label transition-colors ${
+                    filter === f.value ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'
+                  }`}
+                >
+                  {f.label}
+                </button>
               ))}
             </div>
-            <button
-              onClick={async () => {
-                if (!confirm(`Remove ${invalidExercises.length} exercise(s) and their sets? This can't be undone.`)) return
-                setCleaning(true)
-                await fetch('/api/exercises/cleanup', { method: 'DELETE' })
-                setInvalidExercises([])
-                setCleaning(false)
-              }}
-              disabled={cleaning}
-              className="w-full py-3 bg-[#ff9066]/20 text-[#ff9066] rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
-            >
-              {cleaning ? 'Cleaning…' : 'Remove invalid exercises'}
-            </button>
-          </div>
-        </section>
-      )}
 
-      {/* Shortcut sync */}
-      <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Shortcut Sync</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
-          <p className="text-sm text-[#a48b83] leading-snug">Use this key in the SweatSheet iPhone Shortcut to sync workouts directly — no file downloads needed.</p>
-          <div className="flex flex-col gap-2">
-            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Your API Key</p>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-[#2a2a2a] rounded-xl px-4 py-3 font-mono text-xs text-[#e5e2e1] truncate select-all">
-                {apiKey || '—'}
+            {/* Workout history */}
+            {dayGroups.length === 0 ? (
+              <p className="text-center text-[#a48b83] text-sm py-10">No workouts in this period</p>
+            ) : (
+              <div className="space-y-3">
+                {dayGroups.map((g, i) => {
+                  const keyStat = dayKeyStat(g)
+                  const expanded = expandedDate === g.date
+                  const badges: { label: string; className: string }[] = []
+                  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
+                  if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
+
+                  return (
+                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
+                      <button
+                        className="w-full p-4 flex items-center gap-3 text-left"
+                        onClick={() => setExpandedDate(expanded ? null : g.date)}
+                      >
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{dayTitle(g)}</span>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          {badges.map((b, j) => (
+                            <span key={j} className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${b.className}`}>{b.label}</span>
+                          ))}
+                        </div>
+                        <span className={`font-headline font-bold text-base shrink-0 ${keyStat.className}`}>{keyStat.value}</span>
+                      </button>
+
+                      {expanded && (
+                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">
+
+                          {/* Share button */}
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => shareDay(g)}
+                              className="flex items-center gap-1.5 text-[#a48b83] hover:text-[#e5e2e1] active:scale-95 transition-all text-xs font-bold font-label"
+                            >
+                              <span className="material-symbols-outlined text-base">{copiedDate === g.date ? 'check' : 'share'}</span>
+                              {copiedDate === g.date ? 'Copied!' : 'Share'}
+                            </button>
+                          </div>
+
+                          {g.cardio && g.cardio.map((c, j) => (
+                            <div key={j}>
+                              {g.cardio!.length > 1 && (
+                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-2">{c.activity}</p>
+                              )}
+                              <div className="grid grid-cols-3 gap-3">
+                                {c.distance && Number(c.distance) > 0 && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Dist</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{Number(c.distance).toFixed(1)} km</p>
+                                  </div>
+                                )}
+                                {c.pace && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Pace</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.pace}/km</p>
+                                  </div>
+                                )}
+                                {c.duration && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Time</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.duration}</p>
+                                  </div>
+                                )}
+                                {c.heart_rate && (
+                                  <div>
+                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">HR Avg</p>
+                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.heart_rate} bpm</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+
+                          {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
+
+                          {g.lift && (
+                            <div className="space-y-3">
+                              {g.lift.exercises.map((e, j) => {
+                                const LIMIT = 8
+                                const key = `${g.date}:${e.name}`
+                                const isExpanded = expandedSets.has(key)
+                                const visible = isExpanded ? e.rows : e.rows.slice(0, LIMIT)
+                                const hidden = e.rows.length - LIMIT
+                                return (
+                                  <div key={j}>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[#e5e2e1] text-sm font-semibold">{e.name}</span>
+                                      <span className="text-[#ff9066] text-xs font-bold">
+                                        {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k kg` : `${e.volume} kg`}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {visible.map((r, k) => (
+                                        <span key={k} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                          {r.weight}kg <span className="text-[#e5e2e1]">× {r.reps}</span>
+                                        </span>
+                                      ))}
+                                      {!isExpanded && hidden > 0 && (
+                                        <button onClick={() => setExpandedSets(prev => new Set(prev).add(key))} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                          +{hidden} more
+                                        </button>
+                                      )}
+                                      {isExpanded && hidden > 0 && (
+                                        <button onClick={() => setExpandedSets(prev => { const n = new Set(prev); n.delete(key); return n })} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                          show less
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              <div className="flex justify-between pt-2 border-t border-[#201f1f]/50">
+                                <span className="text-[#a48b83] text-xs">{g.lift.sets} sets total</span>
+                                <span className="text-[#a48b83] text-xs font-bold">
+                                  {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}k kg` : `${g.lift.volume} kg`} total
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-              <button
-                onClick={async () => {
-                  await navigator.clipboard.writeText(apiKey)
-                  setKeyCopied(true)
-                  setTimeout(() => setKeyCopied(false), 2000)
-                }}
-                className="shrink-0 px-4 py-3 bg-[#4bdece]/20 text-[#4bdece] rounded-xl text-sm font-bold font-label transition-colors"
-              >
-                {keyCopied ? '✓ Copied' : 'Copy'}
-              </button>
-            </div>
-          </div>
-          <button
-            onClick={async () => {
-              if (!confirm('Regenerate your API key? Your Shortcut will need to be updated with the new key.')) return
-              setRegenerating(true)
-              const data = await fetch('/api/account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'regenerate_api_key' }),
-              }).then(r => r.json())
-              setApiKey(data.api_key ?? '')
-              setRegenerating(false)
-            }}
-            disabled={regenerating}
-            className="text-xs text-[#a48b83] underline underline-offset-2 self-start disabled:opacity-50"
-          >
-            {regenerating ? 'Regenerating…' : 'Regenerate key'}
-          </button>
-          <a
-            href="/SweatSheet Sync.shortcut" download
-            className="w-full py-3 rounded-xl bg-[#4bdece]/20 text-[#4bdece] text-sm font-bold font-label text-center flex items-center justify-center gap-2 hover:bg-[#4bdece]/30 transition-colors"
-          >
-            <span className="material-symbols-outlined text-base">download</span>
-            Download SweatSheet Shortcut
-          </a>
-          <p className="text-[11px] text-[#a48b83] leading-snug">
-            Opens in iPhone Shortcuts — you&apos;ll be asked for your API key on install (copy it above). Requires <strong className="text-[#e5e2e1]">Allow Untrusted Shortcuts</strong> in iOS Settings → Privacy &amp; Security → Shortcuts.
-          </p>
-        </div>
-      </section>
-
-      {/* Change password */}
-      <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Security</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-3">
-          {[
-            { label: 'Current password', value: currentPassword, set: setCurrentPassword },
-            { label: 'New password', value: newPassword, set: setNewPassword },
-            { label: 'Confirm new password', value: confirmPassword, set: setConfirmPassword },
-          ].map(({ label, value, set }) => (
-            <div key={label}>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1.5">{label}</p>
-              <input
-                type="password"
-                value={value}
-                onChange={e => { set(e.target.value); setPwError(''); setPwSaved(false) }}
-                className="w-full bg-[#2a2a2a] rounded-xl px-4 py-3 text-sm text-[#e5e2e1] outline-none focus:ring-1 focus:ring-[#ff9066]/50"
-              />
-            </div>
-          ))}
-          {pwError && <p className="text-xs text-red-400">{pwError}</p>}
-          <button
-            onClick={async () => {
-              if (newPassword !== confirmPassword) { setPwError('Passwords don\'t match'); return }
-              if (newPassword.length < 6) { setPwError('Password must be at least 6 characters'); return }
-              setPwSaving(true); setPwError('')
-              const res = await fetch('/api/account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'change_password', currentPassword, newPassword }),
-              }).then(r => r.json())
-              setPwSaving(false)
-              if (res.error) { setPwError(res.error); return }
-              setPwSaved(true)
-              setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
-              setTimeout(() => setPwSaved(false), 2000)
-            }}
-            disabled={pwSaving || !currentPassword || !newPassword || !confirmPassword}
-            className="w-full py-3 bg-[#ff9066]/20 text-[#ff9066] rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
-          >
-            {pwSaved ? '✓ Password updated' : pwSaving ? 'Saving…' : 'Change password'}
-          </button>
-        </div>
-      </section>
-
-      {/* Danger zone */}
-      <section className="flex flex-col gap-3">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Account</h3>
-
-        <button
-          onClick={logout}
-          className="w-full bg-[#201f1f] py-4 rounded-2xl flex items-center justify-center gap-2 font-headline font-bold text-[#e5e2e1] hover:bg-[#2a2a2a] transition-colors"
-        >
-          <span className="material-symbols-outlined text-lg text-[#a48b83]">logout</span>
-          Log out
-        </button>
-
-        <button
-          onClick={async () => {
-            if (!confirm('This will permanently delete all your workout data. Are you sure?')) return
-            await fetch('/api/reset', { method: 'POST' })
-            router.push('/')
-          }}
-          className="w-full bg-red-950/40 border border-red-900/40 py-4 rounded-2xl flex items-center justify-center gap-2 font-headline font-bold text-red-400 hover:bg-red-950/60 transition-colors"
-        >
-          <span className="material-symbols-outlined text-lg">delete_forever</span>
-          Delete all my data
-        </button>
-      </section>
+            )}
+          </>
+        )}
+      </main>
 
       <BottomNav />
-    </main>
+    </>
   )
 }

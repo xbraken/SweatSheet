@@ -105,10 +105,11 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   async function shareDay(g: DayGroup) {
     if (!profile) return
     const text = buildShareText(profile.username, g)
+    const url = `${window.location.origin}/social/${encodeURIComponent(profile.username)}`
     if (navigator.share) {
-      await navigator.share({ text })
+      await navigator.share({ title: `${profile.username}'s workout`, text, url })
     } else {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(`${text}\n\n${url}`)
       setCopiedDate(g.date)
       setTimeout(() => setCopiedDate(null), 2000)
     }

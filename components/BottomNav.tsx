@@ -7,7 +7,7 @@ const tabs = [
   { href: '/log',      icon: 'edit_note',      label: 'Log' },
   { href: '/social',   icon: 'group',          label: 'Friends' },
   { href: '/progress', icon: 'insights',       label: 'Progress' },
-  { href: '/account',  icon: 'person',         label: 'Account' },
+  { href: '/account',  icon: 'person',         label: 'Profile' },
 ]
 
 export default function BottomNav() {
@@ -15,25 +15,33 @@ export default function BottomNav() {
   return (
     <>
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 flex justify-around items-center px-2 pb-8 pt-4 bg-[#131313]/60 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
-        {tabs.map(tab => {
-          const active = path === tab.href || (tab.href !== '/' && path.startsWith(tab.href))
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`flex flex-col items-center justify-center transition-all active:scale-90 ${active ? 'text-[#ff9066] scale-110' : 'text-[#e5e2e1]/40'}`}
-            >
-              <span
-                className="material-symbols-outlined mb-1 text-[22px]"
-                style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}
+      <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-[#131313]/60 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
+        <div className="flex justify-around items-center px-2 pb-8 pt-4">
+          {tabs.map(tab => {
+            const active = path === tab.href || (tab.href !== '/' && path.startsWith(tab.href))
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`flex flex-col items-center justify-center transition-all active:scale-90 ${active ? 'text-[#ff9066] scale-110' : 'text-[#e5e2e1]/40'}`}
               >
-                {tab.icon}
-              </span>
-              <span className="text-[9px] font-bold font-label uppercase tracking-widest">{tab.label}</span>
-            </Link>
-          )
-        })}
+                <span
+                  className="material-symbols-outlined mb-1 text-[22px]"
+                  style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}
+                >
+                  {tab.icon}
+                </span>
+                <span className="text-[9px] font-bold font-label uppercase tracking-widest">{tab.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+        <Link
+          href="/settings"
+          className={`absolute top-2 right-2 p-1.5 transition-all active:scale-90 ${path === '/settings' ? 'text-[#ff9066]' : 'text-[#e5e2e1]/30 hover:text-[#e5e2e1]/60'}`}
+        >
+          <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: path === '/settings' ? "'FILL' 1" : "'FILL' 0" }}>settings</span>
+        </Link>
       </nav>
 
       {/* Desktop sidebar */}
@@ -65,6 +73,15 @@ export default function BottomNav() {
             )
           })}
         </nav>
+        <Link
+          href="/settings"
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
+            path === '/settings' ? 'bg-[#ff9066]/10 text-[#ff9066]' : 'text-[#e5e2e1]/50 hover:text-[#e5e2e1]/80 hover:bg-[#201f1f]'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[22px]" style={{ fontVariationSettings: path === '/settings' ? "'FILL' 1" : "'FILL' 0" }}>settings</span>
+          <span className="text-sm font-bold font-label">Settings</span>
+        </Link>
       </aside>
     </>
   )
