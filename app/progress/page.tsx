@@ -84,7 +84,7 @@ function buildSvgPoints(values: number[], invert = false): string {
     .map((v, i) => {
       const x = (i / Math.max(values.length - 1, 1)) * 300
       const norm = (v - min) / range
-      const y = invert ? 10 + norm * 70 : 80 - norm * 70
+      const y = invert ? 20 + norm * 60 : 80 - norm * 60
       return `${x},${y}`
     })
     .join(' ')
@@ -1232,7 +1232,7 @@ export default function ProgressPage() {
   function ptY(values: number[], value: number, invert: boolean): number {
     const max = Math.max(...values), min = Math.min(...values), range = max - min || 1
     const norm = (value - min) / range
-    return invert ? 10 + norm * 70 : 80 - norm * 70
+    return invert ? 20 + norm * 60 : 80 - norm * 60
   }
 
   const handleChartPointer = useCallback((e: React.PointerEvent<SVGSVGElement>, n: number) => {
@@ -1547,7 +1547,7 @@ export default function ProgressPage() {
             const idx = hoveredIdx ?? liftPeakIdx
             const pt = liftChartPts[idx]
             return (
-              <div className="absolute top-6 right-6 flex flex-col items-end">
+              <div className="absolute top-4 right-6 flex flex-col items-end">
                 <span className="text-3xl font-black font-headline text-primary-container leading-none">
                   {liftMetric === 'volume' ? Math.round(pt?.value ?? 0).toLocaleString() : pt?.value}
                 </span>
@@ -1564,7 +1564,7 @@ export default function ProgressPage() {
               ? `${Math.floor(pt.value / 60)}:${String(Math.round(pt.value % 60)).padStart(2, '0')}`
               : pt.value.toFixed(1)
             return (
-              <div className="absolute top-6 right-6 flex flex-col items-end">
+              <div className="absolute top-4 right-6 flex flex-col items-end">
                 <span className="text-3xl font-black font-headline text-[#4bdece] leading-none">{display}</span>
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
                   {hoveredIdx !== null ? formatDate(pt.date) : cardioMetric === 'pace' ? 'best pace' : 'km peak'}
@@ -1575,7 +1575,7 @@ export default function ProgressPage() {
 
           {/* Trend badge */}
           {tab === 'lifts' && liftTrend !== null && (
-            <div className={`absolute top-6 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
+            <div className={`absolute top-4 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
               liftTrend >= 0 ? 'bg-primary-container/20 text-primary-container' : 'bg-red-500/20 text-red-400'
             }`}>
               <span className="material-symbols-outlined text-[12px]">{liftTrend >= 0 ? 'trending_up' : 'trending_down'}</span>
@@ -1583,7 +1583,7 @@ export default function ProgressPage() {
             </div>
           )}
           {tab === 'cardio' && cardioTrend !== null && (
-            <div className={`absolute top-6 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
+            <div className={`absolute top-4 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
               cardioTrend >= 0 ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-red-500/20 text-red-400'
             }`}>
               <span className="material-symbols-outlined text-[12px]">{cardioTrend >= 0 ? 'trending_up' : 'trending_down'}</span>
@@ -1649,7 +1649,7 @@ export default function ProgressPage() {
                   </linearGradient>
                 </defs>
                 <polyline points={cardioSvgPts} fill="none" stroke="#4bdece" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <polygon points={`0,${cardioInvert ? 10 : 80} ${cardioSvgPts} 300,${cardioInvert ? 10 : 80}`} fill="url(#cardioGrad)" />
+                <polygon points={`0,${cardioInvert ? 20 : 80} ${cardioSvgPts} 300,${cardioInvert ? 20 : 80}`} fill="url(#cardioGrad)" />
                 {hoveredIdx !== null && <>
                   <line x1={hX} y1={0} x2={hX} y2={100} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
                   <circle cx={hX} cy={hY} r="5" fill="#4bdece" />
