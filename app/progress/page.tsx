@@ -1388,7 +1388,7 @@ export default function ProgressPage() {
   )
 
   return (
-    <main key="content" className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-8 animate-fade-in-view">
+    <main key="content" className="w-full max-w-[390px] md:max-w-3xl mx-auto px-6 pt-2 pb-32 md:pb-12 flex flex-col gap-12 animate-fade-in-view">
       {/* Header */}
       <header className="flex justify-between items-center py-4">
         <h1 className="text-2xl font-black text-primary tracking-tighter font-headline">SweatSheet</h1>
@@ -1482,7 +1482,7 @@ export default function ProgressPage() {
         )}
       </section>
 
-      <div key={tab} className="flex flex-col gap-8 animate-fade-in-view">
+      <div key={tab} className="flex flex-col gap-12 animate-fade-in-view">
 
       {/* Lift metric toggle */}
       {tab === 'lifts' && liftHistory.length > 0 && (
@@ -1537,7 +1537,7 @@ export default function ProgressPage() {
       )}
 
       {/* Desktop: chart + history side by side */}
-      <div className="md:grid md:grid-cols-2 md:gap-8">
+      <div className="flex flex-col gap-12 md:grid md:grid-cols-2 md:gap-8">
 
       {/* Chart */}
       <section className="flex flex-col gap-3">
