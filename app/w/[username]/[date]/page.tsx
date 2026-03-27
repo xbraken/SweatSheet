@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import BottomNav from '@/components/BottomNav'
+import Link from 'next/link'
 
 interface SetDetail { weight: number; reps: number; logged_at: string | null }
 interface LiftGroup { exercise: string; sets: SetDetail[] }
@@ -15,7 +14,7 @@ interface CardioItem {
   started_at: string | null
 }
 interface SessionBlock { sessionId: number; createdAt: string; lifts: LiftGroup[]; cardio: CardioItem[] }
-interface SessionData { date: string; sessions: SessionBlock[] }
+interface WorkoutData { username: string; date: string; sessions: SessionBlock[] }
 
 function epley1RM(weight: number, reps: number): number {
   if (reps === 1) return weight
@@ -33,7 +32,6 @@ function restTime(prev: string | null, curr: string | null): string | null {
 
 function formatTime(ts: string | null): string | null {
   if (!ts) return null
-  // Ensure UTC parsing — append Z if no timezone info present
   const normalized = ts.includes('T') || ts.includes('Z') ? ts : ts.replace(' ', 'T') + 'Z'
   return new Date(normalized).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
@@ -44,58 +42,19 @@ function formatDate(dateStr: string): string {
   })
 }
 
-function buildShareText(date: string, sessions: SessionBlock[]): string {
-  const lines: string[] = [`💪 Workout — ${formatDate(date)}`, '']
-  for (const sess of sessions) {
-    for (const c of sess.cardio) {
-      lines.push(`🏃 ${c.activity}`)
-      const parts: string[] = []
-      if (c.distance && Number(c.distance) > 0) parts.push(`${Number(c.distance).toFixed(1)} km`)
-      if (c.duration) parts.push(c.duration)
-      if (c.pace) parts.push(`${c.pace}/km`)
-      if (c.heart_rate) parts.push(`${c.heart_rate} bpm avg`)
-      if (parts.length) lines.push(`  ${parts.join(' · ')}`)
-      lines.push('')
-    }
-    for (const g of sess.lifts) {
-      lines.push(`🏋️ ${g.exercise}`)
-      lines.push(`  ${g.sets.map(s => `${s.weight}kg × ${s.reps}`).join(', ')}`)
-      lines.push('')
-    }
-  }
-  lines.push('Logged on SweatSheet')
-  return lines.join('\n')
-}
-
-export default function SessionDetailPage({ params }: { params: Promise<{ date: string }> }) {
-  const router = useRouter()
-  const [date, setDate] = useState('')
-  const [username, setUsername] = useState('')
-  const [data, setData] = useState<SessionData | null>(null)
+export default function PublicWorkoutPage({ params }: { params: Promise<{ username: string; date: string }> }) {
+  const [data, setData] = useState<WorkoutData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [copied, setCopied] = useState(false)
-
-  async function shareWorkout() {
-    if (!data || data.sessions.length === 0) return
-    const url = username
-      ? `${window.location.origin}/w/${encodeURIComponent(username)}/${date}`
-      : window.location.href
-    if (navigator.share) {
-      await navigator.share({ title: `Workout — ${date}`, url })
-    } else {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
+  const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
-    fetch('/api/account').then(r => r.json()).then(d => setUsername(d.username ?? '')).catch(() => {})
     params.then(p => {
-      setDate(p.date)
-      fetch(`/api/sessions/by-date/${p.date}`)
-        .then(r => r.json())
-        .then(setData)
+      fetch(`/api/public/workout/${encodeURIComponent(p.username)}/${p.date}`)
+        .then(r => {
+          if (r.status === 404) { setNotFound(true); setLoading(false); return null }
+          return r.json()
+        })
+        .then(d => { if (d) setData(d) })
         .finally(() => setLoading(false))
     })
   }, [params])
@@ -103,41 +62,41 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
   const isEmpty = data && data.sessions.length === 0
 
   return (
-    <>
+    <div className="min-h-screen bg-[#0e0e0e]">
       <header className="bg-[#0e0e0e]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center gap-4 px-6 py-4 w-full max-w-[390px] mx-auto">
-        <button onClick={() => router.back()} className="text-[#ffb9a0] hover:opacity-80 active:scale-95 transition-all">
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h1 className="font-headline text-lg font-bold tracking-tight text-[#ffb9a0] truncate flex-1">
-          {date ? formatDate(date) : '—'}
-        </h1>
-        {data && data.sessions.length > 0 && (
-          <button onClick={shareWorkout} className="text-[#a48b83] hover:text-[#ffb9a0] active:scale-95 transition-all shrink-0" title="Share workout">
-            <span className="material-symbols-outlined">{copied ? 'check' : 'share'}</span>
-          </button>
+        <Link href="/" className="text-[#ff9066] font-headline font-black text-lg tracking-tight">SweatSheet</Link>
+        <div className="flex-1" />
+        {data && (
+          <span className="text-[#a48b83] text-sm font-bold">@{data.username}</span>
         )}
       </header>
 
-      <main className="max-w-[390px] mx-auto px-4 pb-32 pt-4">
+      {!loading && data && (
+        <div className="max-w-[390px] mx-auto px-6 pt-2 pb-2">
+          <h1 className="font-headline text-xl font-black text-[#e5e2e1] tracking-tight">
+            {formatDate(data.date)}
+          </h1>
+        </div>
+      )}
+
+      <main className="max-w-[390px] mx-auto px-4 pb-16 pt-4">
         {loading ? (
           <div className="flex justify-center pt-20">
             <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
+        ) : notFound ? (
+          <p className="text-center text-[#a48b83] pt-20">User not found</p>
         ) : isEmpty ? (
-          <p className="text-center text-[#a48b83] pt-20 animate-fade-in">No workout recorded for this day</p>
+          <p className="text-center text-[#a48b83] pt-20">No workout recorded for this day</p>
         ) : (
           <div className="space-y-6 animate-fade-in">
             {data!.sessions.map((sess, si) => {
               const time = formatTime(sess.createdAt)
-              // For cardio, prefer started_at if available for the time label
-              const cardioTime = sess.cardio[0]?.started_at
-                ? formatTime(sess.cardio[0].started_at)
-                : null
+              const cardioTime = sess.cardio[0]?.started_at ? formatTime(sess.cardio[0].started_at) : null
               const displayTime = cardioTime ?? time
 
               return (
                 <div key={sess.sessionId}>
-                  {/* Session time header */}
                   {displayTime && (
                     <div className="flex items-center gap-3 mb-3">
                       <span className="text-[#a48b83] text-xs font-bold font-mono">{displayTime}</span>
@@ -146,7 +105,6 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                   )}
 
                   <div className="space-y-3">
-                    {/* Cardio blocks */}
                     {sess.cardio.map((c, i) => {
                       const cTime = formatTime(c.started_at)
                       return (
@@ -194,7 +152,6 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                       )
                     })}
 
-                    {/* Lift blocks */}
                     {sess.lifts.map((g, i) => {
                       const totalVol = g.sets.reduce((sum, s) => sum + s.weight * s.reps, 0)
                       const max1RM = Math.max(...g.sets.map(s => epley1RM(s.weight, s.reps)))
@@ -257,7 +214,11 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
         )}
       </main>
 
-      <BottomNav />
-    </>
+      <footer className="max-w-[390px] mx-auto px-6 pb-8 text-center">
+        <Link href="/auth" className="text-[#a48b83] text-xs hover:text-[#e5e2e1] transition-colors">
+          Log your own workouts on SweatSheet →
+        </Link>
+      </footer>
+    </div>
   )
 }

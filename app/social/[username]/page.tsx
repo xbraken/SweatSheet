@@ -104,7 +104,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
 
   async function shareDay(g: DayGroup) {
     if (!profile) return
-    const url = `${window.location.origin}/social/${encodeURIComponent(profile.username)}`
+    const url = `${window.location.origin}/w/${encodeURIComponent(profile.username)}/${g.date}`
     if (navigator.share) {
       await navigator.share({ title: `${profile.username}'s workout`, url })
     } else {

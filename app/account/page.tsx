@@ -145,7 +145,7 @@ export default function ProfilePage() {
   }, [allDayGroups, filter])
 
   async function shareDay(g: DayGroup) {
-    const url = `${window.location.origin}/sessions/${g.date}`
+    const url = `${window.location.origin}/w/${encodeURIComponent(username)}/${g.date}`
     if (navigator.share) {
       await navigator.share({ title: dayTitle(g), url })
     } else {
