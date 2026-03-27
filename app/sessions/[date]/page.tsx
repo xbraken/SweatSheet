@@ -44,11 +44,47 @@ function formatDate(dateStr: string): string {
   })
 }
 
+function buildShareText(date: string, sessions: SessionBlock[]): string {
+  const lines: string[] = [`💪 Workout — ${formatDate(date)}`, '']
+  for (const sess of sessions) {
+    for (const c of sess.cardio) {
+      lines.push(`🏃 ${c.activity}`)
+      const parts: string[] = []
+      if (c.distance && Number(c.distance) > 0) parts.push(`${Number(c.distance).toFixed(1)} km`)
+      if (c.duration) parts.push(c.duration)
+      if (c.pace) parts.push(`${c.pace}/km`)
+      if (c.heart_rate) parts.push(`${c.heart_rate} bpm avg`)
+      if (parts.length) lines.push(`  ${parts.join(' · ')}`)
+      lines.push('')
+    }
+    for (const g of sess.lifts) {
+      lines.push(`🏋️ ${g.exercise}`)
+      lines.push(`  ${g.sets.map(s => `${s.weight}kg × ${s.reps}`).join(', ')}`)
+      lines.push('')
+    }
+  }
+  lines.push('Logged on SweatSheet')
+  return lines.join('\n')
+}
+
 export default function SessionDetailPage({ params }: { params: Promise<{ date: string }> }) {
   const router = useRouter()
   const [date, setDate] = useState('')
   const [data, setData] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  async function shareWorkout() {
+    if (!data || data.sessions.length === 0) return
+    const text = buildShareText(date, data.sessions)
+    if (navigator.share) {
+      await navigator.share({ text })
+    } else {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   useEffect(() => {
     params.then(p => {
@@ -68,9 +104,14 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
         <button onClick={() => router.back()} className="text-[#ffb9a0] hover:opacity-80 active:scale-95 transition-all">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <h1 className="font-headline text-lg font-bold tracking-tight text-[#ffb9a0] truncate">
+        <h1 className="font-headline text-lg font-bold tracking-tight text-[#ffb9a0] truncate flex-1">
           {date ? formatDate(date) : '—'}
         </h1>
+        {data && data.sessions.length > 0 && (
+          <button onClick={shareWorkout} className="text-[#a48b83] hover:text-[#ffb9a0] active:scale-95 transition-all shrink-0" title="Share workout">
+            <span className="material-symbols-outlined">{copied ? 'check' : 'share'}</span>
+          </button>
+        )}
       </header>
 
       <main className="max-w-[390px] mx-auto px-4 pb-32 pt-4">

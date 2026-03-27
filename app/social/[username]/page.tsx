@@ -37,6 +37,31 @@ function formatTime(ts: string | null): string | null {
   return new Date(normalized).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
+function buildShareText(username: string, g: DayGroup): string {
+  const lines: string[] = [`💪 ${username}'s workout — ${formatDate(g.date)}`, '']
+  if (g.cardio) {
+    for (const c of g.cardio) {
+      lines.push(`🏃 ${c.activity}`)
+      const parts: string[] = []
+      if (c.distance && Number(c.distance) > 0) parts.push(`${Number(c.distance).toFixed(1)} km`)
+      if (c.duration) parts.push(c.duration)
+      if (c.pace) parts.push(`${c.pace}/km`)
+      if (c.heart_rate) parts.push(`${c.heart_rate} bpm avg`)
+      if (parts.length) lines.push(`  ${parts.join(' · ')}`)
+      lines.push('')
+    }
+  }
+  if (g.lift) {
+    for (const e of g.lift.exercises) {
+      lines.push(`🏋️ ${e.name}`)
+      lines.push(`  ${e.rows.map(r => `${r.weight}kg × ${r.reps}`).join(', ')}`)
+      lines.push('')
+    }
+  }
+  lines.push('Logged on SweatSheet')
+  return lines.join('\n')
+}
+
 function dayTitle(g: DayGroup): string {
   const parts: string[] = []
   if (g.cardio) parts.push(g.cardio[0]?.activity ?? 'Cardio')
@@ -75,6 +100,19 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [following, setFollowing] = useState(false)
+  const [copiedDate, setCopiedDate] = useState<string | null>(null)
+
+  async function shareDay(g: DayGroup) {
+    if (!profile) return
+    const text = buildShareText(profile.username, g)
+    if (navigator.share) {
+      await navigator.share({ text })
+    } else {
+      await navigator.clipboard.writeText(text)
+      setCopiedDate(g.date)
+      setTimeout(() => setCopiedDate(null), 2000)
+    }
+  }
 
   const dayGroups = useMemo<DayGroup[]>(() => {
     if (!profile) return []
@@ -247,6 +285,16 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                               </div>
                             </div>
                           ))}
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => shareDay(g)}
+                              className="flex items-center gap-1.5 text-[#a48b83] hover:text-[#e5e2e1] active:scale-95 transition-all text-xs font-bold font-label"
+                            >
+                              <span className="material-symbols-outlined text-base">{copiedDate === g.date ? 'check' : 'share'}</span>
+                              {copiedDate === g.date ? 'Copied!' : 'Share'}
+                            </button>
+                          </div>
 
                           {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
 
