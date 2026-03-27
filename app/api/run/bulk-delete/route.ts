@@ -24,9 +24,9 @@ export async function DELETE(req: NextRequest) {
   })
   if (res.rows.length === 0) return NextResponse.json({ ok: true, deleted: 0 })
 
-  const validIds = res.rows.map((r: { cardio_id: unknown }) => r.cardio_id as number)
-  const blockIds = [...new Set(res.rows.map((r: { block_id: unknown }) => r.block_id as number))]
-  const sessionIds = [...new Set(res.rows.map((r: { session_id: unknown }) => r.session_id as number))]
+  const validIds = res.rows.map(r => r.cardio_id as number)
+  const blockIds = [...new Set(res.rows.map(r => r.block_id as number))]
+  const sessionIds = [...new Set(res.rows.map(r => r.session_id as number))]
 
   const validPlaceholders = validIds.map(() => '?').join(',')
   const blockPlaceholders = blockIds.map(() => '?').join(',')
