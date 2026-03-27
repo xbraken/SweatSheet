@@ -216,6 +216,12 @@ function CardioPicker({ onSelect, onClose }: {
   }
 
   useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
     const handle = handleRef.current
     if (!handle) return
 
@@ -258,7 +264,7 @@ function CardioPicker({ onSelect, onClose }: {
         ref={sheetRef}
         className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
       >
-        <div ref={handleRef} className="w-full flex justify-center py-2 mb-4 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
+        <div ref={handleRef} className="w-full flex justify-center py-5 mb-2 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
           <div className="w-10 h-1 bg-[#353534] rounded-full" />
         </div>
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
