@@ -1330,18 +1330,35 @@ export default function ProgressPage() {
   }, [calendarData])
 
   const maxCalWeight = useMemo(() => Math.max(1, ...calendarData.map(d => Number(d.max_weight) || 0)), [calendarData])
-  const maxCalDist = useMemo(() => Math.max(1, ...calendarData.map(d => Number(d.total_distance) || 0)), [calendarData])
 
-  function cellIntensity(day: CalendarDay | undefined): number {
-    if (!day) return 0
+  // Filtered calendar map — derived from the active cardio filter so the heatmap matches what's shown
+  const filteredCalendarMap = useMemo(() => {
+    const m = new Map<string, { total_distance: number; cardio_count: number }>()
+    for (const e of filteredCardioHistory) {
+      const cur = m.get(e.date) ?? { total_distance: 0, cardio_count: 0 }
+      m.set(e.date, {
+        total_distance: cur.total_distance + (parseFloat(e.distance ?? '0') || 0),
+        cardio_count: cur.cardio_count + 1,
+      })
+    }
+    return m
+  }, [filteredCardioHistory])
+
+  const maxFilteredCalDist = useMemo(
+    () => Math.max(1, ...[...filteredCalendarMap.values()].map(d => d.total_distance)),
+    [filteredCalendarMap]
+  )
+
+  function cellIntensity(date: string): number {
     if (tab === 'lifts') {
-      if (!day.max_weight) return 0
+      const day = calendarMap.get(date)
+      if (!day?.max_weight) return 0
       return Math.max(0.2, Number(day.max_weight) / maxCalWeight)
     }
-    // cardio tab: use distance if available, else show min dot for any cardio activity
-    if (day.total_distance && Number(day.total_distance) > 0)
-      return Math.max(0.2, Number(day.total_distance) / maxCalDist)
-    if (Number(day.cardio_count) > 0) return 0.2
+    const day = filteredCalendarMap.get(date)
+    if (!day) return 0
+    if (day.total_distance > 0) return Math.max(0.2, day.total_distance / maxFilteredCalDist)
+    if (day.cardio_count > 0) return 0.2
     return 0
   }
 
@@ -1539,7 +1556,7 @@ export default function ProgressPage() {
             ))}
           </div>
         </div>
-        <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] md:aspect-[3/2] relative overflow-hidden flex flex-col justify-end">
+        <div className="bg-surface-container rounded-xl p-6 aspect-[4/3] md:aspect-[3/2] relative overflow-hidden flex flex-col justify-end [transform:translateZ(0)]">
         <div style={{ opacity: chartAlpha, transition: 'opacity 0.15s ease-in-out' }} className="flex-1 relative flex flex-col justify-end">
 
           {/* Peak stat / hovered value */}
@@ -1689,11 +1706,10 @@ export default function ProgressPage() {
           <div className="grid grid-cols-7 gap-1">
             {calendarGrid.map(({ date, isToday, isFuture }, i) => {
               if (!date) return <div key={i} />
-              const data = calendarMap.get(date)
-              const intensity = cellIntensity(data)
+              const intensity = cellIntensity(date)
               const hasWorkout = intensity > 0
               const isSelected = date === selectedCalDate
-              const hex2 = Math.round(intensity * 255).toString(16).padStart(2, '0')
+              const hex2 = Math.round(Math.min(intensity, 0.6) * 255).toString(16).padStart(2, '0')
               return (
                 <button
                   key={date}
