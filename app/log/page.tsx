@@ -204,30 +204,44 @@ function CardioPicker({ onSelect, onClose }: {
   ]
   const dragY = useRef(0)
   const [translateY, setTranslateY] = useState(0)
+  const translateYRef = useRef(0)
+  const sheetRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = sheetRef.current
+    if (!el) return
+    const onTouchMove = (e: TouchEvent) => {
+      const delta = e.touches[0].clientY - dragY.current
+      if (delta > 0) {
+        e.preventDefault()
+        translateYRef.current = delta
+        setTranslateY(delta)
+      }
+    }
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    return () => el.removeEventListener('touchmove', onTouchMove)
+  }, [])
 
   function handleTouchStart(e: React.TouchEvent) {
     dragY.current = e.touches[0].clientY
   }
-  function handleTouchMove(e: React.TouchEvent) {
-    const delta = e.touches[0].clientY - dragY.current
-    if (delta > 0) setTranslateY(delta)
-  }
   function handleTouchEnd() {
-    if (translateY > 80) {
+    if (translateYRef.current > 80) {
       onClose()
     } else {
       setTranslateY(0)
     }
+    translateYRef.current = 0
   }
 
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={sheetRef}
         className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
         style={{ transform: `translateY(${translateY}px)`, transition: translateY === 0 ? 'transform 0.3s ease' : 'none' }}
         onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
