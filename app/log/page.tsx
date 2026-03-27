@@ -205,6 +205,7 @@ function CardioPicker({ onSelect, onClose }: {
   const dragY = useRef(0)
   const dragDelta = useRef(0)
   const sheetRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLDivElement>(null)
 
   function setSheetY(y: number, animated: boolean) {
     const el = sheetRef.current
@@ -214,8 +215,13 @@ function CardioPicker({ onSelect, onClose }: {
   }
 
   useEffect(() => {
-    const el = sheetRef.current
-    if (!el) return
+    const handle = handleRef.current
+    if (!handle) return
+
+    const onTouchStart = (e: TouchEvent) => {
+      dragY.current = e.touches[0].clientY
+      dragDelta.current = 0
+    }
     const onTouchMove = (e: TouchEvent) => {
       const delta = e.touches[0].clientY - dragY.current
       if (delta > 0) {
@@ -224,23 +230,25 @@ function CardioPicker({ onSelect, onClose }: {
         setSheetY(delta, false)
       }
     }
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => el.removeEventListener('touchmove', onTouchMove)
-  }, [])
-
-  function handleTouchStart(e: React.TouchEvent) {
-    dragY.current = e.touches[0].clientY
-    dragDelta.current = 0
-  }
-  function handleTouchEnd() {
-    if (dragDelta.current > 80) {
-      setSheetY(window.innerHeight, true)
-      setTimeout(onClose, 300)
-    } else {
-      setSheetY(0, true)
+    const onTouchEnd = () => {
+      if (dragDelta.current > 80) {
+        setSheetY(window.innerHeight, true)
+        setTimeout(onClose, 300)
+      } else {
+        setSheetY(0, true)
+      }
+      dragDelta.current = 0
     }
-    dragDelta.current = 0
-  }
+
+    handle.addEventListener('touchstart', onTouchStart)
+    handle.addEventListener('touchmove', onTouchMove, { passive: false })
+    handle.addEventListener('touchend', onTouchEnd)
+    return () => {
+      handle.removeEventListener('touchstart', onTouchStart)
+      handle.removeEventListener('touchmove', onTouchMove)
+      handle.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [onClose])
 
   return (
     <>
@@ -248,10 +256,10 @@ function CardioPicker({ onSelect, onClose }: {
       <div
         ref={sheetRef}
         className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
-        <div className="w-10 h-1 bg-[#353534] rounded-full mx-auto mb-6" />
+        <div ref={handleRef} className="w-full flex justify-center py-2 mb-4 cursor-grab active:cursor-grabbing">
+          <div className="w-10 h-1 bg-[#353534] rounded-full" />
+        </div>
         <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
         <div className="flex flex-col gap-3">
           {options.map(o => (
