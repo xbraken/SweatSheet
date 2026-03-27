@@ -137,7 +137,6 @@ function ExercisePicker({
           <div className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-3 py-2.5">
             <span className="material-symbols-outlined text-[#a48b83] text-lg">search</span>
             <input
-              autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search exercises…"
