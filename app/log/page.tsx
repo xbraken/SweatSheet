@@ -227,7 +227,8 @@ function CardioPicker({ onSelect, onClose }: {
   }
   function handleTouchEnd() {
     if (translateYRef.current > 80) {
-      onClose()
+      setTranslateY(window.innerHeight)
+      setTimeout(onClose, 300)
     } else {
       setTranslateY(0)
     }
