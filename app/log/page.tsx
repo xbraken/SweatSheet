@@ -575,6 +575,10 @@ export default function LogPage() {
     setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s) } : prev)
   }
 
+  const setEditLiftField = (setId: number, field: 'weight' | 'reps', value: number) => {
+    setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(1)) } : s) } : prev)
+  }
+
   const saveEditLift = () => {
     if (!editLift) return
     const { blockId, sets } = editLift
@@ -760,7 +764,13 @@ export default function LogPage() {
                       <button onClick={() => adjustEditLiftSet(s.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
-                      <span className="font-headline font-bold text-sm w-16 text-center">{s.weight}<span className="text-[10px] font-normal text-[#a48b83]"> kg</span></span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={s.weight}
+                        onChange={e => setEditLiftField(s.id, 'weight', parseFloat(e.target.value) || 0)}
+                        className="font-headline font-bold text-sm w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                      />
                       <button onClick={() => adjustEditLiftSet(s.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
@@ -769,7 +779,13 @@ export default function LogPage() {
                       <button onClick={() => adjustEditLiftSet(s.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
-                      <span className="font-headline font-bold text-sm w-10 text-center">{s.reps}<span className="text-[10px] font-normal text-[#a48b83]"> r</span></span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={s.reps}
+                        onChange={e => setEditLiftField(s.id, 'reps', parseInt(e.target.value) || 0)}
+                        className="font-headline font-bold text-sm w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                      />
                       <button onClick={() => adjustEditLiftSet(s.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
@@ -905,7 +921,13 @@ export default function LogPage() {
                           <button onClick={() => updateSet(activeSet.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">remove</span>
                           </button>
-                          <span className="font-headline text-2xl font-black w-16 text-center">{activeSet.weight}</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={activeSet.weight}
+                            onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value) || 0)}
+                            className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                          />
                           <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">add</span>
                           </button>
@@ -917,7 +939,13 @@ export default function LogPage() {
                           <button onClick={() => updateSet(activeSet.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">remove</span>
                           </button>
-                          <span className="font-headline text-2xl font-black w-10 text-center">{activeSet.reps}</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={activeSet.reps}
+                            onChange={e => setSetField(activeSet.id, 'reps', parseInt(e.target.value) || 0)}
+                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                          />
                           <button onClick={() => updateSet(activeSet.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">add</span>
                           </button>
@@ -931,7 +959,7 @@ export default function LogPage() {
                       type="range"
                       min={0}
                       max={300}
-                      step={2.5}
+                      step={0.5}
                       value={activeSet.weight}
                       onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value))}
                       className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
