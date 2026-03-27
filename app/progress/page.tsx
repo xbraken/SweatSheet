@@ -518,7 +518,7 @@ function RunDetailSheet({
                       className="w-full h-40"
                       viewBox="0 0 300 102"
                       preserveAspectRatio="none"
-                      style={{ touchAction: 'none' }}
+                      style={{ touchAction: 'pan-y' }}
                       onPointerMove={e => {
                         const rect = e.currentTarget.getBoundingClientRect()
                         const idx = Math.max(0, Math.min(PACE_N - 1, Math.round(((e.clientX - rect.left) / rect.width) * (PACE_N - 1))))
@@ -738,7 +738,7 @@ function RunDetailSheet({
                       className="w-full h-40"
                       viewBox="0 0 300 102"
                       preserveAspectRatio="none"
-                      style={{ touchAction: 'none' }}
+                      style={{ touchAction: 'pan-y' }}
                       onPointerMove={e => {
                         const rect = e.currentTarget.getBoundingClientRect()
                         const idx = Math.max(0, Math.min(mainValues.length - 1, Math.round(((e.clientX - rect.left) / rect.width) * (mainValues.length - 1))))
@@ -1625,7 +1625,7 @@ export default function ProgressPage() {
                 <svg
                   className="w-full h-32 drop-shadow-[0_0_8px_rgba(255,144,102,0.4)]"
                   viewBox="0 0 300 100" preserveAspectRatio="none"
-                  style={{ touchAction: 'none' }}
+                  style={{ touchAction: 'pan-y' }}
                   onPointerMove={e => handleChartPointer(e, liftPts.length)}
                   onPointerLeave={() => setHoveredIdx(null)}
                   onPointerCancel={() => setHoveredIdx(null)}
@@ -1661,7 +1661,7 @@ export default function ProgressPage() {
               <svg
                 className="w-full h-32 drop-shadow-[0_0_8px_rgba(75,222,206,0.3)]"
                 viewBox="0 0 300 100" preserveAspectRatio="none"
-                style={{ touchAction: 'none' }}
+                style={{ touchAction: 'pan-y' }}
                 onPointerMove={e => handleChartPointer(e, cardioChartPts.length)}
                 onPointerLeave={() => setHoveredIdx(null)}
                 onPointerCancel={() => setHoveredIdx(null)}
@@ -2070,15 +2070,6 @@ export default function ProgressPage() {
         <h3 className="font-headline text-sm font-bold text-on-surface-variant uppercase tracking-widest">Body weight</h3>
         {/* Log today */}
         <div className="bg-surface-container rounded-xl p-4 flex items-center gap-3">
-          <input
-            type="number"
-            step="0.1"
-            value={bwInput}
-            onChange={e => setBwInput(e.target.value)}
-            placeholder="e.g. 75.5"
-            className="flex-1 bg-transparent font-headline text-xl font-bold outline-none placeholder:text-on-surface-variant/30"
-          />
-          <span className="text-sm text-on-surface-variant font-bold">kg</span>
           <button
             disabled={!bwInput}
             onClick={() => {
@@ -2095,10 +2086,21 @@ export default function ProgressPage() {
                 body: JSON.stringify({ date: today, weight_kg }),
               })
             }}
-            className="px-4 py-2 bg-primary-container/20 text-primary-container rounded-xl text-sm font-bold font-label disabled:opacity-30 transition-colors"
+            className="px-4 py-2 bg-primary-container/20 text-primary-container rounded-xl text-sm font-bold font-label disabled:opacity-30 transition-colors shrink-0"
           >
             Log
           </button>
+          <div className="flex-1 flex items-center gap-1">
+            <input
+              type="number"
+              step="0.1"
+              value={bwInput}
+              onChange={e => setBwInput(e.target.value)}
+              placeholder="e.g. 75.5"
+              className="w-full bg-transparent font-headline text-xl font-bold outline-none placeholder:text-on-surface-variant/30"
+            />
+            <span className="text-sm text-on-surface-variant font-bold shrink-0">kg</span>
+          </div>
         </div>
 
         {/* Chart */}
@@ -2119,7 +2121,7 @@ export default function ProgressPage() {
               <svg
                 className="w-full h-28"
                 viewBox="0 0 300 100" preserveAspectRatio="none"
-                style={{ touchAction: 'none' }}
+                style={{ touchAction: 'pan-y' }}
                 onPointerMove={e => {
                   const rect = e.currentTarget.getBoundingClientRect()
                   const x = (e.clientX - rect.left) / rect.width
