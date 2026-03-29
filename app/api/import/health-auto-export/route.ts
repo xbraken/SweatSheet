@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   if (rawWorkouts.length === 0) return NextResponse.json({ error: 'No workouts provided' }, { status: 400 })
 
   // Pre-parse all workouts
-  const parsed = rawWorkouts.map(raw => {
+  const preParsed = rawWorkouts.map(raw => {
     const typeStr = String(raw.name ?? '').toLowerCase().trim()
     const isWalking = typeStr === 'walking'
     if (!raw.intensity && !isWalking) return null
@@ -112,6 +112,66 @@ export async function POST(req: NextRequest) {
   }).filter(Boolean) as Array<{
     raw: Record<string, unknown>; activity: string; startStr: string; endStr: string; startTs: number; endTs: number; date: string
   }>
+
+  // Detect overlapping same-activity workouts — two devices recording the same session.
+  // Merge them: HR from whichever has greater temporal coverage (Zepp typically records
+  // the full duration), distance/GPS from whichever has a pure Apple Watch source.
+  function hrTimeCoverage(raw: Record<string, unknown>): number {
+    const data = Array.isArray(raw.heartRateData) ? raw.heartRateData as Record<string, unknown>[] : []
+    if (data.length < 2) return 0
+    const times = data.map(s => new Date(String(s.date ?? s.startDate ?? '')).getTime()).filter(t => !isNaN(t))
+    return times.length < 2 ? 0 : Math.max(...times) - Math.min(...times)
+  }
+  function hasPureAppleWatchDist(raw: Record<string, unknown>): boolean {
+    const arr = (raw.walkingAndRunningDistance ?? raw.cyclingDistance ?? []) as Record<string, unknown>[]
+    return arr.some(s => {
+      const src = String(s.source ?? '').toLowerCase().replace(/\u00a0/g, ' ')
+      return src.includes('apple watch') && !src.includes('zepp') && !src.includes('amazfit') && !src.includes('huami')
+    })
+  }
+
+  const consumed = new Set<number>()
+  const parsed: typeof preParsed = []
+
+  for (let i = 0; i < preParsed.length; i++) {
+    if (consumed.has(i)) continue
+    let current = preParsed[i]
+
+    for (let j = i + 1; j < preParsed.length; j++) {
+      if (consumed.has(j)) continue
+      const other = preParsed[j]
+      if (current.activity !== other.activity) continue
+      // Check time ranges overlap
+      if (current.startTs >= other.endTs || other.startTs >= current.endTs) continue
+
+      // Overlapping — merge
+      consumed.add(j)
+
+      const startTs = Math.min(current.startTs, other.startTs)
+      const endTs = Math.max(current.endTs, other.endTs)
+      const startStr = startTs === current.startTs ? current.startStr : other.startStr
+      const endStr = endTs === current.endTs ? current.endStr : other.endStr
+
+      // HR: pick whichever covers more of the workout duration
+      const hrRaw = hrTimeCoverage(current.raw) >= hrTimeCoverage(other.raw) ? current.raw : other.raw
+
+      // Distance: prefer the one with pure Apple Watch GPS
+      const distRaw = (!hasPureAppleWatchDist(current.raw) && hasPureAppleWatchDist(other.raw)) ? other.raw : current.raw
+
+      const mergedRaw: Record<string, unknown> = {
+        ...hrRaw,
+        start: startStr,
+        end: endStr,
+        distance: distRaw.distance,
+        walkingAndRunningDistance: distRaw.walkingAndRunningDistance,
+        cyclingDistance: distRaw.cyclingDistance,
+      }
+
+      current = { raw: mergedRaw, activity: current.activity, startStr, endStr, startTs, endTs, date: startStr.slice(0, 10) }
+    }
+
+    parsed.push(current)
+  }
 
   // Batch duplicate check — one query for all start times
   const allStartTimes = parsed.map(p => p.startStr)
