@@ -62,12 +62,25 @@ export async function POST(req: NextRequest) {
         const hrSources = [...new Set(hrData.map(s => String(s.source ?? s.sourceName ?? s.sourceProduct ?? '')).filter(Boolean))]
         const distSources = [...new Set(distData.map(s => String(s.source ?? s.sourceName ?? s.sourceProduct ?? '')).filter(Boolean))]
 
+        // Show first 3 + last 3 HR samples and unique bpm values to diagnose flat-line issues
+        const hrFirst3 = hrData.slice(0, 3)
+        const hrLast3 = hrData.slice(-3)
+        const uniqueBpms = [...new Set(hrData.map(s => Number(s.Avg ?? s.avg ?? s.qty ?? s.value ?? NaN)).filter(n => !isNaN(n)))].sort((a, b) => a - b)
+        const countBySource = hrData.reduce<Record<string, number>>((acc, s) => {
+          const src = String(s.source ?? s.sourceName ?? '').replace(/\u00a0/g, ' ') || 'unknown'
+          acc[src] = (acc[src] ?? 0) + 1
+          return acc
+        }, {})
+
         return {
           name: w.name,
           start: w.start,
           keys: Object.keys(w),
           heartRateDataLength: hrData.length,
-          heartRateSample: hrData[0] ?? null,
+          heartRateFirst3: hrFirst3,
+          heartRateLast3: hrLast3,
+          heartRateUniqueBpms: uniqueBpms.slice(0, 20),
+          heartRateCountBySource: countBySource,
           heartRateSources: hrSources,
           distanceSources: distSources,
           distanceSample: distData[0] ?? null,
