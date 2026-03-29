@@ -10,9 +10,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
 
   const { username } = await params
 
-  const userRes = await db.execute({ sql: 'SELECT id FROM users WHERE username = ?', args: [username] })
+  const userRes = await db.execute({ sql: 'SELECT id, avatar FROM users WHERE username = ?', args: [username] })
   if (userRes.rows.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
   const targetId = userRes.rows[0].id as number
+  const targetAvatar = userRes.rows[0].avatar as string | null
 
   const isOwnProfile = Number(targetId) === Number(session.userId)
 
@@ -28,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   const totalWorkouts = countRes.rows[0].count as number
 
   if (sessionsRes.rows.length === 0) {
-    return NextResponse.json({ username, totalWorkouts, isFollowing, isOwnProfile, sessions: [] })
+    return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions: [] })
   }
 
   const sessionIds = sessionsRes.rows.map(r => r.id as number)
@@ -108,5 +109,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
     }
   })
 
-  return NextResponse.json({ username, totalWorkouts, isFollowing, isOwnProfile, sessions })
+  return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions })
 }

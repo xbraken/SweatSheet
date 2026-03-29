@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   if (!q || q.length < 1) return NextResponse.json({ users: [] })
 
   const res = await db.execute({
-    sql: `SELECT u.id, u.username,
+    sql: `SELECT u.id, u.username, u.avatar,
                  EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND following_id = u.id) as is_following
           FROM users u
           WHERE lower(u.username) LIKE ? AND u.id != ?

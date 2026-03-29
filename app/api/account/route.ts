@@ -10,7 +10,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const result = await db.execute({
-    sql: `SELECT username, unit_pref, api_key FROM users WHERE id = ?`,
+    sql: `SELECT username, unit_pref, api_key, avatar FROM users WHERE id = ?`,
     args: [session.userId],
   })
   if (result.rows.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -58,7 +58,19 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { unit_pref } = await req.json()
+  const body = await req.json()
+
+  if ('avatar' in body) {
+    const avatar = body.avatar as string | null
+    // Basic validation: must be a data URL or null
+    if (avatar !== null && !avatar.startsWith('data:image/')) {
+      return NextResponse.json({ error: 'Invalid avatar format' }, { status: 400 })
+    }
+    await db.execute({ sql: `UPDATE users SET avatar = ? WHERE id = ?`, args: [avatar, session.userId] })
+    return NextResponse.json({ ok: true })
+  }
+
+  const { unit_pref } = body
   if (unit_pref && !['metric', 'imperial'].includes(unit_pref)) {
     return NextResponse.json({ error: 'unit_pref must be metric or imperial' }, { status: 400 })
   }

@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
+import Avatar from '@/components/Avatar'
 
 interface CardioRow { activity: string; distance: number | null; duration: string | null; pace: string | null; heart_rate: number | null }
 interface SetRow { weight: number; reps: number }
@@ -81,11 +82,36 @@ const FILTERS: { label: string; value: Filter }[] = [
   { label: 'All', value: 'all' },
 ]
 
+async function resizeAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const SIZE = 160
+      const canvas = document.createElement('canvas')
+      canvas.width = SIZE
+      canvas.height = SIZE
+      const ctx = canvas.getContext('2d')!
+      const scale = Math.max(SIZE / img.width, SIZE / img.height)
+      const sw = SIZE / scale
+      const sh = SIZE / scale
+      ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, 0, 0, SIZE, SIZE)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', 0.85))
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
 export default function ProfilePage() {
   const [username, setUsername] = useState('')
+  const [avatar, setAvatar] = useState<string | null>(null)
   const [totalWorkouts, setTotalWorkouts] = useState(0)
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<Filter>('all')
@@ -105,10 +131,22 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAvatarFile(file: File) {
+    setAvatarUploading(true)
+    try {
+      const dataUrl = await resizeAvatar(file)
+      setAvatar(dataUrl)
+      await fetch('/api/account', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar: dataUrl }) })
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
   useEffect(() => {
     fetch('/api/account').then(r => r.json()).then(account => {
       const name = account.username ?? ''
       setUsername(name)
+      setAvatar(account.avatar ?? null)
       if (!name) { setLoading(false); return }
       fetch(`/api/social/profile/${encodeURIComponent(name)}`)
         .then(r => r.json())
@@ -189,10 +227,24 @@ export default function ProfilePage() {
           <>
             {/* Profile header */}
             <section className="flex flex-col items-center pt-8 pb-6 animate-fade-in">
-              <div className="w-20 h-20 rounded-full bg-[#2a2a2a] flex items-center justify-center border-2 border-[#ff9066]/20 mb-3">
-                <span className="font-headline text-2xl font-black text-[#ffb9a0]">
-                  {username.slice(0, 2).toUpperCase()}
-                </span>
+              <div className="relative mb-3">
+                <Avatar username={username} avatar={avatar} size="lg" />
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#ff9066] flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                >
+                  {avatarUploading
+                    ? <span className="w-3.5 h-3.5 border border-white/40 border-t-white rounded-full animate-spin" />
+                    : <span className="material-symbols-outlined text-[#752805] text-sm">photo_camera</span>}
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarFile(f); e.target.value = '' }}
+                />
               </div>
               <h2 className="font-headline text-2xl font-extrabold text-[#e5e2e1] mb-1">{username}</h2>
               <p className="text-[#a48b83] text-sm">{totalWorkouts} workouts</p>

@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
+import Avatar from '@/components/Avatar'
 
 interface CardioRow { activity: string; distance: number | null; duration: string | null; pace: string | null; heart_rate: number | null }
 interface SetRow { weight: number; reps: number }
@@ -19,6 +20,7 @@ interface ProfileData {
   isFollowing: boolean
   isOwnProfile: boolean
   sessions: SessionItem[]
+  avatar?: string | null
 }
 interface DayGroup {
   date: string
@@ -205,11 +207,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
         ) : (
           <>
             <section className="flex flex-col items-center pt-8 pb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
-              <div className="w-24 h-24 rounded-full bg-[#2a2a2a] flex items-center justify-center border-2 border-[#ff9066]/20 mb-4">
-                <span className="font-headline text-3xl font-black text-[#ffb9a0]">
-                  {profile.username.slice(0, 2).toUpperCase()}
-                </span>
-              </div>
+              <Avatar username={profile.username} avatar={profile.avatar} size="lg" className="mb-4" />
               <h2 className="font-headline text-2xl font-extrabold text-[#e5e2e1] mb-1">{profile.username}</h2>
               <p className="text-[#a48b83] text-sm font-medium">{profile.totalWorkouts} Workouts</p>
             </section>

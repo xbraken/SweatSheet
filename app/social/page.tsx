@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
+import Avatar from '@/components/Avatar'
 
 interface FeedItem {
   userId: number
@@ -13,7 +14,7 @@ interface FeedItem {
   cardio: Array<{ activity: string }> | null
 }
 
-interface SearchUser { id: number; username: string; is_following: number }
+interface SearchUser { id: number; username: string; is_following: number; avatar?: string | null }
 
 function timeAgo(utcStr: string): string {
   const diff = Date.now() - new Date(utcStr + (utcStr.includes('Z') ? '' : 'Z')).getTime()
@@ -120,11 +121,7 @@ export default function SocialPage() {
                   className="w-full flex items-center justify-between py-4 hover:bg-[#201f1f] active:bg-[#201f1f] transition-colors rounded-xl px-2 -mx-2 group"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#2a2a2a] flex items-center justify-center border border-[#56423c]/20 shrink-0">
-                      <span className="font-headline font-bold text-[#ffb9a0] text-base">
-                        {item.username.slice(0, 2).toUpperCase()}
-                      </span>
-                    </div>
+                    <Avatar username={item.username} size="md" />
                     <div className="text-left">
                       <p className="font-headline font-semibold text-[#e5e2e1] text-base">{item.username}</p>
                       <p className="text-[#a48b83]/70 text-xs mt-0.5 font-medium">{feedSubtitle(item)}</p>
@@ -180,9 +177,7 @@ export default function SocialPage() {
               return (
                 <div key={user.id} className="flex items-center justify-between px-5 py-3 border-b border-[#201f1f]/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-[#2a2a2a] flex items-center justify-center">
-                      <span className="text-[#ffb9a0] font-headline font-bold text-xs">{user.username.slice(0, 2).toUpperCase()}</span>
-                    </div>
+                    <Avatar username={user.username} avatar={user.avatar} size="sm" />
                     <span className="text-[#e5e2e1] text-sm font-medium">{user.username}</span>
                   </div>
                   <button
