@@ -11,6 +11,8 @@ export default function SettingsPage() {
   const [stravaLoading, setStravaLoading] = useState(false)
   const [stravaSyncing, setStravaSyncing] = useState(false)
   const [stravaSyncResult, setStravaSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
+  const [webhookActive, setWebhookActive] = useState<boolean | null>(null)
+  const [webhookRegistering, setWebhookRegistering] = useState(false)
   const stravaStatus = searchParams.get('strava')
   const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
   const [saving, setSaving] = useState(false)
@@ -42,6 +44,10 @@ export default function SettingsPage() {
 
     fetch('/api/strava/status').then(r => r.json()).then(data => {
       setStravaConnected(data.connected ?? false)
+    }).catch(() => {})
+
+    fetch('/api/strava/webhook-status').then(r => r.json()).then(data => {
+      setWebhookActive(Array.isArray(data.subscriptions) && data.subscriptions.length > 0)
     }).catch(() => {})
   }, [])
 
@@ -212,6 +218,33 @@ export default function SettingsPage() {
                   }
                 </p>
               )}
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${webhookActive === null ? 'bg-[#a48b83]' : webhookActive ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <span className="text-xs text-[#a48b83]">
+                    {webhookActive === null ? 'Checking auto-import…' : webhookActive ? 'Auto-import active' : 'Auto-import inactive'}
+                  </span>
+                </div>
+                {webhookActive === false && (
+                  <button
+                    onClick={async () => {
+                      setWebhookRegistering(true)
+                      const callbackUrl = `${window.location.origin}/api/strava/webhook`
+                      const res = await fetch('/api/strava/webhook-status', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callbackUrl }),
+                      }).then(r => r.json())
+                      setWebhookActive(res.ok)
+                      setWebhookRegistering(false)
+                    }}
+                    disabled={webhookRegistering}
+                    className="text-xs font-bold text-[#fc4c02] disabled:opacity-50"
+                  >
+                    {webhookRegistering ? 'Fixing…' : 'Fix it'}
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {stravaStatus === 'connected' && (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { importActivity } from '@/lib/strava'
 
@@ -40,7 +41,11 @@ export async function POST(req: NextRequest) {
   if (!userRes.rows.length) return NextResponse.json({ ok: true })
 
   const userId = userRes.rows[0].id as number
-  await importActivity(userId, event.object_id)
+
+  // Respond to Strava immediately (required within 2s) — import runs after response
+  after(async () => {
+    await importActivity(userId, event.object_id)
+  })
 
   return NextResponse.json({ ok: true })
 }
