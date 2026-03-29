@@ -9,6 +9,8 @@ export default function SettingsPage() {
   const [username, setUsername] = useState('')
   const [stravaConnected, setStravaConnected] = useState(false)
   const [stravaLoading, setStravaLoading] = useState(false)
+  const [stravaSyncing, setStravaSyncing] = useState(false)
+  const [stravaSyncResult, setStravaSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
   const stravaStatus = searchParams.get('strava')
   const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
   const [saving, setSaving] = useState(false)
@@ -179,6 +181,39 @@ export default function SettingsPage() {
               </a>
             )}
           </div>
+          {stravaConnected && (
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => {
+                  setStravaSyncing(true)
+                  setStravaSyncResult(null)
+                  const res = await fetch('/api/strava/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pages: 2 }),
+                  }).then(r => r.json())
+                  setStravaSyncing(false)
+                  setStravaSyncResult({ imported: res.imported ?? 0, skipped: res.skipped ?? 0 })
+                  setTimeout(() => setStravaSyncResult(null), 4000)
+                }}
+                disabled={stravaSyncing}
+                className="w-full py-3 bg-[#fc4c02]/10 text-[#fc4c02] rounded-xl text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+              >
+                {stravaSyncing
+                  ? <><div className="w-4 h-4 border-2 border-[#fc4c02]/30 border-t-[#fc4c02] rounded-full animate-spin" /> Syncing…</>
+                  : <><span className="material-symbols-outlined text-base">sync</span> Sync recent activities</>
+                }
+              </button>
+              {stravaSyncResult && (
+                <p className="text-xs text-center text-[#a48b83]">
+                  {stravaSyncResult.imported > 0
+                    ? `✓ ${stravaSyncResult.imported} imported, ${stravaSyncResult.skipped} already up to date`
+                    : `All ${stravaSyncResult.skipped} activities already up to date`
+                  }
+                </p>
+              )}
+            </div>
+          )}
           {stravaStatus === 'connected' && (
             <p className="text-xs text-[#4bdece] bg-[#4bdece]/10 rounded-xl px-3 py-2">Strava connected — new workouts will import automatically.</p>
           )}
