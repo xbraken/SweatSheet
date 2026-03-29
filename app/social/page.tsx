@@ -7,6 +7,7 @@ import Avatar from '@/components/Avatar'
 interface FeedItem {
   userId: number
   username: string
+  avatar?: string | null
   sessionId: number
   date: string
   createdAt: string
@@ -121,7 +122,7 @@ export default function SocialPage() {
                   className="w-full flex items-center justify-between py-4 hover:bg-[#201f1f] active:bg-[#201f1f] transition-colors rounded-xl px-2 -mx-2 group"
                 >
                   <div className="flex items-center gap-4">
-                    <Avatar username={item.username} size="md" />
+                    <Avatar username={item.username} avatar={item.avatar} size="md" />
                     <div className="text-left">
                       <p className="font-headline font-semibold text-[#e5e2e1] text-base">{item.username}</p>
                       <p className="text-[#a48b83]/70 text-xs mt-0.5 font-medium">{feedSubtitle(item)}</p>

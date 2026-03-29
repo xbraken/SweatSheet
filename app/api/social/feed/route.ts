@@ -10,7 +10,7 @@ export async function GET() {
 
   // Get followed users + their most recent session each
   const followedRes = await db.execute({
-    sql: `SELECT u.id as user_id, u.username,
+    sql: `SELECT u.id as user_id, u.username, u.avatar,
                  s.id as session_id, s.date, s.created_at as session_time
           FROM follows f
           JOIN users u ON u.id = f.following_id
@@ -106,6 +106,7 @@ export async function GET() {
     return {
       userId: row.user_id as number,
       username: row.username as string,
+      avatar: row.avatar as string | null,
       sessionId,
       date: row.date as string,
       createdAt: row.session_time as string,
