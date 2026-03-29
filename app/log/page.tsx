@@ -897,7 +897,11 @@ export default function LogPage() {
         {/* Header */}
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
-            <button onClick={() => setView({ type: 'list' })} className="flex items-center gap-1 text-[#a48b83]">
+            <button onClick={() => {
+              localStorage.removeItem(DRAFT_KEY)
+              setSets([{ id: 1, weight: 60, reps: 8, done: false }])
+              setView({ type: 'list' })
+            }} className="flex items-center gap-1 text-[#a48b83]">
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
@@ -1033,7 +1037,12 @@ export default function LogPage() {
     <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
       <div className="sticky top-0 z-40 px-4 py-4 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
         <div className="flex items-center justify-between">
-          <button onClick={() => setView({ type: 'list' })} className="flex items-center gap-1 text-[#a48b83]">
+          <button onClick={() => {
+            localStorage.removeItem(DRAFT_KEY)
+            setCardioDistance('')
+            setCardioTime('')
+            setView({ type: 'list' })
+          }} className="flex items-center gap-1 text-[#a48b83]">
             <span className="material-symbols-outlined text-lg">arrow_back</span>
             <span className="text-sm font-bold">Back</span>
           </button>
