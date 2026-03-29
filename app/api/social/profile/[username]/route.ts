@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   const [followRes, countRes, sessionsRes] = await Promise.all([
     db.execute({ sql: 'SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?', args: [session.userId, targetId] }),
     db.execute({ sql: 'SELECT COUNT(*) as count FROM sessions WHERE user_id = ?', args: [targetId] }),
-    db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20', args: [targetId] }),
+    db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY date DESC, created_at DESC LIMIT 100', args: [targetId] }),
   ])
 
   const isFollowing = followRes.rows.length > 0
