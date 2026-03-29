@@ -1282,24 +1282,41 @@ export default function ProgressPage() {
   // Personal records: fastest run in each distance bracket (uses all history, not range-filtered)
   const raceRecords = useMemo(() => {
     const BRACKETS = [
-      { label: '5K',       target: 5.0,     tol: 0.4 },
-      { label: '10K',      target: 10.0,    tol: 0.8 },
-      { label: 'Half',     target: 21.0975, tol: 1.5 },
-      { label: 'Marathon', target: 42.195,  tol: 2.0 },
+      { label: '5K',       target: 5.0,     min: 4.6 },
+      { label: '10K',      target: 10.0,    min: 9.2 },
+      { label: 'Half',     target: 21.0975, min: 19.5 },
+      { label: 'Marathon', target: 42.195,  min: 40.0 },
     ]
     const runs = cardioHistory.filter(e =>
       e.activity.toLowerCase().includes('run') && e.distance && e.duration
     )
+
+    // Estimate time at exactly targetKm using average pace (totalTime * target / actualDist)
+    function estimatedSec(e: typeof runs[0], target: number): number {
+      const d = parseFloat(e.distance ?? '')
+      const t = toSeconds(e.duration)
+      if (!t || !d || d <= 0) return Infinity
+      return t * (target / d)
+    }
+    function fmtSec(sec: number): string {
+      const h = Math.floor(sec / 3600)
+      const m = Math.floor((sec % 3600) / 60)
+      const s = Math.round(sec % 60)
+      if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      return `${m}:${String(s).padStart(2, '0')}`
+    }
+
     return BRACKETS.flatMap(b => {
+      // Include any run long enough to cover the distance
       const matching = runs.filter(e => {
         const d = parseFloat(e.distance ?? '')
-        return !isNaN(d) && Math.abs(d - b.target) <= b.tol
+        return !isNaN(d) && d >= b.min
       })
       if (matching.length === 0) return []
       const fastest = matching.reduce((best, e) =>
-        (toSeconds(e.duration) ?? Infinity) < (toSeconds(best.duration) ?? Infinity) ? e : best
+        estimatedSec(e, b.target) < estimatedSec(best, b.target) ? e : best
       )
-      return [{ label: b.label, entry: fastest, count: matching.length }]
+      return [{ label: b.label, entry: fastest, count: matching.length, time: fmtSec(estimatedSec(fastest, b.target)) }]
     })
   }, [cardioHistory])
 
@@ -1520,14 +1537,14 @@ export default function ProgressPage() {
       {/* Personal records row */}
       {tab === 'cardio' && raceRecords.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
-          {raceRecords.map(({ label, entry, count }) => (
+          {raceRecords.map(({ label, entry, count, time }) => (
             <button
               key={label}
               onClick={() => entry.cardio_id && setSelectedRunId(entry.cardio_id)}
               className="bg-[#131313] rounded-xl px-4 py-3 flex flex-col gap-0.5 shrink-0 active:scale-[0.97] transition-transform text-left min-w-[80px]"
             >
               <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#4bdece]">{label}</span>
-              <span className="text-lg font-black font-headline text-[#e5e2e1] leading-tight">{entry.duration}</span>
+              <span className="text-lg font-black font-headline text-[#e5e2e1] leading-tight">{time}</span>
               <span className="text-[9px] text-[#a48b83]">{formatDate(entry.date)}</span>
               {count > 1 && <span className="text-[8px] text-[#5a5a5a]">{count} runs</span>}
             </button>
