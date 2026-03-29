@@ -53,15 +53,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       debug: true,
       total: rawWorkouts.length,
-      workouts: rawWorkouts.map(w => ({
-        name: w.name,
-        start: w.start,
-        keys: Object.keys(w),
-        heartRateDataLength: Array.isArray(w.heartRateData) ? (w.heartRateData as unknown[]).length : 'missing',
-        heartRateRecoveryLength: Array.isArray(w.heartRateRecovery) ? (w.heartRateRecovery as unknown[]).length : 'missing',
-        heartRateSample: Array.isArray(w.heartRateData) ? (w.heartRateData as unknown[])[0] : (Array.isArray(w.heartRateRecovery) ? (w.heartRateRecovery as unknown[])[0] : null),
-        heartRate: w.heartRate,
-      })),
+      workouts: rawWorkouts.map(w => {
+        const hrData = Array.isArray(w.heartRateData) ? w.heartRateData as Record<string, unknown>[] : []
+        const distData = Array.isArray(w.walkingAndRunningDistance) ? w.walkingAndRunningDistance as Record<string, unknown>[]
+          : Array.isArray(w.cyclingDistance) ? w.cyclingDistance as Record<string, unknown>[] : []
+
+        // Collect unique source names from HR and distance samples so caller can see what's present
+        const hrSources = [...new Set(hrData.map(s => String(s.source ?? s.sourceName ?? s.sourceProduct ?? '')).filter(Boolean))]
+        const distSources = [...new Set(distData.map(s => String(s.source ?? s.sourceName ?? s.sourceProduct ?? '')).filter(Boolean))]
+
+        return {
+          name: w.name,
+          start: w.start,
+          keys: Object.keys(w),
+          heartRateDataLength: hrData.length,
+          heartRateSample: hrData[0] ?? null,
+          heartRateSources: hrSources,
+          distanceSources: distSources,
+          distanceSample: distData[0] ?? null,
+          heartRate: w.heartRate,
+        }
+      }),
     })
   }
 
@@ -146,7 +158,7 @@ export async function POST(req: NextRequest) {
       if (isNaN(distKm)) distKm = 0
 
       const paceSecPerKm = distKm > 0.1 ? totalSec / distKm : null
-      const pace = paceSecPerKm
+      let pace = paceSecPerKm
         ? `${Math.floor(paceSecPerKm / 60)}:${String(Math.round(paceSecPerKm % 60)).padStart(2, '0')}`
         : null
 
@@ -173,10 +185,27 @@ export async function POST(req: NextRequest) {
       if (isNaN(avgHR)) avgHR = hrVal(raw.avgHeartRate)
       if (isNaN(maxHR)) maxHR = hrVal(raw.maxHeartRate)
 
-      // HR time-series — heartRateData[]: [{ date, Avg, Min, Max }]
+      // Source name helpers — checks source / sourceName / sourceProduct fields
+      function sampleSource(s: Record<string, unknown>): string {
+        return String(s.source ?? s.sourceName ?? s.sourceProduct ?? '').toLowerCase()
+      }
+      function isZepp(s: Record<string, unknown>): boolean {
+        const src = sampleSource(s)
+        return src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
+      }
+      function isAppleWatch(s: Record<string, unknown>): boolean {
+        const src = sampleSource(s)
+        return src.includes('apple watch') || src.includes('applewatch')
+      }
+
+      // HR time-series — prefer Zepp samples; fall back to all if no Zepp data present
       const hrSamples: Array<{ offsetSec: number; bpm: number }> = []
       if (Array.isArray(raw.heartRateData)) {
-        for (const s of raw.heartRateData as Record<string, unknown>[]) {
+        const allHrData = raw.heartRateData as Record<string, unknown>[]
+        const zeppHrData = allHrData.filter(isZepp)
+        const hrSource = zeppHrData.length > 0 ? zeppHrData : allHrData
+
+        for (const s of hrSource) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
           const bpm = Math.round(Number(s.Avg ?? s.avg ?? s.qty ?? s.value ?? NaN))
           if (isNaN(ts) || isNaN(bpm) || bpm <= 0) continue
@@ -184,10 +213,21 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Distance time-series — walkingAndRunningDistance[] or cyclingDistance[]: [{ date, qty, units }]
-      const distArr = (raw.walkingAndRunningDistance ?? raw.cyclingDistance ?? []) as Record<string, unknown>[]
+      // Recompute avg/min/max HR from the (source-filtered) samples for consistency
+      if (hrSamples.length > 0) {
+        const bpms = hrSamples.map(s => s.bpm)
+        avgHR = Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length)
+        minHR = Math.min(...bpms)
+        maxHR = Math.max(...bpms)
+      }
+
+      // Distance time-series — prefer Apple Watch samples; fall back to all if none present
+      const rawDistArr = (raw.walkingAndRunningDistance ?? raw.cyclingDistance ?? []) as Record<string, unknown>[]
+      const watchDistArr = rawDistArr.filter(isAppleWatch)
+      const distArr = watchDistArr.length > 0 ? watchDistArr : rawDistArr
+
       const distSamples: Array<{ offsetSec: number; distKm: number }> = []
-      if (Array.isArray(distArr) && distArr.length > 0) {
+      if (distArr.length > 0) {
         let cumKm = 0
         for (const s of distArr) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
@@ -197,6 +237,15 @@ export async function POST(req: NextRequest) {
           cumKm += dkm
           distSamples.push({ offsetSec: Math.round((ts - startTs) / 1000), distKm: cumKm })
         }
+      }
+
+      // If Apple Watch distance samples exist, recompute total distance + pace from them
+      if (watchDistArr.length > 0 && distSamples.length > 0) {
+        distKm = distSamples[distSamples.length - 1].distKm
+        const recalcSec = distKm > 0.1 ? totalSec / distKm : null
+        pace = recalcSec
+          ? `${Math.floor(recalcSec / 60)}:${String(Math.round(recalcSec % 60)).padStart(2, '0')}`
+          : pace
       }
 
       const blockType = activity === 'Cycling' ? 'cycle' : 'run'
