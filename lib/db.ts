@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 let _initPromise: Promise<void> | null = null
 
@@ -145,6 +145,12 @@ async function _runInit() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_blocks_session_type ON blocks(session_id, type)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_sets_exercise_block ON sets(exercise, block_id)`)
+
+  // Strava OAuth fields
+  try { await db.execute(`ALTER TABLE users ADD COLUMN strava_athlete_id INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE users ADD COLUMN strava_access_token TEXT`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE users ADD COLUMN strava_refresh_token TEXT`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE users ADD COLUMN strava_token_expires_at INTEGER`) } catch { /* exists */ }
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)

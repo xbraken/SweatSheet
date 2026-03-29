@@ -5,7 +5,7 @@ const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? 'dev-secret-please-set-AUTH_SECRET-in-env'
 )
 
-const PUBLIC_PREFIXES = ['/auth', '/api/auth', '/api/import', '/api/public', '/w/', '/_next', '/favicon.ico', '/manifest.json', '/icons']
+const PUBLIC_PREFIXES = ['/auth', '/api/auth', '/api/import', '/api/public', '/api/strava/webhook', '/api/strava/callback', '/w/', '/_next', '/favicon.ico', '/manifest.json', '/icons']
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl

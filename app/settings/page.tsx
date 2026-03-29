@@ -1,11 +1,15 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 
 export default function SettingsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [username, setUsername] = useState('')
+  const [stravaConnected, setStravaConnected] = useState(false)
+  const [stravaLoading, setStravaLoading] = useState(false)
+  const stravaStatus = searchParams.get('strava')
   const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -32,6 +36,10 @@ export default function SettingsPage() {
 
     fetch('/api/exercises/cleanup').then(r => r.json()).then(data => {
       if (data.invalid) setInvalidExercises(data.invalid)
+    }).catch(() => {})
+
+    fetch('/api/strava/status').then(r => r.json()).then(data => {
+      setStravaConnected(data.connected ?? false)
     }).catch(() => {})
   }, [])
 
@@ -131,6 +139,57 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      {/* Strava */}
+      <section className="flex flex-col gap-4 mb-8">
+        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Connected Apps</h3>
+        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-[#fc4c02]/20 rounded-xl flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-[#fc4c02]"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#e5e2e1]">Strava</p>
+                <p className="text-xs text-[#a48b83]">
+                  {stravaConnected ? 'Auto-imports runs and rides' : 'Connect to auto-import cardio'}
+                </p>
+              </div>
+            </div>
+            {stravaConnected ? (
+              <button
+                onClick={async () => {
+                  if (!confirm('Disconnect Strava? New activities won\'t be imported automatically.')) return
+                  setStravaLoading(true)
+                  await fetch('/api/strava/disconnect', { method: 'POST' })
+                  setStravaConnected(false)
+                  setStravaLoading(false)
+                }}
+                disabled={stravaLoading}
+                className="px-4 py-2 rounded-xl bg-[#2a2a2a] text-[#a48b83] text-xs font-bold font-label transition-colors disabled:opacity-50"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <a
+                href="/api/strava/connect"
+                className="px-4 py-2 rounded-xl bg-[#fc4c02]/20 text-[#fc4c02] text-xs font-bold font-label transition-colors"
+              >
+                Connect
+              </a>
+            )}
+          </div>
+          {stravaStatus === 'connected' && (
+            <p className="text-xs text-[#4bdece] bg-[#4bdece]/10 rounded-xl px-3 py-2">Strava connected — new workouts will import automatically.</p>
+          )}
+          {stravaStatus === 'denied' && (
+            <p className="text-xs text-[#a48b83] bg-[#2a2a2a] rounded-xl px-3 py-2">Strava connection cancelled.</p>
+          )}
+          {stravaStatus === 'error' && (
+            <p className="text-xs text-red-400 bg-red-950/30 rounded-xl px-3 py-2">Something went wrong connecting to Strava. Try again.</p>
+          )}
+        </div>
+      </section>
 
       {/* Shortcut sync */}
       <section className="flex flex-col gap-4 mb-8">
