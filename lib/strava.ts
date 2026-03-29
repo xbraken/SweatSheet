@@ -116,21 +116,38 @@ export async function importActivity(userId: number, activityId: number): Promis
 
     const endDate = new Date(new Date(startStr).getTime() + totalSec * 1000).toISOString()
 
-    // Build HR samples
+    // Build HR samples — downsample to 1 per 10s (1/sec from Strava is overkill for charts)
     const hrSamples: { offsetSec: number; bpm: number }[] = []
     if (streams.heartrate?.data && streams.time?.data) {
+      let lastSec = -Infinity
       for (let i = 0; i < streams.heartrate.data.length; i++) {
         const bpm = streams.heartrate.data[i]
         const offsetSec = streams.time.data[i]
-        if (bpm > 0) hrSamples.push({ offsetSec, bpm })
+        if (bpm > 0 && offsetSec - lastSec >= 10) {
+          hrSamples.push({ offsetSec, bpm })
+          lastSec = offsetSec
+        }
       }
     }
 
-    // Build distance samples
+    // Build distance samples — downsample to 1 per 10s
     const distSamples: { offsetSec: number; distKm: number }[] = []
     if (streams.distance?.data && streams.time?.data) {
+      let lastSec = -Infinity
       for (let i = 0; i < streams.distance.data.length; i++) {
-        distSamples.push({ offsetSec: streams.time.data[i], distKm: streams.distance.data[i] / 1000 })
+        const offsetSec = streams.time.data[i]
+        if (offsetSec - lastSec >= 10) {
+          distSamples.push({ offsetSec, distKm: streams.distance.data[i] / 1000 })
+          lastSec = offsetSec
+        }
+      }
+      // Always include the final sample so total distance is accurate on the chart
+      if (streams.distance.data.length > 0) {
+        const last = streams.distance.data.length - 1
+        const lastOffset = streams.time.data[last]
+        if (distSamples.length === 0 || distSamples[distSamples.length - 1].offsetSec !== lastOffset) {
+          distSamples.push({ offsetSec: lastOffset, distKm: streams.distance.data[last] / 1000 })
+        }
       }
     }
 

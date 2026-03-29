@@ -50,11 +50,10 @@ export async function POST() {
       args: [uid],
     })
     await db.execute({
-      sql: `DELETE FROM blocks WHERE session_id IN (
-              SELECT id FROM sessions WHERE user_id = ?
-            )`,
+      sql: `DELETE FROM blocks WHERE session_id IN (SELECT id FROM sessions WHERE user_id = ?)`,
       args: [uid],
     })
+    // All children already gone — this delete has nothing left to cascade through
     const result = await db.execute({
       sql: 'DELETE FROM sessions WHERE user_id = ?',
       args: [uid],

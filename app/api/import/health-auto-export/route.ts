@@ -284,11 +284,16 @@ export async function POST(req: NextRequest) {
         const filtered = allHrData.filter(s => !hasAppleSrc(s) || hasZeppSrc(s))
         const hrSource = filtered.length > 0 ? filtered : allHrData
 
+        let lastHrSec = -Infinity
         for (const s of hrSource) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
           const bpm = Math.round(Number(s.Avg ?? s.avg ?? s.qty ?? s.value ?? NaN))
           if (isNaN(ts) || isNaN(bpm) || bpm <= 0) continue
-          hrSamples.push({ offsetSec: Math.round((ts - startTs) / 1000), bpm })
+          const offsetSec = Math.round((ts - startTs) / 1000)
+          // Downsample to 1 per 10s — enough resolution for charts
+          if (offsetSec - lastHrSec < 10) continue
+          hrSamples.push({ offsetSec, bpm })
+          lastHrSec = offsetSec
         }
       }
 
@@ -310,13 +315,24 @@ export async function POST(req: NextRequest) {
       const distSamples: Array<{ offsetSec: number; distKm: number }> = []
       if (distArr.length > 0) {
         let cumKm = 0
+        let lastDistSec = -Infinity
+        const rawDistSamples: Array<{ offsetSec: number; distKm: number }> = []
         for (const s of distArr) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
           const dkm = qtyInKm(s)
           if (isNaN(ts) || isNaN(dkm) || dkm < 0) continue
           if (ts < startTs || ts > endTs) continue
           cumKm += dkm
-          distSamples.push({ offsetSec: Math.round((ts - startTs) / 1000), distKm: cumKm })
+          rawDistSamples.push({ offsetSec: Math.round((ts - startTs) / 1000), distKm: cumKm })
+        }
+        // Downsample to 1 per 10s, always keeping the final sample
+        for (let i = 0; i < rawDistSamples.length; i++) {
+          const s = rawDistSamples[i]
+          const isLast = i === rawDistSamples.length - 1
+          if (s.offsetSec - lastDistSec >= 10 || isLast) {
+            distSamples.push(s)
+            lastDistSec = s.offsetSec
+          }
         }
       }
 
