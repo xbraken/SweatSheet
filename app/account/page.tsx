@@ -15,6 +15,7 @@ interface SessionItem {
 }
 interface DayGroup {
   date: string
+  sessionIds: number[]
   cardio: CardioRow[] | null
   lift: { volume: number; sets: number; exercises: ExerciseStat[] } | null
 }
@@ -89,6 +90,20 @@ export default function ProfilePage() {
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<Filter>('all')
   const [copiedDate, setCopiedDate] = useState<string | null>(null)
+  const [deletingSession, setDeletingSession] = useState<number | null>(null)
+
+  async function deleteSession(sessionId: number, date: string) {
+    setDeletingSession(sessionId)
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setSessions(prev => prev.filter(s => s.sessionId !== sessionId))
+        if (expandedDate === date) setExpandedDate(null)
+      }
+    } finally {
+      setDeletingSession(null)
+    }
+  }
 
   useEffect(() => {
     fetch('/api/account').then(r => r.json()).then(account => {
@@ -128,6 +143,7 @@ export default function ProfilePage() {
       }
       return {
         date,
+        sessionIds: sess.map(s => s.sessionId),
         cardio: allCardio.length > 0 ? allCardio : null,
         lift: hasLift ? { volume, sets, exercises: Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: st.volume, rows: st.rows })) } : null,
       }
@@ -209,23 +225,38 @@ export default function ProfilePage() {
                   if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
                   if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
 
+                  const isEmpty = !g.cardio && !g.lift
+
                   return (
                     <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
-                      <button
-                        className="w-full p-4 flex items-center gap-3 text-left"
-                        onClick={() => setExpandedDate(expanded ? null : g.date)}
-                      >
-                        <div className="flex flex-col flex-1 min-w-0">
+                      <div className="w-full p-4 flex items-center gap-3">
+                        <button
+                          className="flex flex-col flex-1 min-w-0 text-left"
+                          onClick={() => !isEmpty && setExpandedDate(expanded ? null : g.date)}
+                        >
                           <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
-                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{dayTitle(g)}</span>
-                        </div>
-                        <div className="flex gap-1 shrink-0">
+                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{isEmpty ? 'Empty session' : dayTitle(g)}</span>
+                        </button>
+                        <div className="flex gap-1 shrink-0 items-center">
                           {badges.map((b, j) => (
                             <span key={j} className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${b.className}`}>{b.label}</span>
                           ))}
+                          {isEmpty && g.sessionIds.map(sid => (
+                            <button
+                              key={sid}
+                              onClick={() => deleteSession(sid, g.date)}
+                              disabled={deletingSession === sid}
+                              className="p-1.5 rounded-lg text-[#a48b83] hover:text-red-400 hover:bg-red-400/10 active:scale-95 transition-all"
+                              title="Delete empty session"
+                            >
+                              {deletingSession === sid
+                                ? <span className="w-4 h-4 border border-[#a48b83]/40 border-t-[#a48b83] rounded-full animate-spin inline-block" />
+                                : <span className="material-symbols-outlined text-base">delete</span>}
+                            </button>
+                          ))}
                         </div>
-                        <span className={`font-headline font-bold text-base shrink-0 ${keyStat.className}`}>{keyStat.value}</span>
-                      </button>
+                        {!isEmpty && <span className={`font-headline font-bold text-base shrink-0 ${keyStat.className}`}>{keyStat.value}</span>}
+                      </div>
 
                       {expanded && (
                         <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">

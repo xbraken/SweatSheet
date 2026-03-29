@@ -14,14 +14,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   if (userRes.rows.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
   const targetId = userRes.rows[0].id as number
 
+  const isOwnProfile = targetId === session.userId
+
   const [followRes, countRes, sessionsRes] = await Promise.all([
     db.execute({ sql: 'SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?', args: [session.userId, targetId] }),
     db.execute({ sql: 'SELECT COUNT(*) as count FROM sessions WHERE user_id = ?', args: [targetId] }),
-    db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY date DESC, created_at DESC LIMIT 100', args: [targetId] }),
+    isOwnProfile
+      ? db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY date DESC, created_at DESC', args: [targetId] })
+      : db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY date DESC, created_at DESC LIMIT 50', args: [targetId] }),
   ])
 
   const isFollowing = followRes.rows.length > 0
-  const isOwnProfile = targetId === session.userId
   const totalWorkouts = countRes.rows[0].count as number
 
   if (sessionsRes.rows.length === 0) {
