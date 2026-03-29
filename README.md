@@ -11,7 +11,7 @@ Built this because my workout data was scattered across Zepp, Apple Watch, and t
 - **AI screenshot parsing** — take a screenshot of a workout from another app and it'll extract the data using Claude's vision API.
 - **Progress charts** — volume over time, cardio stats, bodyweight tracking.
 - **Social** — follow friends, see their workouts.
-- **PWA** — install it on your phone, works offline.
+- **PWA** — install it on your phone from the browser.
 
 ## Stack
 
