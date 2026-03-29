@@ -908,7 +908,6 @@ function RunDetailSheet({
                     value={compareSearch}
                     onChange={e => setCompareSearch(e.target.value)}
                     className="w-full bg-transparent text-sm text-[#e5e2e1] placeholder-[#a48b83] outline-none"
-                    autoFocus
                   />
                 </div>
                 {allCardio
