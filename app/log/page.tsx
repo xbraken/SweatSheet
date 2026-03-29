@@ -898,6 +898,8 @@ export default function LogPage() {
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
             <button onClick={() => {
+              const hasSets = sets.some(s => s.done || s.weight !== 60 || s.reps !== 8)
+              if (hasSets && !confirm('Discard this exercise?')) return
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, done: false }])
               setView({ type: 'list' })
@@ -1038,6 +1040,8 @@ export default function LogPage() {
       <div className="sticky top-0 z-40 px-4 py-4 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
         <div className="flex items-center justify-between">
           <button onClick={() => {
+            const hasData = cardioDistance !== '' || cardioTime !== ''
+            if (hasData && !confirm('Discard this cardio entry?')) return
             localStorage.removeItem(DRAFT_KEY)
             setCardioDistance('')
             setCardioTime('')
