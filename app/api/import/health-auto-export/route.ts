@@ -96,7 +96,9 @@ export async function POST(req: NextRequest) {
   const preParsed = rawWorkouts.map(raw => {
     const typeStr = String(raw.name ?? '').toLowerCase().trim()
     const isWalking = typeStr === 'walking'
-    if (!raw.intensity && !isWalking) return null
+    // Only require intensity for walking — filters out passive background step-counting.
+    // Runs and cycling are always intentional so don't need this gate.
+    if (isWalking && !raw.intensity) return null
 
     let activity = ACTIVITY_MAP[typeStr]
     if (!activity) return null
