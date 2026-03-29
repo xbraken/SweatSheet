@@ -12,9 +12,10 @@ export async function POST(req: NextRequest) {
   const token = await getValidToken(session.userId)
   if (!token) return NextResponse.json({ error: 'No Strava connection' }, { status: 400 })
 
-  // How many pages to fetch — default 1 page (30 activities), allow up to 5 (150)
-  const body = await req.json().catch(() => ({})) as { pages?: number }
+  // How many pages/activities to fetch
+  const body = await req.json().catch(() => ({})) as { pages?: number; perPage?: number }
   const pages = Math.min(body.pages ?? 1, 5)
+  const perPage = Math.min(body.perPage ?? 30, 30)
 
   let imported = 0
   let skipped = 0
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   for (let page = 1; page <= pages; page++) {
     const res = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?per_page=30&page=${page}`,
+      `https://www.strava.com/api/v3/athlete/activities?per_page=${perPage}&page=${page}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     if (!res.ok) break

@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [stravaConnected, setStravaConnected] = useState(false)
   const [stravaLoading, setStravaLoading] = useState(false)
   const [stravaSyncing, setStravaSyncing] = useState(false)
+  const [stravaSyncMode, setStravaSyncMode] = useState<'latest' | 'recent'>('latest')
   const [stravaSyncResult, setStravaSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null)
   const [webhookRegistering, setWebhookRegistering] = useState(false)
@@ -189,14 +190,31 @@ export default function SettingsPage() {
           </div>
           {stravaConnected && (
             <div className="flex flex-col gap-2">
+              <div className="flex gap-2 p-1 bg-[#2a2a2a] rounded-xl">
+                <button
+                  onClick={() => setStravaSyncMode('latest')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'latest' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-[#a48b83]'}`}
+                >
+                  Latest
+                </button>
+                <button
+                  onClick={() => setStravaSyncMode('recent')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'recent' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-[#a48b83]'}`}
+                >
+                  Last 30
+                </button>
+              </div>
               <button
                 onClick={async () => {
                   setStravaSyncing(true)
                   setStravaSyncResult(null)
+                  const body = stravaSyncMode === 'latest'
+                    ? { pages: 1, perPage: 1 }
+                    : { pages: 1, perPage: 30 }
                   const res = await fetch('/api/strava/sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pages: 2 }),
+                    body: JSON.stringify(body),
                   }).then(r => r.json())
                   setStravaSyncing(false)
                   setStravaSyncResult({ imported: res.imported ?? 0, skipped: res.skipped ?? 0 })
@@ -207,7 +225,7 @@ export default function SettingsPage() {
               >
                 {stravaSyncing
                   ? <><div className="w-4 h-4 border-2 border-[#fc4c02]/30 border-t-[#fc4c02] rounded-full animate-spin" /> Syncing…</>
-                  : <><span className="material-symbols-outlined text-base">sync</span> Sync recent activities</>
+                  : <><span className="material-symbols-outlined text-base">sync</span> {stravaSyncMode === 'latest' ? 'Sync latest activity' : 'Sync last 30 activities'}</>
                 }
               </button>
               {stravaSyncResult && (
