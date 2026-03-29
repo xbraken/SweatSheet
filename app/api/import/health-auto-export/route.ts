@@ -185,36 +185,29 @@ export async function POST(req: NextRequest) {
       if (isNaN(avgHR)) avgHR = hrVal(raw.avgHeartRate)
       if (isNaN(maxHR)) maxHR = hrVal(raw.maxHeartRate)
 
-      // Source name helpers — checks source / sourceName / sourceProduct fields.
-      // Normalise non-breaking spaces (\u00a0) to regular spaces so "Apple Watch"
-      // matches even when the device name uses a non-breaking space.
+      // Source name helpers — normalise non-breaking spaces (\u00a0) so
+      // "Apple\u00a0Watch" matches "apple watch".
       function sampleSource(s: Record<string, unknown>): string {
         return String(s.source ?? s.sourceName ?? s.sourceProduct ?? '')
           .toLowerCase()
           .replace(/\u00a0/g, ' ')
       }
-      // Pure Zepp: contains "zepp"/"amazfit"/"huami" but NOT "apple watch"
-      // (excludes the combined "Apple Watch|Zepp" merged source)
-      function isZepp(s: Record<string, unknown>): boolean {
+      function hasZeppSrc(s: Record<string, unknown>): boolean {
         const src = sampleSource(s)
-        const hasZepp = src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
-        const hasApple = src.includes('apple watch')
-        return hasZepp && !hasApple
+        return src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
       }
-      // Pure Apple Watch: contains "apple watch" but NOT "zepp"/"amazfit"/"huami"
-      function isAppleWatch(s: Record<string, unknown>): boolean {
-        const src = sampleSource(s)
-        const hasApple = src.includes('apple watch')
-        const hasZepp = src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
-        return hasApple && !hasZepp
+      function hasAppleSrc(s: Record<string, unknown>): boolean {
+        return sampleSource(s).includes('apple watch')
       }
 
-      // HR time-series — prefer Zepp samples; fall back to all if no Zepp data present
+      // HR: exclude samples that are purely Apple Watch (no Zepp involvement).
+      // Combined "Apple Watch|Zepp" sources are kept — they contain Zepp HR data.
+      // Falls back to all samples if filtering leaves nothing.
       const hrSamples: Array<{ offsetSec: number; bpm: number }> = []
       if (Array.isArray(raw.heartRateData)) {
         const allHrData = raw.heartRateData as Record<string, unknown>[]
-        const zeppHrData = allHrData.filter(isZepp)
-        const hrSource = zeppHrData.length > 0 ? zeppHrData : allHrData
+        const filtered = allHrData.filter(s => !hasAppleSrc(s) || hasZeppSrc(s))
+        const hrSource = filtered.length > 0 ? filtered : allHrData
 
         for (const s of hrSource) {
           const ts = new Date(String(s.date ?? s.startDate ?? '')).getTime()
@@ -224,7 +217,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Recompute avg/min/max HR from the (source-filtered) samples for consistency
+      // Recompute avg/min/max HR from the filtered samples for consistency
       if (hrSamples.length > 0) {
         const bpms = hrSamples.map(s => s.bpm)
         avgHR = Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length)
@@ -232,10 +225,12 @@ export async function POST(req: NextRequest) {
         maxHR = Math.max(...bpms)
       }
 
-      // Distance time-series — prefer Apple Watch samples; fall back to all if none present
+      // Distance: exclude samples that are purely Zepp (no Apple Watch involvement).
+      // Combined "Apple Watch|Zepp" sources are kept — they contain Apple Watch GPS.
+      // Falls back to all samples if filtering leaves nothing.
       const rawDistArr = (raw.walkingAndRunningDistance ?? raw.cyclingDistance ?? []) as Record<string, unknown>[]
-      const watchDistArr = rawDistArr.filter(isAppleWatch)
-      const distArr = watchDistArr.length > 0 ? watchDistArr : rawDistArr
+      const filteredDistArr = rawDistArr.filter(s => !hasZeppSrc(s) || hasAppleSrc(s))
+      const distArr = filteredDistArr.length > 0 ? filteredDistArr : rawDistArr
 
       const distSamples: Array<{ offsetSec: number; distKm: number }> = []
       if (distArr.length > 0) {
@@ -250,8 +245,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // If Apple Watch distance samples exist, recompute total distance + pace from them
-      if (watchDistArr.length > 0 && distSamples.length > 0) {
+      // Recompute total distance + pace from the filtered distance samples
+      if (filteredDistArr.length > 0 && distSamples.length > 0) {
         distKm = distSamples[distSamples.length - 1].distKm
         const recalcSec = distKm > 0.1 ? totalSec / distKm : null
         pace = recalcSec
