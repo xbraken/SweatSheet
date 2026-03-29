@@ -415,6 +415,32 @@ export default function LogPage() {
   const [calMonth, setCalMonth] = useState(() => new Date())
   const [workoutDates, setWorkoutDates] = useState<Set<string>>(new Set())
 
+  // ── Draft persistence ────────────────────────────────────────────────────────
+  const DRAFT_KEY = 'ss_workout_draft'
+  const [draftRestored, setDraftRestored] = useState(false)
+
+  // Restore draft on mount (batched with flag so save effect doesn't fire prematurely)
+  useEffect(() => {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (raw) {
+      try {
+        const d = JSON.parse(raw) as { view?: View; sets?: SetRow[]; cardioDistance?: string; cardioTime?: string }
+        if (d.view?.type === 'lift' || d.view?.type === 'cardio') setView(d.view)
+        if (Array.isArray(d.sets) && d.sets.length > 0) setSets(d.sets)
+        if (typeof d.cardioDistance === 'string') setCardioDistance(d.cardioDistance)
+        if (typeof d.cardioTime === 'string') setCardioTime(d.cardioTime)
+      } catch { /* corrupt draft — ignore */ }
+    }
+    setDraftRestored(true)
+  }, [])
+
+  // Save draft whenever in-progress state changes (skips initial renders until restored)
+  useEffect(() => {
+    if (!draftRestored) return
+    if (view.type === 'list') return
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ view, sets, cardioDistance, cardioTime }))
+  }, [draftRestored, view, sets, cardioDistance, cardioTime])
+
   // Load rest duration from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('ss_rest_duration')
@@ -537,6 +563,8 @@ export default function LogPage() {
       })
       const data = await res.json()
       if (data.isPr) setPr({ exercise: data.exercise, weight: data.weight })
+      localStorage.removeItem(DRAFT_KEY)
+      setSets([{ id: 1, weight: 60, reps: 8, done: false }])
       refreshCurrent()
       setView({ type: 'list' })
     } finally {
@@ -565,6 +593,7 @@ export default function LogPage() {
           setLoggedCardio(data.cardio ?? [])
         }).finally(resolve)
       })
+      localStorage.removeItem(DRAFT_KEY)
       setView({ type: 'list' })
     } finally {
       setSaving(false)
