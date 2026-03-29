@@ -185,17 +185,28 @@ export async function POST(req: NextRequest) {
       if (isNaN(avgHR)) avgHR = hrVal(raw.avgHeartRate)
       if (isNaN(maxHR)) maxHR = hrVal(raw.maxHeartRate)
 
-      // Source name helpers — checks source / sourceName / sourceProduct fields
+      // Source name helpers — checks source / sourceName / sourceProduct fields.
+      // Normalise non-breaking spaces (\u00a0) to regular spaces so "Apple Watch"
+      // matches even when the device name uses a non-breaking space.
       function sampleSource(s: Record<string, unknown>): string {
-        return String(s.source ?? s.sourceName ?? s.sourceProduct ?? '').toLowerCase()
+        return String(s.source ?? s.sourceName ?? s.sourceProduct ?? '')
+          .toLowerCase()
+          .replace(/\u00a0/g, ' ')
       }
+      // Pure Zepp: contains "zepp"/"amazfit"/"huami" but NOT "apple watch"
+      // (excludes the combined "Apple Watch|Zepp" merged source)
       function isZepp(s: Record<string, unknown>): boolean {
         const src = sampleSource(s)
-        return src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
+        const hasZepp = src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
+        const hasApple = src.includes('apple watch')
+        return hasZepp && !hasApple
       }
+      // Pure Apple Watch: contains "apple watch" but NOT "zepp"/"amazfit"/"huami"
       function isAppleWatch(s: Record<string, unknown>): boolean {
         const src = sampleSource(s)
-        return src.includes('apple watch') || src.includes('applewatch')
+        const hasApple = src.includes('apple watch')
+        const hasZepp = src.includes('zepp') || src.includes('amazfit') || src.includes('huami')
+        return hasApple && !hasZepp
       }
 
       // HR time-series — prefer Zepp samples; fall back to all if no Zepp data present
