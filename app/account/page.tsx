@@ -75,10 +75,10 @@ function buildShareText(username: string, g: DayGroup): string {
 }
 
 const FILTERS: { label: string; value: Filter }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Year', value: 'year' },
-  { label: 'Month', value: 'month' },
   { label: 'Week', value: 'week' },
+  { label: 'Month', value: 'month' },
+  { label: 'Year', value: 'year' },
+  { label: 'All', value: 'all' },
 ]
 
 export default function ProfilePage() {
