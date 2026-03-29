@@ -946,9 +946,9 @@ export default function LogPage() {
           {activeSet && (
             <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
               {restingId !== null ? (
-                <RestButton seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
+                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
               ) : (
-                <>
+                <div key={`controls-${sets.filter(s => s.done).length}`} className="animate-fade-in">
                   <div className="flex items-center gap-1 mb-2">
                     <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
                     <div className="flex-1 flex gap-3">
@@ -1012,7 +1012,7 @@ export default function LogPage() {
                     <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                     Log set
                   </button>
-                </>
+                </div>
               )}
             </div>
           )}
