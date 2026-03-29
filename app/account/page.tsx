@@ -281,22 +281,20 @@ export default function ProfilePage() {
 
                   return (
                     <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
-                      <div className="w-full p-4 flex items-center gap-3">
-                        <button
-                          className="flex flex-col flex-1 min-w-0 text-left"
-                          onClick={() => !isEmpty && setExpandedDate(expanded ? null : g.date)}
-                        >
-                          <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
-                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{isEmpty ? 'Empty session' : dayTitle(g)}</span>
-                        </button>
-                        <div className="flex gap-1 shrink-0 items-center">
+                      <button
+                        className="w-full p-4 text-left"
+                        onClick={() => !isEmpty && setExpandedDate(expanded ? null : g.date)}
+                      >
+                        <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                        <p className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{isEmpty ? 'Empty session' : dayTitle(g)}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
                           {badges.map((b, j) => (
                             <span key={j} className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${b.className}`}>{b.label}</span>
                           ))}
                           {isEmpty && g.sessionIds.map(sid => (
                             <button
                               key={sid}
-                              onClick={() => deleteSession(sid, g.date)}
+                              onClick={(e) => { e.stopPropagation(); deleteSession(sid, g.date) }}
                               disabled={deletingSession === sid}
                               className="p-1.5 rounded-lg text-[#a48b83] hover:text-red-400 hover:bg-red-400/10 active:scale-95 transition-all"
                               title="Delete empty session"
@@ -306,9 +304,9 @@ export default function ProfilePage() {
                                 : <span className="material-symbols-outlined text-base">delete</span>}
                             </button>
                           ))}
+                          {!isEmpty && <span className={`font-headline font-bold text-base ml-auto ${keyStat.className}`}>{keyStat.value}</span>}
                         </div>
-                        {!isEmpty && <span className={`font-headline font-bold text-base shrink-0 ${keyStat.className}`}>{keyStat.value}</span>}
-                      </div>
+                      </button>
 
                       {expanded && (
                         <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">
