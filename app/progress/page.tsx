@@ -2,6 +2,17 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
+import { EXERCISES, type ExerciseType } from '@/lib/exercises'
+
+function getExerciseType(name: string): ExerciseType {
+  return EXERCISES.find(e => e.name === name)?.type ?? 'weights'
+}
+
+function fmtDuration(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = Math.round(secs % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 function baseActivity(activity: string) {
   return activity.toLowerCase().includes('run') ? 'Run' : activity
@@ -21,7 +32,7 @@ function ActivityLabel({ activity, className }: { activity: string; className?: 
   )
 }
 
-type LiftEntry = { date: string; max_weight: number; volume: number; set_count: number; rows: { id: number; weight: number; reps: number; logged_at?: string | null }[]; first_logged_at?: string | null }
+type LiftEntry = { date: string; max_weight: number; volume: number; max_duration: number; total_duration: number; set_count: number; rows: { id: number; weight: number; reps: number; duration_secs: number | null; logged_at?: string | null }[]; first_logged_at?: string | null }
 type CardioEntry = {
   cardio_id: number
   date: string
@@ -55,6 +66,8 @@ type RunDetail = {
 type CalendarDay = {
   date: string
   max_weight: number | null
+  max_duration: number | null
+  lift_count: number
   total_distance: number | null
   cardio_count: number
 }
@@ -1011,6 +1024,7 @@ export default function ProgressPage() {
     (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_tab') as 'lifts' | 'cardio') || 'lifts'
   )
   const [exercise, setExercise] = useState('')
+  const exerciseType = useMemo(() => exercise ? getExerciseType(exercise) : 'weights', [exercise])
   const [open, setOpen] = useState(false)
   const [cardioOpen, setCardioOpen] = useState(false)
   const [exercises, setExercises] = useState<string[]>([])
@@ -1046,7 +1060,7 @@ export default function ProgressPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [visibleCount, setVisibleCount] = useState(10)
-  const [editSetModal, setEditSetModal] = useState<{id: number; weight: number; reps: number} | null>(null)
+  const [editSetModal, setEditSetModal] = useState<{id: number; weight: number; reps: number; duration_secs: number | null} | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [fadingRunIds, setFadingRunIds] = useState<Set<number>>(new Set())
   const [chartAlpha, setChartAlpha] = useState(1)
@@ -1139,17 +1153,30 @@ export default function ProgressPage() {
         setLiftHistory(data.liftHistory ?? [])
       })
       .finally(() => setLoading(false))
-  }, [exercise, refreshKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise])
+
+  // Refetch lift history + calendar after an edit (refreshKey bump)
+  useEffect(() => {
+    if (refreshKey === 0 || !exercise) return
+    fetch(`/api/progress?exercise=${encodeURIComponent(exercise)}`)
+      .then(r => r.json())
+      .then(data => {
+        setLiftHistory(data.liftHistory ?? [])
+        setCalendarData(data.calendarData ?? [])
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
 
   const saveEditSet = () => {
     if (!editSetModal) return
-    const { id, weight, reps } = editSetModal
+    const { id, weight, reps, duration_secs } = editSetModal
     setEditSetModal(null)
     setRefreshKey(k => k + 1)
     fetch('/api/sets', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, weight, reps }),
+      body: JSON.stringify({ id, weight, reps, duration_secs }),
     })
   }
 
@@ -1168,11 +1195,20 @@ export default function ProgressPage() {
     return rangeCutoff ? arr.filter(e => e.date >= rangeCutoff) : arr
   }, [liftHistory, rangeCutoff])
   const liftChartPts = useMemo(() =>
-    liftChartData.map(e => ({
-      date: e.date,
-      value: liftMetric === 'weight' ? Number(e.max_weight) : Number(e.volume),
-    })),
-    [liftChartData, liftMetric]
+    liftChartData.map(e => {
+      let value: number
+      if (exerciseType === 'timed') {
+        value = liftMetric === 'weight' ? e.max_duration : e.total_duration
+      } else if (exerciseType === 'bodyweight') {
+        value = liftMetric === 'weight'
+          ? Math.max(0, ...e.rows.map(r => r.reps))
+          : e.rows.reduce((a, r) => a + r.reps, 0)
+      } else {
+        value = liftMetric === 'weight' ? Number(e.max_weight) : Number(e.volume)
+      }
+      return { date: e.date, value }
+    }),
+    [liftChartData, liftMetric, exerciseType]
   )
   const liftPts = liftChartPts.map(p => p.value)
   const liftSvgPts = liftPts.length > 1 ? buildSvgPoints(liftPts) : null
@@ -1251,10 +1287,18 @@ export default function ProgressPage() {
   // ── Sorting ─────────────────────────────────────────────────────────────────
   const sortedLifts = useMemo(() => {
     const arr = [...liftHistory]
-    if (liftSort === 'weight') return arr.sort((a, b) => Number(b.max_weight) - Number(a.max_weight))
-    if (liftSort === 'volume') return arr.sort((a, b) => Number(b.volume) - Number(a.volume))
+    if (liftSort === 'weight') {
+      if (exerciseType === 'timed') return arr.sort((a, b) => b.max_duration - a.max_duration)
+      if (exerciseType === 'bodyweight') return arr.sort((a, b) => Math.max(0, ...b.rows.map(r => r.reps)) - Math.max(0, ...a.rows.map(r => r.reps)))
+      return arr.sort((a, b) => Number(b.max_weight) - Number(a.max_weight))
+    }
+    if (liftSort === 'volume') {
+      if (exerciseType === 'timed') return arr.sort((a, b) => b.total_duration - a.total_duration)
+      if (exerciseType === 'bodyweight') return arr.sort((a, b) => b.rows.reduce((s, r) => s + r.reps, 0) - a.rows.reduce((s, r) => s + r.reps, 0))
+      return arr.sort((a, b) => Number(b.volume) - Number(a.volume))
+    }
     return arr
-  }, [liftHistory, liftSort])
+  }, [liftHistory, liftSort, exerciseType])
 
   const hasIntervalRuns = useMemo(
     () => cardioHistory.some(e => runSubtype(e.activity) === 'interval'),
@@ -1270,7 +1314,15 @@ export default function ProgressPage() {
 
   // ── PB / best badges ────────────────────────────────────────────────────────
   const pbDate = liftHistory.length > 0
-    ? liftHistory.reduce((best, e) => Number(e.max_weight) > Number(best.max_weight) ? e : best).date
+    ? exerciseType === 'timed'
+      ? liftHistory.reduce((best, e) => e.max_duration > best.max_duration ? e : best).date
+      : exerciseType === 'bodyweight'
+        ? liftHistory.reduce((best, e) => {
+            const eMax = Math.max(0, ...e.rows.map(r => r.reps))
+            const bMax = Math.max(0, ...best.rows.map(r => r.reps))
+            return eMax > bMax ? e : best
+          }).date
+        : liftHistory.reduce((best, e) => Number(e.max_weight) > Number(best.max_weight) ? e : best).date
     : null
 
   const fastestRunEntry = useMemo(() => {
@@ -1353,6 +1405,14 @@ export default function ProgressPage() {
   }, [calendarData])
 
   const maxCalWeight = useMemo(() => Math.max(1, ...calendarData.map(d => Number(d.max_weight) || 0)), [calendarData])
+  const maxCalDuration = useMemo(() => Math.max(1, ...calendarData.map(d => Number(d.max_duration) || 0)), [calendarData])
+
+  // Per-exercise calendar map — built from liftHistory so heatmap only shows days for the selected exercise
+  const liftCalendarMap = useMemo(() => {
+    const m = new Map<string, LiftEntry>()
+    liftHistory.forEach(e => m.set(e.date, e))
+    return m
+  }, [liftHistory])
 
   // Filtered calendar map — derived from the active cardio filter so the heatmap matches what's shown
   const filteredCalendarMap = useMemo(() => {
@@ -1374,9 +1434,19 @@ export default function ProgressPage() {
 
   function cellIntensity(date: string): number {
     if (tab === 'lifts') {
-      const day = calendarMap.get(date)
-      if (!day?.max_weight) return 0
-      return Math.max(0.2, Number(day.max_weight) / maxCalWeight)
+      const entry = liftCalendarMap.get(date)
+      if (!entry) return 0
+      if (exerciseType === 'timed') {
+        const maxD = Math.max(1, ...liftHistory.map(e => e.max_duration))
+        return Math.max(0.2, entry.max_duration / maxD)
+      }
+      if (exerciseType === 'bodyweight') {
+        const maxR = Math.max(1, ...liftHistory.map(e => Math.max(0, ...e.rows.map(r => r.reps))))
+        const entryMax = Math.max(0, ...entry.rows.map(r => r.reps))
+        return Math.max(0.2, entryMax / maxR)
+      }
+      const maxW = Math.max(1, ...liftHistory.map(e => Number(e.max_weight)))
+      return Math.max(0.2, Number(entry.max_weight) / maxW)
     }
     const day = filteredCalendarMap.get(date)
     if (!day) return 0
@@ -1394,8 +1464,8 @@ export default function ProgressPage() {
 
   const selectedDayLift = useMemo(() => {
     if (!selectedCalDate) return null
-    return calendarMap.get(selectedCalDate) ?? null
-  }, [selectedCalDate, calendarMap])
+    return liftCalendarMap.get(selectedCalDate) ?? null
+  }, [selectedCalDate, liftCalendarMap])
 
   if (loading) return (
     <main key="loading" className="w-full max-w-[390px] md:max-w-3xl mx-auto min-h-screen flex items-center justify-center">
@@ -1511,7 +1581,9 @@ export default function ProgressPage() {
                 liftMetric === m ? 'bg-primary-container text-[#752805]' : 'bg-surface-container text-on-surface-variant'
               }`}
             >
-              {m === 'weight' ? 'Max weight' : 'Volume'}
+              {m === 'weight'
+                ? exerciseType === 'timed' ? 'Best duration' : exerciseType === 'bodyweight' ? 'Max reps' : 'Max weight'
+                : exerciseType === 'timed' ? 'Total duration' : exerciseType === 'bodyweight' ? 'Total reps' : 'Volume'}
             </button>
           ))}
         </div>
@@ -1560,7 +1632,9 @@ export default function ProgressPage() {
         <div className="flex items-center justify-between">
           <h3 className="font-headline text-sm font-bold text-on-surface-variant">
             {tab === 'lifts'
-              ? liftMetric === 'weight' ? 'Max weight trend' : 'Volume trend'
+              ? liftMetric === 'weight'
+                ? exerciseType === 'timed' ? 'Duration trend' : exerciseType === 'bodyweight' ? 'Reps trend' : 'Max weight trend'
+                : exerciseType === 'timed' ? 'Total duration trend' : exerciseType === 'bodyweight' ? 'Total reps trend' : 'Volume trend'
               : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
           </h3>
           <div className="flex gap-1">
@@ -1589,10 +1663,15 @@ export default function ProgressPage() {
             return (
               <div className="absolute top-4 right-6 flex flex-col items-end">
                 <span className="text-3xl font-black font-headline text-primary-container leading-none">
-                  {liftMetric === 'volume' ? Math.round(pt?.value ?? 0).toLocaleString() : pt?.value}
+                  {exerciseType === 'timed' ? fmtDuration(pt?.value ?? 0)
+                    : liftMetric === 'volume' ? Math.round(pt?.value ?? 0).toLocaleString()
+                    : pt?.value}
                 </span>
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
-                  {hoveredIdx !== null ? formatDate(pt.date) : liftMetric === 'weight' ? 'kg peak' : 'kg vol peak'}
+                  {hoveredIdx !== null ? formatDate(pt.date)
+                    : exerciseType === 'timed' ? (liftMetric === 'weight' ? 'best' : 'total')
+                    : exerciseType === 'bodyweight' ? (liftMetric === 'weight' ? 'reps peak' : 'reps total')
+                    : liftMetric === 'weight' ? 'kg peak' : 'kg vol peak'}
                 </span>
               </div>
             )
@@ -1775,15 +1854,21 @@ export default function ProgressPage() {
                   </div>
                 </div>
               ))
-            ) : tab === 'lifts' && selectedDayLift?.max_weight ? (
+            ) : tab === 'lifts' && selectedDayLift ? (
               <div className="flex justify-between items-center">
                 <p className="font-headline font-bold text-on-surface">{exercise}</p>
-                <p className="text-sm font-bold text-primary-container">{Number(selectedDayLift.max_weight)} kg peak</p>
+                <p className="text-sm font-bold text-primary-container">
+                  {exerciseType === 'timed'
+                    ? `${fmtDuration(selectedDayLift.max_duration)} best`
+                    : exerciseType === 'bodyweight'
+                      ? `${Math.max(0, ...selectedDayLift.rows.map(r => r.reps))} reps`
+                      : `${Number(selectedDayLift.max_weight)} kg peak`}
+                </p>
               </div>
             ) : (
               <p className="text-sm text-on-surface-variant">No workout recorded</p>
             )}
-            {(tab === 'cardio' ? selectedDayWorkouts.length > 0 : !!selectedDayLift?.max_weight) && (
+            {(tab === 'cardio' ? selectedDayWorkouts.length > 0 : !!selectedDayLift) && (
               <button
                 onClick={() => router.push(`/sessions/${selectedCalDate}`)}
                 className="mt-1 flex items-center gap-1 text-xs font-bold text-primary-container hover:opacity-80 transition-opacity self-start"
@@ -1810,7 +1895,9 @@ export default function ProgressPage() {
                       liftSort === s ? 'bg-primary-container/20 text-primary-container' : 'text-on-surface-variant/40'
                     }`}
                   >
-                    {s === 'date' ? 'Date' : s === 'weight' ? 'Wt' : 'Vol'}
+                    {s === 'date' ? 'Date'
+                      : s === 'weight' ? (exerciseType === 'timed' ? 'Dur' : exerciseType === 'bodyweight' ? 'Reps' : 'Wt')
+                      : (exerciseType === 'timed' ? 'Total' : exerciseType === 'bodyweight' ? 'Total' : 'Vol')}
                   </button>
                 ))
               : (['date', 'distance', 'pace'] as const)
@@ -1934,8 +2021,12 @@ export default function ProgressPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-2xl font-black font-headline text-on-surface">
-                            {Number(s.max_weight)}{' '}
-                            <span className="text-xs font-normal text-on-surface-variant">kg</span>
+                            {exerciseType === 'timed' ? fmtDuration(s.max_duration)
+                              : exerciseType === 'bodyweight' ? `${Math.max(0, ...s.rows.map(r => r.reps))}`
+                              : String(Number(s.max_weight))}{' '}
+                            <span className="text-xs font-normal text-on-surface-variant">
+                              {exerciseType === 'timed' ? '' : exerciseType === 'bodyweight' ? 'reps' : 'kg'}
+                            </span>
                           </span>
                           {isPb && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-primary-container text-[#752805] uppercase tracking-wide">PB</span>
@@ -1943,8 +2034,14 @@ export default function ProgressPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase mb-1">Volume</p>
-                        <p className="font-bold text-on-surface">{Number(s.volume).toFixed(0)} kg</p>
+                        <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase mb-1">
+                          {exerciseType === 'timed' ? 'Total' : exerciseType === 'bodyweight' ? 'Total reps' : 'Volume'}
+                        </p>
+                        <p className="font-bold text-on-surface">
+                          {exerciseType === 'timed' ? fmtDuration(s.total_duration)
+                            : exerciseType === 'bodyweight' ? s.rows.reduce((a, r) => a + r.reps, 0)
+                            : `${Number(s.volume).toFixed(0)} kg`}
+                        </p>
                       </div>
                     </div>
                     {s.rows?.length > 0 && (() => {
@@ -1957,10 +2054,16 @@ export default function ProgressPage() {
                           {visible.map((r, j) => (
                             <button
                               key={j}
-                              onClick={() => r.id && setEditSetModal({ id: r.id, weight: r.weight, reps: r.reps })}
+                              onClick={() => r.id && setEditSetModal({ id: r.id, weight: r.weight, reps: r.reps, duration_secs: r.duration_secs ?? null })}
                               className={`bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg transition-colors ${r.id ? 'hover:bg-[#2a2a2a] active:scale-95' : ''}`}
                             >
-                              {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
+                              {exerciseType === 'timed' ? (
+                                <span className="text-on-surface">{fmtDuration(r.duration_secs ?? 0)}</span>
+                              ) : exerciseType === 'bodyweight' ? (
+                                <>{r.weight > 0 && <>{r.weight}kg + </>}<span className="text-on-surface">{r.reps} reps</span></>
+                              ) : (
+                                <>{r.weight}kg <span className="text-on-surface">× {r.reps}</span></>
+                              )}
                             </button>
                           ))}
                           {!isExpanded && hidden > 0 && (
@@ -2224,30 +2327,60 @@ export default function ProgressPage() {
               <button onClick={() => setEditSetModal(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
             </div>
             <div className="flex justify-center gap-10 mb-6">
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Weight kg</p>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setEditSetModal(m => m ? {...m, weight: Math.max(0, +(m.weight - 2.5).toFixed(1))} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                    <span className="material-symbols-outlined text-sm">remove</span>
-                  </button>
-                  <span className="font-headline text-2xl font-black w-16 text-center">{editSetModal.weight}</span>
-                  <button onClick={() => setEditSetModal(m => m ? {...m, weight: +(m.weight + 2.5).toFixed(1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                    <span className="material-symbols-outlined text-sm">add</span>
-                  </button>
+              {exerciseType === 'timed' ? (
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Duration</p>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setEditSetModal(m => m ? {...m, duration_secs: Math.max(0, (m.duration_secs ?? 0) - 15)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <span className="material-symbols-outlined text-sm">remove</span>
+                    </button>
+                    <span className="font-headline text-2xl font-black w-20 text-center">{fmtDuration(editSetModal.duration_secs ?? 0)}</span>
+                    <button onClick={() => setEditSetModal(m => m ? {...m, duration_secs: (m.duration_secs ?? 0) + 15} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <span className="material-symbols-outlined text-sm">add</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Reps</p>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                    <span className="material-symbols-outlined text-sm">remove</span>
-                  </button>
-                  <span className="font-headline text-2xl font-black w-10 text-center">{editSetModal.reps}</span>
-                  <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                    <span className="material-symbols-outlined text-sm">add</span>
-                  </button>
+              ) : exerciseType === 'bodyweight' ? (
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Reps</p>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <span className="material-symbols-outlined text-sm">remove</span>
+                    </button>
+                    <span className="font-headline text-2xl font-black w-10 text-center">{editSetModal.reps}</span>
+                    <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <span className="material-symbols-outlined text-sm">add</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Weight kg</p>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setEditSetModal(m => m ? {...m, weight: Math.max(0, +(m.weight - 2.5).toFixed(1))} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">remove</span>
+                      </button>
+                      <span className="font-headline text-2xl font-black w-16 text-center">{editSetModal.weight}</span>
+                      <button onClick={() => setEditSetModal(m => m ? {...m, weight: +(m.weight + 2.5).toFixed(1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">add</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Reps</p>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">remove</span>
+                      </button>
+                      <span className="font-headline text-2xl font-black w-10 text-center">{editSetModal.reps}</span>
+                      <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <span className="material-symbols-outlined text-sm">add</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <button onClick={saveEditSet} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
               Save

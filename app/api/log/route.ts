@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
     db.execute({
       sql: `SELECT b.id as block_id, st.exercise,
               COUNT(st.id) as set_count,
-              MAX(st.weight) as max_weight
+              MAX(st.weight) as max_weight,
+              MAX(st.duration_secs) as max_duration
             FROM blocks b
             JOIN sessions s ON b.session_id = s.id
             JOIN sets st ON st.block_id = b.id
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
       args: [session.userId, today],
     }),
     db.execute({
-      sql: `SELECT st.id, st.block_id, st.weight, st.reps
+      sql: `SELECT st.id, st.block_id, st.weight, st.reps, st.duration_secs
             FROM sets st
             JOIN blocks b ON st.block_id = b.id
             JOIN sessions s ON b.session_id = s.id
@@ -68,11 +69,11 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ rows: [] }),
   ])
 
-  const setsByBlock: Record<number, {id: number; weight: number; reps: number}[]> = {}
+  const setsByBlock: Record<number, {id: number; weight: number; reps: number; duration_secs: number | null}[]> = {}
   for (const r of setsRes.rows) {
     const bid = r.block_id as number
     if (!setsByBlock[bid]) setsByBlock[bid] = []
-    setsByBlock[bid].push({ id: r.id as number, weight: Number(r.weight), reps: Number(r.reps) })
+    setsByBlock[bid].push({ id: r.id as number, weight: Number(r.weight), reps: Number(r.reps), duration_secs: r.duration_secs != null ? Number(r.duration_secs) : null })
   }
 
   return NextResponse.json({
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
     const position = posRes.rows[0].cnt as number
 
     if (body.type === 'lift') {
-      const { exercise, sets } = body
+      const { exercise, sets, exerciseType } = body
       const doneSets = sets.filter((s: { done: boolean }) => s.done)
       if (!exercise || doneSets.length === 0) {
         return NextResponse.json({ error: 'No completed sets' }, { status: 400 })
@@ -131,26 +132,43 @@ export async function POST(req: NextRequest) {
       })
       const blockId = blockRes.rows[0].id as number
 
-      await Promise.all(doneSets.map((s: { weight: number; reps: number }, j: number) =>
+      await Promise.all(doneSets.map((s: { weight: number; reps: number; duration_secs?: number }, j: number) =>
         db.execute({
-          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))',
-          args: [blockId, exercise, s.weight, s.reps, j],
+          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at, duration_secs) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?)',
+          args: [blockId, exercise, s.weight, s.reps, j, s.duration_secs ?? null],
         })
       ))
 
-      // PR detection
-      const maxNew = Math.max(...doneSets.map((s: { weight: number }) => s.weight))
-      const prevMax = await db.execute({
-        sql: `SELECT MAX(st.weight) as max_w FROM sets st
-              JOIN blocks b ON st.block_id = b.id
-              JOIN sessions s ON b.session_id = s.id
-              WHERE st.exercise = ? AND s.user_id = ? AND b.id != ?`,
-        args: [exercise, session.userId, blockId],
-      })
-      const prev = prevMax.rows[0].max_w as number | null
-      const isPr = prev === null || maxNew > prev
+      // PR detection — skip for bodyweight, use duration for timed, weight for weights
+      let isPr = false
+      let prValue = 0
+      if (exerciseType === 'timed') {
+        const maxDur = Math.max(...doneSets.map((s: { duration_secs?: number }) => s.duration_secs ?? 0))
+        const prevMax = await db.execute({
+          sql: `SELECT MAX(st.duration_secs) as max_d FROM sets st
+                JOIN blocks b ON st.block_id = b.id
+                JOIN sessions s ON b.session_id = s.id
+                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ?`,
+          args: [exercise, session.userId, blockId],
+        })
+        const prev = prevMax.rows[0].max_d as number | null
+        isPr = prev === null || maxDur > prev
+        prValue = maxDur
+      } else if (exerciseType !== 'bodyweight') {
+        const maxNew = Math.max(...doneSets.map((s: { weight: number }) => s.weight))
+        const prevMax = await db.execute({
+          sql: `SELECT MAX(st.weight) as max_w FROM sets st
+                JOIN blocks b ON st.block_id = b.id
+                JOIN sessions s ON b.session_id = s.id
+                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ?`,
+          args: [exercise, session.userId, blockId],
+        })
+        const prev = prevMax.rows[0].max_w as number | null
+        isPr = prev === null || maxNew > prev
+        prValue = maxNew
+      }
 
-      return NextResponse.json({ ok: true, blockId, isPr, exercise, weight: maxNew })
+      return NextResponse.json({ ok: true, blockId, isPr, exercise, weight: prValue })
     } else {
       // Cardio
       const { activity, distance, time, pace } = body

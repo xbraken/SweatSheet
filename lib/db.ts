@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 let _initPromise: Promise<void> | null = null
 
@@ -154,6 +154,9 @@ async function _runInit() {
 
   // Avatar (base64 data URL, resized client-side to 160x160 before upload)
   try { await db.execute(`ALTER TABLE users ADD COLUMN avatar TEXT`) } catch { /* exists */ }
+
+  // Duration for timed exercises (plank, wall sit etc.)
+  try { await db.execute(`ALTER TABLE sets ADD COLUMN duration_secs INTEGER`) } catch { /* exists */ }
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)

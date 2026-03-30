@@ -2,11 +2,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
-import { EXERCISES, CATEGORIES, type ExerciseCategory } from '@/lib/exercises'
+import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from '@/lib/exercises'
 
-type SetRow = { id: number; weight: number; reps: number; done: boolean }
+type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
-type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; sets: {id: number; weight: number; reps: number}[] }
+type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 
 const REST_OPTIONS = [
@@ -75,13 +75,14 @@ function PrToast({ exercise, weight, onDone }: { exercise: string; weight: numbe
 
 // ── Exercise Picker Sheet ─────────────────────────────────────────────────────
 function ExercisePicker({
-  hints, starred, onSelect, onToggleStar, onClose,
+  hints, starred, onSelect, onToggleStar, onClose, exerciseType,
 }: {
   hints: ExerciseHint[]
   starred: Set<string>
   onSelect: (name: string, hint?: ExerciseHint) => void
   onToggleStar: (name: string) => void
   onClose: () => void
+  exerciseType?: ExerciseType
 }) {
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState<ExerciseCategory | null>(null)
@@ -95,10 +96,16 @@ function ExercisePicker({
   const q = search.toLowerCase()
   const filtered = useMemo(() => {
     let list = EXERCISES
+    if (exerciseType) list = list.filter(e => e.type === exerciseType)
     if (filterCat) list = list.filter(e => e.category === filterCat)
     if (q) list = list.filter(e => e.name.toLowerCase().includes(q))
     return list
-  }, [q, filterCat])
+  }, [q, filterCat, exerciseType])
+
+  const availableCategories = useMemo(() => {
+    if (!exerciseType) return CATEGORIES
+    return CATEGORIES.filter(cat => EXERCISES.some(e => e.type === exerciseType && e.category === cat))
+  }, [exerciseType])
 
   const starredList = useMemo(() => filtered.filter(e => starred.has(e.name)), [filtered, starred])
   const unstarredList = useMemo(() => filtered.filter(e => !starred.has(e.name)), [filtered, starred])
@@ -113,7 +120,14 @@ function ExercisePicker({
           className="flex-1 flex items-center justify-between py-3 px-4 hover:bg-[#2a2a2a] active:bg-[#353534] transition-colors text-left rounded-xl"
         >
           <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
-          {hint && <span className="text-[10px] text-[#a48b83]">{hint.last_weight} kg × {hint.last_reps}</span>}
+          {hint && <span className="text-[10px] text-[#a48b83]">{
+            (() => {
+              const ex = EXERCISES.find(e => e.name === name)
+              if (ex?.type === 'timed') return `${Math.floor(hint.last_reps / 60)}:${String(hint.last_reps % 60).padStart(2, '0')}`
+              if (ex?.type === 'bodyweight') return hint.last_weight > 0 ? `${hint.last_weight} kg × ${hint.last_reps}` : `${hint.last_reps} reps`
+              return `${hint.last_weight} kg × ${hint.last_reps}`
+            })()
+          }</span>}
         </button>
         <button onClick={() => onToggleStar(name)} className="p-2 shrink-0">
           <span
@@ -149,7 +163,7 @@ function ExercisePicker({
               onClick={() => setFilterCat(null)}
               className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${!filterCat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
             >All</button>
-            {CATEGORIES.map(cat => (
+            {availableCategories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setFilterCat(filterCat === cat ? null : cat)}
@@ -287,6 +301,85 @@ function CardioPicker({ onSelect, onClose }: {
   )
 }
 
+// ── Workout Type Picker Sheet ────────────────────────────────────────────────
+function WorkoutTypePicker({ onSelect, onClose }: {
+  onSelect: (type: 'weights' | 'bodyweight' | 'timed' | 'cardio') => void
+  onClose: () => void
+}) {
+  const options: { label: string; value: 'weights' | 'bodyweight' | 'timed' | 'cardio'; icon: string; color: string; bgColor: string }[] = [
+    { label: 'Weights', value: 'weights', icon: 'fitness_center', color: '#ff9066', bgColor: 'rgba(255,144,102,0.1)' },
+    { label: 'Bodyweight', value: 'bodyweight', icon: 'accessibility_new', color: '#ff9066', bgColor: 'rgba(255,144,102,0.1)' },
+    { label: 'Timed', value: 'timed', icon: 'timer', color: '#ff9066', bgColor: 'rgba(255,144,102,0.1)' },
+    { label: 'Cardio', value: 'cardio', icon: 'directions_run', color: '#4bdece', bgColor: 'rgba(75,222,206,0.1)' },
+  ]
+  const dragY = useRef(0)
+  const dragDelta = useRef(0)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLDivElement>(null)
+
+  function setSheetY(y: number, animated: boolean) {
+    const el = sheetRef.current
+    if (!el) return
+    el.style.animation = 'none'
+    el.style.transition = animated ? 'transform 0.3s ease' : 'none'
+    el.style.transform = `translateY(${y}px)`
+  }
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
+    const handle = handleRef.current
+    if (!handle) return
+    const onTouchStart = (e: TouchEvent) => { dragY.current = e.touches[0].clientY; dragDelta.current = 0 }
+    const onTouchMove = (e: TouchEvent) => {
+      const delta = e.touches[0].clientY - dragY.current
+      if (delta > 0) { e.preventDefault(); dragDelta.current = delta; setSheetY(delta, false) }
+    }
+    const onTouchEnd = () => {
+      if (dragDelta.current > 80) { setSheetY(window.innerHeight, true); setTimeout(onClose, 300) }
+      else { setSheetY(0, true) }
+      dragDelta.current = 0
+    }
+    handle.addEventListener('touchstart', onTouchStart)
+    handle.addEventListener('touchmove', onTouchMove, { passive: false })
+    handle.addEventListener('touchend', onTouchEnd)
+    return () => { handle.removeEventListener('touchstart', onTouchStart); handle.removeEventListener('touchmove', onTouchMove); handle.removeEventListener('touchend', onTouchEnd) }
+  }, [onClose])
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        ref={sheetRef}
+        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl animate-slide-up"
+      >
+        <div ref={handleRef} className="w-full flex justify-center py-5 mb-2 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
+          <div className="w-10 h-1 bg-[#353534] rounded-full" />
+        </div>
+        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">What are you logging?</p>
+        <div className="grid grid-cols-2 gap-3">
+          {options.map(o => (
+            <button
+              key={o.value}
+              onClick={() => { onSelect(o.value); onClose() }}
+              className="flex flex-col items-center gap-3 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all"
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: o.bgColor }}>
+                <span className="material-symbols-outlined text-2xl" style={{ color: o.color }}>{o.icon}</span>
+              </div>
+              <span className="font-headline font-bold text-sm text-[#e5e2e1]">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Calendar Sheet ────────────────────────────────────────────────────────────
 function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNext, onClose }: {
@@ -347,6 +440,8 @@ function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNex
 type View =
   | { type: 'list' }
   | { type: 'lift'; exercise: string }
+  | { type: 'bodyweight'; exercise: string }
+  | { type: 'timed'; exercise: string }
   | { type: 'cardio'; activity: string }
 
 export default function LogPage() {
@@ -357,12 +452,17 @@ export default function LogPage() {
   const [loggedCardio, setLoggedCardio] = useState<LoggedCardio[]>([])
   const [loadingToday, setLoadingToday] = useState(true)
 
-  // Exercise picker / cardio picker
+  // Pickers
+  const [showTypePicker, setShowTypePicker] = useState(false)
   const [showExPicker, setShowExPicker] = useState(false)
   const [showCardioPicker, setShowCardioPicker] = useState(false)
+  const [exerciseTypeFilter, setExerciseTypeFilter] = useState<ExerciseType | undefined>(undefined)
+
+  // Bodyweight add-weight toggle
+  const [addWeightMode, setAddWeightMode] = useState(false)
 
   // Lift logging state
-  const [sets, setSets] = useState<SetRow[]>([{ id: 1, weight: 60, reps: 8, done: false }])
+  const [sets, setSets] = useState<SetRow[]>([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
   const [restingId, setRestingId] = useState<number | null>(null)
   const [restRemaining, setRestRemaining] = useState(0)
   const [restDuration, setRestDuration] = useState(90)
@@ -404,7 +504,7 @@ export default function LogPage() {
   const [pr, setPr] = useState<{ exercise: string; weight: number } | null>(null)
 
   // Edit sheets
-  const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number}[]} | null>(null)
+  const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]} | null>(null)
   const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
   const [fadingBlocks, setFadingBlocks] = useState<Set<number>>(new Set())
 
@@ -425,7 +525,7 @@ export default function LogPage() {
     if (raw) {
       try {
         const d = JSON.parse(raw) as { view?: View; sets?: SetRow[]; cardioDistance?: string; cardioTime?: string }
-        if (d.view?.type === 'lift' || d.view?.type === 'cardio') setView(d.view)
+        if (d.view?.type === 'lift' || d.view?.type === 'bodyweight' || d.view?.type === 'timed' || d.view?.type === 'cardio') setView(d.view)
         if (Array.isArray(d.sets) && d.sets.length > 0) setSets(d.sets)
         if (typeof d.cardioDistance === 'string') setCardioDistance(d.cardioDistance)
         if (typeof d.cardioTime === 'string') setCardioTime(d.cardioTime)
@@ -509,12 +609,22 @@ export default function LogPage() {
     })
   }, [])
 
-  // Start logging a lift exercise
-  const startLift = (name: string, hint?: ExerciseHint) => {
-    setSets([{ id: Date.now(), weight: hint?.last_weight ?? 60, reps: hint?.last_reps ?? 8, done: false }])
+  // Start logging an exercise — route to correct view based on type
+  const startExercise = (name: string, hint?: ExerciseHint) => {
+    const exType = EXERCISES.find(e => e.name === name)?.type ?? 'weights'
     setRestingId(null)
-    setView({ type: 'lift', exercise: name })
     setShowExPicker(false)
+    if (exType === 'bodyweight') {
+      setSets([{ id: Date.now(), weight: 0, reps: hint?.last_reps ?? 10, duration_secs: 0, done: false }])
+      setAddWeightMode(false)
+      setView({ type: 'bodyweight', exercise: name })
+    } else if (exType === 'timed') {
+      setSets([{ id: Date.now(), weight: 0, reps: 0, duration_secs: hint?.last_reps ?? 30, done: false }])
+      setView({ type: 'timed', exercise: name })
+    } else {
+      setSets([{ id: Date.now(), weight: hint?.last_weight ?? 60, reps: hint?.last_reps ?? 8, duration_secs: 0, done: false }])
+      setView({ type: 'lift', exercise: name })
+    }
   }
 
   // Start logging cardio
@@ -534,7 +644,7 @@ export default function LogPage() {
         if (restDuration > 0) { setRestingId(setId); setRestRemaining(restDuration) }
         const loggedSet = updated.find(s => s.id === setId)!
         if (!updated.some(s => !s.done)) {
-          updated.push({ id: Date.now(), weight: loggedSet.weight, reps: loggedSet.reps, done: false })
+          updated.push({ id: Date.now(), weight: loggedSet.weight, reps: loggedSet.reps, duration_secs: loggedSet.duration_secs, done: false })
         }
       }
       return updated
@@ -549,9 +659,9 @@ export default function LogPage() {
     setSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(1)) } : s))
   }
 
-  // Save lift
-  const saveLift = async () => {
-    if (view.type !== 'lift') return
+  // Save lift / bodyweight / timed
+  const saveSets = async () => {
+    if (view.type !== 'lift' && view.type !== 'bodyweight' && view.type !== 'timed') return
     const doneSets = sets.filter(s => s.done)
     if (doneSets.length === 0) { setView({ type: 'list' }); return }
     setSaving(true)
@@ -559,12 +669,12 @@ export default function LogPage() {
       const res = await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets }),
+        body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets, exerciseType: view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights' }),
       })
       const data = await res.json()
       if (data.isPr) setPr({ exercise: data.exercise, weight: data.weight })
       localStorage.removeItem(DRAFT_KEY)
-      setSets([{ id: 1, weight: 60, reps: 8, done: false }])
+      setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
       refreshCurrent()
       setView({ type: 'list' })
     } finally {
@@ -653,10 +763,20 @@ export default function LogPage() {
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col px-4 pt-6 animate-fade-in-view">
         {pr && <PrToast exercise={pr.exercise} weight={pr.weight} onDone={() => setPr(null)} />}
+        {showTypePicker && (
+          <WorkoutTypePicker
+            onSelect={(t) => {
+              if (t === 'cardio') { setShowCardioPicker(true) }
+              else { setExerciseTypeFilter(t); setShowExPicker(true) }
+            }}
+            onClose={() => setShowTypePicker(false)}
+          />
+        )}
         {showExPicker && (
           <ExercisePicker
             hints={hints} starred={starred} onToggleStar={toggleStar}
-            onSelect={startLift}
+            exerciseType={exerciseTypeFilter}
+            onSelect={startExercise}
             onClose={() => setShowExPicker(false)}
           />
         )}
@@ -706,7 +826,12 @@ export default function LogPage() {
                     <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
                     <div>
                       <p className="font-headline font-bold text-[#e5e2e1]">{l.exercise}</p>
-                      <p className="text-xs text-[#a48b83]">{l.set_count} sets · {l.max_weight} kg peak</p>
+                      <p className="text-xs text-[#a48b83]">{l.set_count} sets{(() => {
+                        const ex = EXERCISES.find(e => e.name === l.exercise)
+                        if (ex?.type === 'timed') { const d = l.max_duration ?? 0; return ` · best ${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}` }
+                        if (ex?.type === 'bodyweight') return l.max_weight > 0 ? ` · ${l.max_weight} kg` : ' · bodyweight'
+                        return ` · ${l.max_weight} kg peak`
+                      })()}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -722,7 +847,12 @@ export default function LogPage() {
                   <div className="flex flex-wrap gap-1.5 mt-2.5 ml-9">
                     {l.sets.map((s, i) => (
                       <span key={s.id} className="text-[11px] bg-[#131313] text-[#a48b83] px-2 py-1 rounded-lg font-label">
-                        {i + 1}. {s.weight}kg × {s.reps}
+                        {i + 1}. {(() => {
+                          const ex = EXERCISES.find(e => e.name === l.exercise)
+                          if (ex?.type === 'timed') { const ds = s.duration_secs ?? 0; return `${Math.floor(ds / 60)}:${String(ds % 60).padStart(2, '0')}` }
+                          if (ex?.type === 'bodyweight') return s.weight > 0 ? `${s.weight}kg × ${s.reps}` : `${s.reps} reps`
+                          return `${s.weight}kg × ${s.reps}`
+                        })()}
                       </span>
                     ))}
                   </div>
@@ -756,22 +886,15 @@ export default function LogPage() {
           </div>
         )}
 
-        {/* Add buttons — only shown for today */}
+        {/* Add button — only shown for today */}
         {!browsedDate && (
-          <div className="flex flex-col gap-3 mt-auto">
+          <div className="mt-auto">
             <button
-              onClick={() => setShowExPicker(true)}
+              onClick={() => setShowTypePicker(true)}
               className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40"
             >
-              <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
-              <span className="font-headline font-bold text-[#dcc1b8]">Log exercise</span>
-            </button>
-            <button
-              onClick={() => setShowCardioPicker(true)}
-              className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#4bdece]/40"
-            >
-              <span className="material-symbols-outlined text-[#4bdece]">directions_run</span>
-              <span className="font-headline font-bold text-[#dcc1b8]">Log cardio</span>
+              <span className="material-symbols-outlined text-[#ff9066]">add</span>
+              <span className="font-headline font-bold text-[#dcc1b8]">Log workout</span>
             </button>
           </div>
         )}
@@ -898,10 +1021,10 @@ export default function LogPage() {
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
             <button onClick={() => {
-              const hasSets = sets.some(s => s.done || s.weight !== 60 || s.reps !== 8)
+              const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
               localStorage.removeItem(DRAFT_KEY)
-              setSets([{ id: 1, weight: 60, reps: 8, done: false }])
+              setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
             }} className="flex items-center gap-1 text-[#a48b83]">
               <span className="material-symbols-outlined text-lg">arrow_back</span>
@@ -1021,7 +1144,281 @@ export default function LogPage() {
         {/* Save */}
         <div className="px-4 pb-8 pt-6">
           <button
-            onClick={saveLift}
+            onClick={saveSets}
+            disabled={saving || sets.every(s => !s.done)}
+            className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+          >
+            {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+
+        <BottomNav />
+      </main>
+    )
+  }
+
+  // ── Bodyweight logging view ────────────────────────────────────────────────
+  if (view.type === 'bodyweight') {
+    const activeIdx = sets.findIndex(s => !s.done)
+    const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
+
+    return (
+      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
+        <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
+          <div className="flex items-center justify-between">
+            <button onClick={() => {
+              const hasSets = sets.some(s => s.done)
+              if (hasSets && !confirm('Discard this exercise?')) return
+              localStorage.removeItem(DRAFT_KEY)
+              setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
+              setView({ type: 'list' })
+            }} className="flex items-center gap-1 text-[#a48b83]">
+              <span className="material-symbols-outlined text-lg">arrow_back</span>
+              <span className="text-sm font-bold">Back</span>
+            </button>
+            <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+            <div className="w-16" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
+            <div className="flex gap-1">
+              {REST_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setAndSaveRestDuration(opt.value)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
+                    restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
+                  }`}
+                >{opt.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-grow px-4 pt-6 space-y-2">
+          {/* Done sets */}
+          {sets.filter(s => s.done).map((set, i) => (
+            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
+              <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
+              <div className="flex-1 flex gap-6">
+                <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
+                {set.weight > 0 && <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>}
+              </div>
+              <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+              </button>
+            </div>
+          ))}
+
+          {/* Active set */}
+          {activeSet && (
+            <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
+              {restingId !== null ? (
+                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
+              ) : (
+                <div key={`controls-${sets.filter(s => s.done).length}`} className="animate-fade-in">
+                  <div className="flex items-center gap-1 mb-2">
+                    <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
+                    <div className="flex-1">
+                      <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
+                      <div className="flex items-center gap-2 justify-center">
+                        <button onClick={() => updateSet(activeSet.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <span className="material-symbols-outlined text-sm">remove</span>
+                        </button>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={activeSet.reps}
+                          onChange={e => setSetField(activeSet.id, 'reps', parseInt(e.target.value) || 0)}
+                          onFocus={e => e.target.select()}
+                          className="font-headline text-2xl font-black w-14 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                        />
+                        <button onClick={() => updateSet(activeSet.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <span className="material-symbols-outlined text-sm">add</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Add weight toggle */}
+                  {!addWeightMode ? (
+                    <button
+                      onClick={() => setAddWeightMode(true)}
+                      className="flex items-center gap-1.5 text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3 px-1"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      Add weight
+                    </button>
+                  ) : (
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest">Weight kg</p>
+                        <button onClick={() => { setAddWeightMode(false); setSetField(activeSet.id, 'weight', 0) }} className="text-[10px] font-bold text-[#a48b83]">Remove</button>
+                      </div>
+                      <div className="flex items-center gap-2 justify-center">
+                        <button onClick={() => updateSet(activeSet.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <span className="material-symbols-outlined text-sm">remove</span>
+                        </button>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={activeSet.weight}
+                          onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value) || 0)}
+                          onFocus={e => e.target.select()}
+                          className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                        />
+                        <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <span className="material-symbols-outlined text-sm">add</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => toggleSet(activeSet.id)}
+                    className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    Log set
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 pb-8 pt-6">
+          <button
+            onClick={saveSets}
+            disabled={saving || sets.every(s => !s.done)}
+            className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+          >
+            {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+
+        <BottomNav />
+      </main>
+    )
+  }
+
+  // ── Timed logging view ────────────────────────────────────────────────────
+  if (view.type === 'timed') {
+    const activeIdx = sets.findIndex(s => !s.done)
+    const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
+    const fmtDur = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+
+    return (
+      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
+        <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
+          <div className="flex items-center justify-between">
+            <button onClick={() => {
+              const hasSets = sets.some(s => s.done)
+              if (hasSets && !confirm('Discard this exercise?')) return
+              localStorage.removeItem(DRAFT_KEY)
+              setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
+              setView({ type: 'list' })
+            }} className="flex items-center gap-1 text-[#a48b83]">
+              <span className="material-symbols-outlined text-lg">arrow_back</span>
+              <span className="text-sm font-bold">Back</span>
+            </button>
+            <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+            <div className="w-16" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
+            <div className="flex gap-1">
+              {REST_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setAndSaveRestDuration(opt.value)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
+                    restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
+                  }`}
+                >{opt.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-grow px-4 pt-6 space-y-2">
+          {/* Done sets */}
+          {sets.filter(s => s.done).map((set, i) => (
+            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
+              <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
+              <span className="font-headline font-bold">{fmtDur(set.duration_secs)}</span>
+              <div className="flex-1" />
+              <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+              </button>
+            </div>
+          ))}
+
+          {/* Active set */}
+          {activeSet && (
+            <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
+              {restingId !== null ? (
+                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
+              ) : (
+                <div key={`controls-${sets.filter(s => s.done).length}`} className="animate-fade-in">
+                  <div className="flex items-center gap-1 mb-2">
+                    <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
+                    <div className="flex-1">
+                      <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Duration</p>
+                      <div className="flex items-center gap-2 justify-center">
+                        <button onClick={() => setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: Math.max(0, s.duration_secs - 15) } : s))} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <span className="material-symbols-outlined text-sm">remove</span>
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={Math.floor(activeSet.duration_secs / 60)}
+                            onChange={e => {
+                              const mins = Math.max(0, parseInt(e.target.value) || 0)
+                              setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: mins * 60 + (s.duration_secs % 60) } : s))
+                            }}
+                            onFocus={e => e.target.select()}
+                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                          />
+                          <span className="font-headline text-2xl font-black text-[#a48b83]">:</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={String(activeSet.duration_secs % 60).padStart(2, '0')}
+                            onChange={e => {
+                              const secs = Math.min(59, Math.max(0, parseInt(e.target.value) || 0))
+                              setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: Math.floor(s.duration_secs / 60) * 60 + secs } : s))
+                            }}
+                            onFocus={e => e.target.select()}
+                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                          />
+                        </div>
+                        <button onClick={() => setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: s.duration_secs + 15 } : s))} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <span className="material-symbols-outlined text-sm">add</span>
+                        </button>
+                      </div>
+                      <div className="flex justify-center gap-1 mt-1">
+                        <span className="text-[10px] text-[#56423c] w-10 text-center">min</span>
+                        <span className="w-3" />
+                        <span className="text-[10px] text-[#56423c] w-10 text-center">sec</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleSet(activeSet.id)}
+                    className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2 mt-2"
+                  >
+                    <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    Log set
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 pb-8 pt-6">
+          <button
+            onClick={saveSets}
             disabled={saving || sets.every(s => !s.done)}
             className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
           >

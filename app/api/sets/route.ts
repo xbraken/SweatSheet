@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, weight, reps } = await req.json()
+  const { id, weight, reps, duration_secs } = await req.json()
   if (!id || weight == null || reps == null) {
     return NextResponse.json({ error: 'id, weight, reps required' }, { status: 400 })
   }
@@ -24,8 +24,8 @@ export async function PATCH(req: NextRequest) {
   if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   await db.execute({
-    sql: 'UPDATE sets SET weight = ?, reps = ? WHERE id = ?',
-    args: [weight, reps, id],
+    sql: 'UPDATE sets SET weight = ?, reps = ?, duration_secs = ? WHERE id = ?',
+    args: [weight, reps, duration_secs ?? null, id],
   })
   return NextResponse.json({ ok: true })
 }

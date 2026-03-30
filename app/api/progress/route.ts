@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     // liftOnly mode: only fetch lift history for the given exercise (skip the 3 shared queries)
     if (liftOnly && exercise) {
       const liftRes = await db.execute({
-        sql: `SELECT s.date, st.id, st.weight, st.reps, st.logged_at
+        sql: `SELECT s.date, st.id, st.weight, st.reps, st.duration_secs, st.logged_at
               FROM sets st
               JOIN blocks b ON st.block_id = b.id
               JOIN sessions s ON b.session_id = s.id
@@ -25,22 +25,27 @@ export async function GET(req: NextRequest) {
               ORDER BY s.date DESC, b.id, st.id`,
         args: [exercise, userId],
       })
-      const dateMap = new Map<string, { max_weight: number; volume: number; rows: { id: number; weight: number; reps: number; logged_at: string | null }[]; first_logged_at: string | null }>()
+      const dateMap = new Map<string, { max_weight: number; volume: number; max_duration: number; total_duration: number; rows: { id: number; weight: number; reps: number; duration_secs: number | null; logged_at: string | null }[]; first_logged_at: string | null }>()
       for (const r of liftRes.rows) {
         const date = r.date as string
         const id = r.id as number
         const weight = Number(r.weight)
         const reps = Number(r.reps)
+        const duration_secs = r.duration_secs != null ? Number(r.duration_secs) : null
         const logged_at = (r.logged_at as string | null) ?? null
-        const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, rows: [], first_logged_at: null }
+        const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, max_duration: 0, total_duration: 0, rows: [], first_logged_at: null }
         cur.max_weight = Math.max(cur.max_weight, weight)
         cur.volume += weight * reps
-        cur.rows.push({ id, weight, reps, logged_at })
+        if (duration_secs != null) {
+          cur.max_duration = Math.max(cur.max_duration, duration_secs)
+          cur.total_duration += duration_secs
+        }
+        cur.rows.push({ id, weight, reps, duration_secs, logged_at })
         if (!cur.first_logged_at && logged_at) cur.first_logged_at = logged_at
         dateMap.set(date, cur)
       }
       const liftHistory = Array.from(dateMap.entries()).map(([date, d]) => ({
-        date, max_weight: d.max_weight, volume: Math.round(d.volume), set_count: d.rows.length, rows: d.rows, first_logged_at: d.first_logged_at,
+        date, max_weight: d.max_weight, volume: Math.round(d.volume), max_duration: d.max_duration, total_duration: d.total_duration, set_count: d.rows.length, rows: d.rows, first_logged_at: d.first_logged_at,
       }))
       return NextResponse.json({ liftHistory })
     }
@@ -67,6 +72,8 @@ export async function GET(req: NextRequest) {
       db.execute({
         sql: `SELECT s.date,
                 MAX(CASE WHEN b.type = 'lift' THEN st.weight END) as max_weight,
+                MAX(CASE WHEN b.type = 'lift' THEN st.duration_secs END) as max_duration,
+                COUNT(DISTINCT CASE WHEN b.type = 'lift' THEN st.id END) as lift_count,
                 SUM(c.distance) as total_distance,
                 COUNT(DISTINCT c.id) as cardio_count
               FROM sessions s
@@ -79,7 +86,7 @@ export async function GET(req: NextRequest) {
       }),
       exercise
         ? db.execute({
-            sql: `SELECT s.date, st.id, st.weight, st.reps, st.logged_at
+            sql: `SELECT s.date, st.id, st.weight, st.reps, st.duration_secs, st.logged_at
                   FROM sets st
                   JOIN blocks b ON st.block_id = b.id
                   JOIN sessions s ON b.session_id = s.id
@@ -94,17 +101,22 @@ export async function GET(req: NextRequest) {
 
     let liftHistory: object[] = []
     if (exercise && liftRes.rows.length > 0) {
-      const dateMap = new Map<string, { max_weight: number; volume: number; rows: { id: number; weight: number; reps: number; logged_at: string | null }[]; first_logged_at: string | null }>()
+      const dateMap = new Map<string, { max_weight: number; volume: number; max_duration: number; total_duration: number; rows: { id: number; weight: number; reps: number; duration_secs: number | null; logged_at: string | null }[]; first_logged_at: string | null }>()
       for (const r of liftRes.rows) {
         const date = r.date as string
         const id = r.id as number
         const weight = Number(r.weight)
         const reps = Number(r.reps)
+        const duration_secs = r.duration_secs != null ? Number(r.duration_secs) : null
         const logged_at = (r.logged_at as string | null) ?? null
-        const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, rows: [], first_logged_at: null }
+        const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, max_duration: 0, total_duration: 0, rows: [], first_logged_at: null }
         cur.max_weight = Math.max(cur.max_weight, weight)
         cur.volume += weight * reps
-        cur.rows.push({ id, weight, reps, logged_at })
+        if (duration_secs != null) {
+          cur.max_duration = Math.max(cur.max_duration, duration_secs)
+          cur.total_duration += duration_secs
+        }
+        cur.rows.push({ id, weight, reps, duration_secs, logged_at })
         if (!cur.first_logged_at && logged_at) cur.first_logged_at = logged_at
         dateMap.set(date, cur)
       }
@@ -112,6 +124,8 @@ export async function GET(req: NextRequest) {
         date,
         max_weight: d.max_weight,
         volume: Math.round(d.volume),
+        max_duration: d.max_duration,
+        total_duration: d.total_duration,
         set_count: d.rows.length,
         rows: d.rows,
         first_logged_at: d.first_logged_at,
