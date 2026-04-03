@@ -84,7 +84,7 @@ function dayBadges(g: DayGroup): Array<{ label: string; className: string }> {
 function dayKeyStat(g: DayGroup): { value: string; className: string } {
   if (g.lift) {
     const v = g.lift.volume
-    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}k kg` : `${v} kg`, className: 'text-[#4bdece]' }
+    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`, className: 'text-[#4bdece]' }
   }
   if (g.cardio) {
     const c = g.cardio[0]
@@ -303,7 +303,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                                   <div className="flex items-center justify-between mb-1.5">
                                     <span className="text-[#e5e2e1] text-sm font-semibold">{e.name}</span>
                                     <span className="text-[#ff9066] text-xs font-bold">
-                                      {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}k kg` : `${e.volume} kg`}
+                                      {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}t` : `${e.volume} kg`}
                                     </span>
                                   </div>
                                   {(() => {
@@ -345,7 +345,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                               <div className="flex justify-between pt-2 border-t border-[#201f1f]/50">
                                 <span className="text-[#a48b83] text-xs">{g.lift.sets} sets total</span>
                                 <span className="text-[#a48b83] text-xs font-bold">
-                                  {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}k kg` : `${g.lift.volume} kg`} total
+                                  {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}t` : `${g.lift.volume} kg`} total
                                 </span>
                               </div>
                             </div>
