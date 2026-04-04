@@ -8,6 +8,8 @@ type SetRow = { id: number; weight: number; reps: number; duration_secs: number;
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
 type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
+type Template = { id: number; name: string; exercises: string[] }
+type ActiveTemplate = { id: number; name: string; exercises: string[]; currentIndex: number }
 
 const REST_OPTIONS = [
   { label: 'Off', value: 0 },
@@ -302,8 +304,9 @@ function CardioPicker({ onSelect, onClose }: {
 }
 
 // ── Workout Type Picker Sheet ────────────────────────────────────────────────
-function WorkoutTypePicker({ onSelect, onClose }: {
+function WorkoutTypePicker({ onSelect, onTemplate, onClose }: {
   onSelect: (type: 'weights' | 'bodyweight' | 'timed' | 'cardio') => void
+  onTemplate: () => void
   onClose: () => void
 }) {
   const options: { label: string; value: 'weights' | 'bodyweight' | 'timed' | 'cardio'; icon: string; color: string; bgColor: string }[] = [
@@ -375,6 +378,13 @@ function WorkoutTypePicker({ onSelect, onClose }: {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => { onTemplate(); onClose() }}
+          className="mt-3 w-full flex items-center justify-center gap-2 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534]"
+        >
+          <span className="material-symbols-outlined text-xl text-[#ff9066]">assignment</span>
+          <span className="font-headline font-bold text-sm text-[#dcc1b8]">Use a template</span>
+        </button>
       </div>
     </>
   )
@@ -458,6 +468,14 @@ export default function LogPage() {
   const [showCardioPicker, setShowCardioPicker] = useState(false)
   const [exerciseTypeFilter, setExerciseTypeFilter] = useState<ExerciseType | undefined>(undefined)
 
+  // Templates
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<{ id?: number; name: string; exercises: string[] } | null>(null)
+  const [activeTemplate, setActiveTemplate] = useState<ActiveTemplate | null>(null)
+  const [templateExPickerOpen, setTemplateExPickerOpen] = useState(false)
+
   // Bodyweight add-weight toggle
   const [addWeightMode, setAddWeightMode] = useState(false)
 
@@ -524,11 +542,12 @@ export default function LogPage() {
     const raw = localStorage.getItem(DRAFT_KEY)
     if (raw) {
       try {
-        const d = JSON.parse(raw) as { view?: View; sets?: SetRow[]; cardioDistance?: string; cardioTime?: string }
+        const d = JSON.parse(raw) as { view?: View; sets?: SetRow[]; cardioDistance?: string; cardioTime?: string; activeTemplate?: ActiveTemplate }
         if (d.view?.type === 'lift' || d.view?.type === 'bodyweight' || d.view?.type === 'timed' || d.view?.type === 'cardio') setView(d.view)
         if (Array.isArray(d.sets) && d.sets.length > 0) setSets(d.sets)
         if (typeof d.cardioDistance === 'string') setCardioDistance(d.cardioDistance)
         if (typeof d.cardioTime === 'string') setCardioTime(d.cardioTime)
+        if (d.activeTemplate) setActiveTemplate(d.activeTemplate)
       } catch { /* corrupt draft — ignore */ }
     }
     setDraftRestored(true)
@@ -538,8 +557,8 @@ export default function LogPage() {
   useEffect(() => {
     if (!draftRestored) return
     if (view.type === 'list') return
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ view, sets, cardioDistance, cardioTime }))
-  }, [draftRestored, view, sets, cardioDistance, cardioTime])
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ view, sets, cardioDistance, cardioTime, activeTemplate }))
+  }, [draftRestored, view, sets, cardioDistance, cardioTime, activeTemplate])
 
   // Load rest duration from localStorage
   useEffect(() => {
@@ -568,12 +587,16 @@ export default function LogPage() {
   const initialLoadDone = useRef(false)
   useEffect(() => {
     setLoadingToday(true)
-    fetch('/api/log?include=all').then(r => r.json()).then(data => {
+    Promise.all([
+      fetch('/api/log?include=all').then(r => r.json()),
+      fetch('/api/templates').then(r => r.json()).catch(() => ({ templates: [] })),
+    ]).then(([data, tplData]) => {
       setLoggedLifts(data.lifts ?? [])
       setLoggedCardio(data.cardio ?? [])
       if (data.dates) setWorkoutDates(new Set(data.dates as string[]))
       if (data.history) setHints(data.history)
       if (data.starred) setStarred(new Set(data.starred))
+      setTemplates(tplData.templates ?? [])
       setLoadingToday(false)
       initialLoadDone.current = true
     }).catch(() => setLoadingToday(false))
@@ -676,7 +699,17 @@ export default function LogPage() {
       localStorage.removeItem(DRAFT_KEY)
       setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
       refreshCurrent()
-      setView({ type: 'list' })
+      // Auto-advance if template is active
+      if (activeTemplate && activeTemplate.currentIndex < activeTemplate.exercises.length - 1) {
+        const nextIndex = activeTemplate.currentIndex + 1
+        setActiveTemplate(prev => prev ? { ...prev, currentIndex: nextIndex } : null)
+        const nextEx = activeTemplate.exercises[nextIndex]
+        const hint = hints.find((h: ExerciseHint) => h.exercise === nextEx)
+        startExercise(nextEx, hint)
+      } else {
+        if (activeTemplate) setActiveTemplate(null)
+        setView({ type: 'list' })
+      }
     } finally {
       setSaving(false)
     }
@@ -769,6 +802,7 @@ export default function LogPage() {
               if (t === 'cardio') { setShowCardioPicker(true) }
               else { setExerciseTypeFilter(t); setShowExPicker(true) }
             }}
+            onTemplate={() => setShowTemplatePicker(true)}
             onClose={() => setShowTypePicker(false)}
           />
         )}
@@ -782,6 +816,196 @@ export default function LogPage() {
         )}
         {showCardioPicker && (
           <CardioPicker onSelect={startCardio} onClose={() => setShowCardioPicker(false)} />
+        )}
+
+        {/* Template Picker */}
+        {showTemplatePicker && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowTemplatePicker(false)} />
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] max-h-[80vh] overflow-y-auto animate-slide-up">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Your templates</p>
+                <button onClick={() => setShowTemplatePicker(false)}>
+                  <span className="material-symbols-outlined text-[#a48b83]">close</span>
+                </button>
+              </div>
+              {templates.length === 0 ? (
+                <p className="text-sm text-[#a48b83] text-center py-6">No templates yet. Create one to get started.</p>
+              ) : (
+                <div className="flex flex-col gap-2 mb-4">
+                  {templates.map(t => (
+                    <div key={t.id} className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setShowTemplatePicker(false)
+                          setActiveTemplate({ id: t.id, name: t.name, exercises: t.exercises, currentIndex: 0 })
+                          const firstEx = t.exercises[0]
+                          const hint = hints.find((h: ExerciseHint) => h.exercise === firstEx)
+                          startExercise(firstEx, hint)
+                        }}
+                        className="flex-1 p-4 bg-[#201f1f] rounded-xl text-left active:scale-[0.98] transition-transform"
+                      >
+                        <p className="font-headline font-bold text-[#e5e2e1] mb-1">{t.name}</p>
+                        <p className="text-xs text-[#a48b83] line-clamp-1">
+                          {t.exercises.length <= 3
+                            ? t.exercises.join(', ')
+                            : `${t.exercises.slice(0, 2).join(', ')} +${t.exercises.length - 2} more`}
+                        </p>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingTemplate({ id: t.id, name: t.name, exercises: [...t.exercises] })
+                          setShowTemplatePicker(false)
+                          setShowTemplateEditor(true)
+                        }}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-[#201f1f] shrink-0"
+                      >
+                        <span className="material-symbols-outlined text-lg text-[#a48b83]">edit</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setEditingTemplate({ name: '', exercises: [] })
+                  setShowTemplatePicker(false)
+                  setShowTemplateEditor(true)
+                }}
+                className="w-full flex items-center justify-center gap-2 p-4 bg-[#ff9066] rounded-xl active:scale-95 transition-transform"
+              >
+                <span className="material-symbols-outlined text-lg text-[#752805]">add</span>
+                <span className="font-headline font-bold text-sm text-[#752805]">Create new template</span>
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Template Editor */}
+        {showTemplateEditor && editingTemplate && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setShowTemplateEditor(false)} />
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] max-h-[85vh] overflow-y-auto animate-slide-up">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                  {editingTemplate.id ? 'Edit template' : 'New template'}
+                </p>
+                <button onClick={() => setShowTemplateEditor(false)}>
+                  <span className="material-symbols-outlined text-[#a48b83]">close</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Template name"
+                value={editingTemplate.name}
+                onChange={e => setEditingTemplate(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-[#e5e2e1] font-headline font-bold placeholder-[#a48b83]/50 mb-4 outline-none focus:ring-1 focus:ring-[#ff9066]/40"
+              />
+              {editingTemplate.exercises.length > 0 && (
+                <div className="flex flex-col gap-2 mb-4">
+                  {editingTemplate.exercises.map((ex, i) => (
+                    <div key={`${ex}-${i}`} className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-4 py-3">
+                      <span className="text-xs font-bold text-[#a48b83] w-5">{i + 1}</span>
+                      <span className="flex-1 text-sm text-[#e5e2e1]">{ex}</span>
+                      <button
+                        onClick={() => setEditingTemplate(prev => {
+                          if (!prev) return prev
+                          const exercises = [...prev.exercises]
+                          if (i > 0) { [exercises[i - 1], exercises[i]] = [exercises[i], exercises[i - 1]] }
+                          return { ...prev, exercises }
+                        })}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i > 0 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        disabled={i === 0}
+                      >
+                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_less</span>
+                      </button>
+                      <button
+                        onClick={() => setEditingTemplate(prev => {
+                          if (!prev) return prev
+                          const exercises = [...prev.exercises]
+                          if (i < exercises.length - 1) { [exercises[i], exercises[i + 1]] = [exercises[i + 1], exercises[i]] }
+                          return { ...prev, exercises }
+                        })}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i < editingTemplate.exercises.length - 1 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        disabled={i === editingTemplate.exercises.length - 1}
+                      >
+                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_more</span>
+                      </button>
+                      <button
+                        onClick={() => setEditingTemplate(prev => prev ? { ...prev, exercises: prev.exercises.filter((_, j) => j !== i) } : prev)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534]"
+                      >
+                        <span className="material-symbols-outlined text-sm text-red-400">close</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => { setShowTemplateEditor(false); setTemplateExPickerOpen(true) }}
+                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-[#353534] rounded-xl mb-4 active:scale-95 transition-transform"
+              >
+                <span className="material-symbols-outlined text-lg text-[#ff9066]">add</span>
+                <span className="text-sm font-bold text-[#dcc1b8]">Add exercise</span>
+              </button>
+              <div className="flex gap-2">
+                {editingTemplate.id && (
+                  <button
+                    onClick={async () => {
+                      await fetch('/api/templates', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: editingTemplate.id }),
+                      })
+                      setTemplates(prev => prev.filter(t => t.id !== editingTemplate.id))
+                      setShowTemplateEditor(false)
+                      setEditingTemplate(null)
+                    }}
+                    className="px-4 py-3.5 bg-red-500/10 text-red-400 rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform"
+                  >
+                    Delete
+                  </button>
+                )}
+                <button
+                  disabled={!editingTemplate.name.trim() || editingTemplate.exercises.length === 0}
+                  onClick={async () => {
+                    const body = editingTemplate.id
+                      ? { id: editingTemplate.id, name: editingTemplate.name, exercises: editingTemplate.exercises }
+                      : { name: editingTemplate.name, exercises: editingTemplate.exercises }
+                    const res = await fetch('/api/templates', {
+                      method: editingTemplate.id ? 'PUT' : 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(body),
+                    })
+                    const data = await res.json()
+                    if (editingTemplate.id) {
+                      setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, name: editingTemplate.name, exercises: editingTemplate.exercises } : t))
+                    } else {
+                      setTemplates(prev => [{ id: data.id, name: editingTemplate.name, exercises: editingTemplate.exercises }, ...prev])
+                    }
+                    setShowTemplateEditor(false)
+                    setEditingTemplate(null)
+                  }}
+                  className="flex-1 py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-40"
+                >
+                  {editingTemplate.id ? 'Save changes' : 'Create template'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Exercise picker for template editor */}
+        {templateExPickerOpen && (
+          <ExercisePicker
+            hints={hints} starred={starred} onToggleStar={toggleStar}
+            onSelect={(name: string) => {
+              setEditingTemplate(prev => prev ? { ...prev, exercises: [...prev.exercises, name] } : prev)
+              setTemplateExPickerOpen(false)
+              setShowTemplateEditor(true)
+            }}
+            onClose={() => { setTemplateExPickerOpen(false); setShowTemplateEditor(true) }}
+          />
         )}
 
         <header className="mb-6 flex items-start justify-between">
@@ -1010,6 +1234,53 @@ export default function LogPage() {
     )
   }
 
+  // ── Template progress bar (shared across lift/bodyweight/timed views) ──────
+  const templateProgressBar = activeTemplate && (
+    <div className="flex items-center gap-3 px-1 py-2">
+      <div className="flex-1 flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold font-label text-[#dcc1b8]">{activeTemplate.name}</span>
+          <span className="text-[10px] font-bold text-[#a48b83]">{activeTemplate.currentIndex + 1}/{activeTemplate.exercises.length}</span>
+        </div>
+        <div className="flex gap-1">
+          {activeTemplate.exercises.map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 h-1 rounded-full transition-colors"
+              style={{ backgroundColor: i <= activeTemplate.currentIndex ? '#ff9066' : '#353534' }}
+            />
+          ))}
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          setActiveTemplate(null)
+          localStorage.removeItem(DRAFT_KEY)
+          setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
+          setView({ type: 'list' })
+        }}
+        className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534] shrink-0"
+      >
+        <span className="material-symbols-outlined text-sm text-[#a48b83]">close</span>
+      </button>
+    </div>
+  )
+
+  // ── Skip function for template mode ──────────────────────────────────────
+  const skipTemplateExercise = () => {
+    if (!activeTemplate) return
+    if (activeTemplate.currentIndex < activeTemplate.exercises.length - 1) {
+      const nextIndex = activeTemplate.currentIndex + 1
+      setActiveTemplate(prev => prev ? { ...prev, currentIndex: nextIndex } : null)
+      const nextEx = activeTemplate.exercises[nextIndex]
+      const hint = hints.find((h: ExerciseHint) => h.exercise === nextEx)
+      startExercise(nextEx, hint)
+    } else {
+      setActiveTemplate(null)
+      setView({ type: 'list' })
+    }
+  }
+
   // ── Lift logging view ───────────────────────────────────────────────────────
   if (view.type === 'lift') {
     const activeIdx = sets.findIndex(s => !s.done)
@@ -1023,6 +1294,7 @@ export default function LogPage() {
             <button onClick={() => {
               const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
+              setActiveTemplate(null)
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
@@ -1033,6 +1305,7 @@ export default function LogPage() {
             <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
             <div className="w-16" />
           </div>
+          {templateProgressBar}
           {/* Rest timer config */}
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
@@ -1142,11 +1415,19 @@ export default function LogPage() {
         </div>
 
         {/* Save */}
-        <div className="px-4 pb-8 pt-6">
+        <div className="px-4 pb-8 pt-6 flex gap-2">
+          {activeTemplate && (
+            <button
+              onClick={skipTemplateExercise}
+              className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]"
+            >
+              Skip
+            </button>
+          )}
           <button
             onClick={saveSets}
             disabled={saving || sets.every(s => !s.done)}
-            className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+            className="flex-1 py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
           >
             {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
           </button>
@@ -1157,7 +1438,7 @@ export default function LogPage() {
     )
   }
 
-  // ── Bodyweight logging view ────────────────────────────────────────────────
+  // ── Bodyweight logging view ───────────���─────────────────────��──────────────
   if (view.type === 'bodyweight') {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
@@ -1169,6 +1450,7 @@ export default function LogPage() {
             <button onClick={() => {
               const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
+              setActiveTemplate(null)
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
@@ -1179,6 +1461,7 @@ export default function LogPage() {
             <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
             <div className="w-16" />
           </div>
+          {templateProgressBar}
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
             <div className="flex gap-1">
@@ -1285,11 +1568,14 @@ export default function LogPage() {
           )}
         </div>
 
-        <div className="px-4 pb-8 pt-6">
+        <div className="px-4 pb-8 pt-6 flex gap-2">
+          {activeTemplate && (
+            <button onClick={skipTemplateExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
+          )}
           <button
             onClick={saveSets}
             disabled={saving || sets.every(s => !s.done)}
-            className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+            className="flex-1 py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
           >
             {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
           </button>
@@ -1313,6 +1599,7 @@ export default function LogPage() {
             <button onClick={() => {
               const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
+              setActiveTemplate(null)
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
@@ -1323,6 +1610,7 @@ export default function LogPage() {
             <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
             <div className="w-16" />
           </div>
+          {templateProgressBar}
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
             <div className="flex gap-1">
@@ -1416,11 +1704,14 @@ export default function LogPage() {
           )}
         </div>
 
-        <div className="px-4 pb-8 pt-6">
+        <div className="px-4 pb-8 pt-6 flex gap-2">
+          {activeTemplate && (
+            <button onClick={skipTemplateExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
+          )}
           <button
             onClick={saveSets}
             disabled={saving || sets.every(s => !s.done)}
-            className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+            className="flex-1 py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
           >
             {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
           </button>

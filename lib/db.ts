@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 6
+const SCHEMA_VERSION = 7
 
 let _initPromise: Promise<void> | null = null
 
@@ -157,6 +157,22 @@ async function _runInit() {
 
   // Duration for timed exercises (plank, wall sit etc.)
   try { await db.execute(`ALTER TABLE sets ADD COLUMN duration_secs INTEGER`) } catch { /* exists */ }
+
+  // Workout templates
+  await db.execute(`CREATE TABLE IF NOT EXISTS templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  await db.execute(`CREATE TABLE IF NOT EXISTS template_exercises (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    exercise TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+  )`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_templates_user ON templates(user_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_template_exercises_template ON template_exercises(template_id)`)
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)
