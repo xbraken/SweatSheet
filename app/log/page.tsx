@@ -11,6 +11,37 @@ type LoggedCardio = { block_id: number; cardio_id: number; activity: string; dis
 type Routine = { id: number; name: string; exercises: string[] }
 type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number }
 
+// ── Swipeable card (swipe left to delete on mobile, X on desktop) ─────────────
+function SwipeableCard({ onDelete, className, children }: { onDelete: () => void; className?: string; children: React.ReactNode }) {
+  const [swipeX, setSwipeX] = useState(0)
+  const startX = useRef(0)
+  const dragging = useRef(false)
+  const THRESHOLD = 80
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl">
+      <div
+        className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-500 rounded-2xl transition-all"
+        style={{ width: Math.abs(Math.min(0, swipeX)) }}
+      >
+        <span className="material-symbols-outlined text-white text-lg">delete</span>
+      </div>
+      <div
+        className={className}
+        style={{ transform: `translateX(${Math.min(0, swipeX)}px)`, transition: dragging.current ? 'none' : 'transform 0.25s ease' }}
+        onTouchStart={e => { startX.current = e.touches[0].clientX; dragging.current = true }}
+        onTouchMove={e => { const dx = e.touches[0].clientX - startX.current; if (dx < 0) setSwipeX(dx) }}
+        onTouchEnd={() => {
+          dragging.current = false
+          if (swipeX < -THRESHOLD) { setSwipeX(0); onDelete() } else setSwipeX(0)
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 const REST_OPTIONS = [
   { label: 'Off', value: 0 },
   { label: '30s', value: 30 },
@@ -525,6 +556,8 @@ export default function LogPage() {
   const [parseLoading, setParseLoading] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
 
+  const [repeatLoading, setRepeatLoading] = useState(false)
+
   const handleParseImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) { setParseError('Please upload an image file'); return }
     setParseLoading(true); setParseError(null)
@@ -555,6 +588,10 @@ export default function LogPage() {
   const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]} | null>(null)
   const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
   const [fadingBlocks, setFadingBlocks] = useState<Set<number>>(new Set())
+  const [pullY, setPullY] = useState(0)
+  const [pulling, setPulling] = useState(false)
+  const pullStartY = useRef(0)
+  const PULL_THRESHOLD = 72
 
   // Calendar / history browsing
   const browsedDateRef = useRef<string | null>(null)
@@ -572,12 +609,20 @@ export default function LogPage() {
     const raw = localStorage.getItem(DRAFT_KEY)
     if (raw) {
       try {
-        const d = JSON.parse(raw) as { view?: View; sets?: SetRow[]; cardioDistance?: string; cardioTime?: string; activeRoutine?: ActiveRoutine }
+        const d = JSON.parse(raw) as { view?: View; sets?: SetRow[]; cardioDistance?: string; cardioTime?: string; activeRoutine?: ActiveRoutine; restSetId?: number; restEndsAt?: number; restDuration?: number }
         if (d.view?.type === 'lift' || d.view?.type === 'bodyweight' || d.view?.type === 'timed' || d.view?.type === 'cardio') setView(d.view)
         if (Array.isArray(d.sets) && d.sets.length > 0) setSets(d.sets)
         if (typeof d.cardioDistance === 'string') setCardioDistance(d.cardioDistance)
         if (typeof d.cardioTime === 'string') setCardioTime(d.cardioTime)
         if (d.activeRoutine) setActiveRoutine(d.activeRoutine)
+        if (d.restSetId != null && d.restEndsAt != null) {
+          const remaining = Math.max(0, Math.round((d.restEndsAt - Date.now()) / 1000))
+          if (remaining > 0) {
+            setRestingId(d.restSetId)
+            setRestRemaining(remaining)
+            if (d.restDuration) setRestDuration(d.restDuration)
+          }
+        }
       } catch { /* corrupt draft — ignore */ }
     }
     setDraftRestored(true)
@@ -587,8 +632,13 @@ export default function LogPage() {
   useEffect(() => {
     if (!draftRestored) return
     if (view.type === 'list') return
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ view, sets, cardioDistance, cardioTime, activeRoutine }))
-  }, [draftRestored, view, sets, cardioDistance, cardioTime, activeRoutine])
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      view, sets, cardioDistance, cardioTime, activeRoutine,
+      restSetId: restingId ?? undefined,
+      restEndsAt: restingId != null ? Date.now() + restRemaining * 1000 : undefined,
+      restDuration: restingId != null ? restDuration : undefined,
+    }))
+  }, [draftRestored, view, sets, cardioDistance, cardioTime, activeRoutine, restingId, restRemaining, restDuration])
 
   // Load rest duration from localStorage
   useEffect(() => {
@@ -688,12 +738,31 @@ export default function LogPage() {
     setView({ type: 'cardio', activity })
   }
 
+  const repeatLastSession = async () => {
+    setRepeatLoading(true)
+    try {
+      const data = await fetch('/api/log?lastSession=1').then(r => r.json())
+      const exercises = data.exercises as { type: string; exercise?: string; activity?: string; sets: {weight: number; reps: number; duration_secs: number | null}[] }[]
+      if (!exercises?.length) return
+      const first = exercises[0]
+      if (first.type === 'lift' && first.exercise) {
+        const best = first.sets.length > 0 ? first.sets.reduce((a, b) => (b.weight > a.weight ? b : a), first.sets[0]) : null
+        startExercise(first.exercise, best ? { exercise: first.exercise, last_weight: best.weight, last_reps: best.reps } : undefined)
+      } else if ((first.type === 'cardio' || first.type === 'run' || first.type === 'cycle') && first.activity) {
+        startCardio(first.activity)
+      }
+    } finally {
+      setRepeatLoading(false)
+    }
+  }
+
   // Toggle set done/undone + auto-queue next
   const toggleSet = (setId: number) => {
     setSets(prev => {
       const updated = prev.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
       if (justDone) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40)
         if (restDuration > 0) { setRestingId(setId); setRestRemaining(restDuration) }
         const loggedSet = updated.find(s => s.id === setId)!
         if (!updated.some(s => !s.done)) {
@@ -824,7 +893,22 @@ export default function LogPage() {
   // ── List view ───────────────────────────────────────────────────────────────
   if (view.type === 'list') {
     return (
-      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col px-4 pt-6 animate-fade-in-view">
+      <main
+        className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col px-4 pt-6 animate-fade-in-view"
+        onTouchStart={e => { if (window.scrollY === 0) { pullStartY.current = e.touches[0].clientY; setPulling(true) } }}
+        onTouchMove={e => { if (!pulling) return; const dy = e.touches[0].clientY - pullStartY.current; if (dy > 0) setPullY(Math.min(dy, PULL_THRESHOLD * 1.5)) }}
+        onTouchEnd={() => {
+          if (pullY >= PULL_THRESHOLD) refreshCurrent()
+          setPullY(0); setPulling(false)
+        }}
+      >
+        {/* Pull to refresh indicator */}
+        {pullY > 0 && (
+          <div className="flex justify-center items-center overflow-hidden transition-all" style={{ height: pullY * 0.6 }}>
+            <span className={`material-symbols-outlined text-[#ff9066] transition-transform ${pullY >= PULL_THRESHOLD ? 'text-[#ff9066]' : 'text-[#56423c]'}`}
+              style={{ transform: `rotate(${(pullY / PULL_THRESHOLD) * 180}deg)` }}>refresh</span>
+          </div>
+        )}
         {pr && <PrToast exercise={pr.exercise} weight={pr.weight} onDone={() => setPr(null)} />}
         {showTypePicker && (
           <WorkoutTypePicker
@@ -1057,11 +1141,48 @@ export default function LogPage() {
                 Back to today
               </button>
             )}
+            {!browsedDate && (
+              <button onClick={repeatLastSession} disabled={repeatLoading} title="Repeat last session" className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f] disabled:opacity-50">
+                {repeatLoading
+                  ? <span className="w-4 h-4 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+                  : <span className="material-symbols-outlined text-[#a48b83] text-[18px]">replay</span>}
+              </button>
+            )}
             <button onClick={() => setCalOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f]">
               <span className="material-symbols-outlined text-[#a48b83]">calendar_month</span>
             </button>
           </div>
         </header>
+
+        {/* Active routine progress on list view */}
+        {activeRoutine && !browsedDate && (
+          <div className="flex items-center gap-3 bg-[#201f1f] rounded-2xl px-4 py-3 mb-4 border border-[#ff9066]/20">
+            <span className="material-symbols-outlined text-[#ff9066] text-lg">assignment</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-bold font-headline text-[#dcc1b8] truncate">{activeRoutine.name}</span>
+                <span className="text-[10px] font-bold text-[#a48b83] ml-2 shrink-0">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
+              </div>
+              <div className="flex gap-1">
+                {activeRoutine.exercises.map((_, i) => (
+                  <div key={i} className="flex-1 h-1 rounded-full transition-colors"
+                    style={{ backgroundColor: i <= activeRoutine.currentIndex ? '#ff9066' : '#353534' }} />
+                ))}
+              </div>
+              <p className="text-xs text-[#a48b83] mt-1.5 truncate">Next: {activeRoutine.exercises[activeRoutine.currentIndex]}</p>
+            </div>
+            <button
+              onClick={() => {
+                const ex = activeRoutine.exercises[activeRoutine.currentIndex]
+                const hint = hints.find(h => h.exercise === ex)
+                startExercise(ex, hint)
+              }}
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#ff9066] shrink-0 active:scale-90 transition-transform"
+            >
+              <span className="material-symbols-outlined text-[#752805] text-lg">play_arrow</span>
+            </button>
+          </div>
+        )}
 
         {/* Today's logged exercises */}
         {loadingToday ? (
@@ -1073,11 +1194,24 @@ export default function LogPage() {
             <span className="material-symbols-outlined text-5xl text-[#353534] mb-4">fitness_center</span>
             <p className="font-headline font-bold text-lg text-[#dcc1b8]">{browsedDate ? 'Rest day' : 'Nothing logged yet'}</p>
             <p className="text-sm text-[#a48b83] mt-1">{browsedDate ? 'No workout recorded for this day' : 'Add a lift or cardio below'}</p>
+            {!browsedDate && (
+              <button
+                onClick={repeatLastSession}
+                disabled={repeatLoading}
+                className="mt-5 flex items-center gap-2 px-4 py-2.5 bg-[#201f1f] rounded-xl text-sm font-bold text-[#dcc1b8] active:scale-95 transition-all disabled:opacity-50"
+              >
+                {repeatLoading
+                  ? <span className="w-4 h-4 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+                  : <span className="material-symbols-outlined text-base text-[#ff9066]">replay</span>}
+                Repeat last session
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3 mb-6">
             {loggedLifts.map(l => (
-              <div key={l.block_id} className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 ${fadingBlocks.has(l.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
+              <SwipeableCard key={l.block_id} onDelete={() => deleteBlock(l.block_id)}
+                className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 ${fadingBlocks.has(l.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
@@ -1095,7 +1229,7 @@ export default function LogPage() {
                     <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets] })}>
                       <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
                     </button>
-                    <button onClick={() => deleteBlock(l.block_id)}>
+                    <button onClick={() => deleteBlock(l.block_id)} className="hidden md:block">
                       <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
                     </button>
                   </div>
@@ -1114,10 +1248,11 @@ export default function LogPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </SwipeableCard>
             ))}
             {loggedCardio.map(c => (
-              <div key={c.block_id} className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
+              <SwipeableCard key={c.block_id} onDelete={() => deleteBlock(c.block_id)}
+                className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[#4bdece]">
                     {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
@@ -1134,11 +1269,11 @@ export default function LogPage() {
                   <button onClick={() => setEditCardio({ blockId: c.block_id, cardioId: c.cardio_id, activity: c.activity, distance: c.distance ?? '', duration: c.duration ?? '' })}>
                     <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
                   </button>
-                  <button onClick={() => deleteBlock(c.block_id)}>
+                  <button onClick={() => deleteBlock(c.block_id)} className="hidden md:block">
                     <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
                   </button>
                 </div>
-              </div>
+              </SwipeableCard>
             ))}
           </div>
         )}

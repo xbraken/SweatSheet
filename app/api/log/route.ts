@@ -13,6 +13,31 @@ export async function GET(req: NextRequest) {
   const today = searchParams.get('date') ?? new Date().toISOString().split('T')[0]
   const includeAll = searchParams.get('include') === 'all'
 
+  // lastSession: return exercises from the most recent past session
+  if (searchParams.get('lastSession') === '1') {
+    const res = await db.execute({
+      sql: `SELECT b.id as block_id, b.type, st.exercise, st.weight, st.reps, st.duration_secs,
+                   c.activity, s.date
+            FROM sessions s
+            JOIN blocks b ON b.session_id = s.id
+            LEFT JOIN sets st ON st.block_id = b.id AND b.type = 'lift'
+            LEFT JOIN cardio c ON c.block_id = b.id AND b.type = 'cardio'
+            WHERE s.user_id = ? AND s.date < ?
+            ORDER BY s.date DESC, b.id ASC, st.position ASC
+            LIMIT 80`,
+      args: [session.userId, today],
+    })
+    if (res.rows.length === 0) return NextResponse.json({ exercises: [] })
+    const targetDate = res.rows[0].date as string
+    const byBlock = new Map<number, { type: string; exercise?: string; activity?: string; sets: {weight: number; reps: number; duration_secs: number | null}[] }>()
+    for (const r of res.rows.filter(r => r.date === targetDate)) {
+      const bid = r.block_id as number
+      if (!byBlock.has(bid)) byBlock.set(bid, { type: r.type as string, exercise: r.exercise as string | undefined, activity: r.activity as string | undefined, sets: [] })
+      if (r.type === 'lift' && r.exercise) byBlock.get(bid)!.sets.push({ weight: Number(r.weight), reps: Number(r.reps), duration_secs: r.duration_secs != null ? Number(r.duration_secs) : null })
+    }
+    return NextResponse.json({ exercises: [...byBlock.values()] })
+  }
+
   const [liftRes, setsRes, cardioRes, calendarRes, hintsRes, starredRes] = await Promise.all([
     db.execute({
       sql: `SELECT b.id as block_id, st.exercise,
