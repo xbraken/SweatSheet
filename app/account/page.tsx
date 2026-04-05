@@ -104,6 +104,53 @@ async function resizeAvatar(file: File): Promise<string> {
   })
 }
 
+function BwSparkline({ data }: { data: { date: string; weight_kg: number }[] }) {
+  const W = 260, H = 52
+  if (data.length < 2) return null
+  const pts = data.slice(-60)
+  const weights = pts.map(p => p.weight_kg)
+  const min = Math.min(...weights)
+  const max = Math.max(...weights)
+  const range = max - min || 1
+  const xs = pts.map((_, i) => (i / (pts.length - 1)) * W)
+  const ys = pts.map(p => H - 4 - ((p.weight_kg - min) / range) * (H - 12))
+  const d = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ')
+  const area = `${d} L${W},${H} L0,${H} Z`
+  const latest = pts[pts.length - 1]
+  const prev = pts[0]
+  const delta = latest.weight_kg - prev.weight_kg
+  return (
+    <div className="bg-[#201f1f] rounded-2xl px-4 py-3 mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Body weight</span>
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-headline font-black text-[#e5e2e1] text-lg">{latest.weight_kg} kg</span>
+          {pts.length > 1 && (
+            <span className={`text-xs font-bold ${delta > 0 ? 'text-[#ff9066]' : delta < 0 ? 'text-[#4bdece]' : 'text-[#a48b83]'}`}>
+              {delta > 0 ? '+' : ''}{delta.toFixed(1)} kg
+            </span>
+          )}
+        </div>
+      </div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="w-full overflow-visible">
+        <defs>
+          <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ff9066" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#ff9066" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#bwGrad)" />
+        <path d={d} fill="none" stroke="#ff9066" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="3" fill="#ff9066" />
+      </svg>
+      <div className="flex justify-between mt-1">
+        <span className="text-[10px] text-[#56423c]">{new Date(prev.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+        <span className="text-[10px] text-[#56423c]">{new Date(latest.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function ProfilePage() {
   const [username, setUsername] = useState('')
   const [avatar, setAvatar] = useState<string | null>(null)
@@ -117,6 +164,7 @@ export default function ProfilePage() {
   const [filter, setFilter] = useState<Filter>('all')
   const [copiedDate, setCopiedDate] = useState<string | null>(null)
   const [deletingSession, setDeletingSession] = useState<number | null>(null)
+  const [bwHistory, setBwHistory] = useState<{ date: string; weight_kg: number }[]>([])
 
   async function deleteSession(sessionId: number, date: string) {
     setDeletingSession(sessionId)
@@ -148,14 +196,15 @@ export default function ProfilePage() {
       setUsername(name)
       setAvatar(account.avatar ?? null)
       if (!name) { setLoading(false); return }
-      fetch(`/api/social/profile/${encodeURIComponent(name)}`)
-        .then(r => r.json())
-        .then(d => {
-          setSessions(d.sessions ?? [])
-          setTotalWorkouts(d.totalWorkouts ?? 0)
-          if (d.sessions?.length > 0) setExpandedDate(d.sessions[0].date)
-        })
-        .finally(() => setLoading(false))
+      Promise.all([
+        fetch(`/api/social/profile/${encodeURIComponent(name)}`).then(r => r.json()),
+        fetch('/api/bodyweight').then(r => r.json()).catch(() => []),
+      ]).then(([d, bw]) => {
+        setSessions(d.sessions ?? [])
+        setTotalWorkouts(d.totalWorkouts ?? 0)
+        if (d.sessions?.length > 0) setExpandedDate(d.sessions[0].date)
+        if (Array.isArray(bw)) setBwHistory([...bw].reverse())
+      }).finally(() => setLoading(false))
     }).catch(() => setLoading(false))
   }, [])
 
@@ -264,6 +313,9 @@ export default function ProfilePage() {
                 </button>
               ))}
             </div>
+
+            {/* Body weight sparkline */}
+            <BwSparkline data={bwHistory} />
 
             {/* Workout history */}
             {dayGroups.length === 0 ? (

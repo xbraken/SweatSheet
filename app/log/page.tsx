@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
+import Onboarding, { shouldShowOnboarding } from '@/components/Onboarding'
 import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from '@/lib/exercises'
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
@@ -588,6 +589,7 @@ export default function LogPage() {
   const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]} | null>(null)
   const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
   const [fadingBlocks, setFadingBlocks] = useState<Set<number>>(new Set())
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [pullY, setPullY] = useState(0)
   const [pulling, setPulling] = useState(false)
   const pullStartY = useRef(0)
@@ -644,6 +646,11 @@ export default function LogPage() {
   useEffect(() => {
     const saved = localStorage.getItem('ss_rest_duration')
     if (saved) setRestDuration(parseInt(saved))
+  }, [])
+
+  // Onboarding: show once on first visit
+  useEffect(() => {
+    if (shouldShowOnboarding()) setShowOnboarding(true)
   }, [])
 
   const setAndSaveRestDuration = (v: number) => {
@@ -909,6 +916,7 @@ export default function LogPage() {
               style={{ transform: `rotate(${(pullY / PULL_THRESHOLD) * 180}deg)` }}>refresh</span>
           </div>
         )}
+        {showOnboarding && <Onboarding onDone={() => setShowOnboarding(false)} />}
         {pr && <PrToast exercise={pr.exercise} weight={pr.weight} onDone={() => setPr(null)} />}
         {showTypePicker && (
           <WorkoutTypePicker
