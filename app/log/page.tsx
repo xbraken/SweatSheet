@@ -13,29 +13,93 @@ type Routine = { id: number; name: string; exercises: string[] }
 type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number }
 
 // ── Swipeable card (swipe left to delete on mobile, X on desktop) ─────────────
+const ACTION_W = 72 // width of revealed delete button
+const THRESHOLD = 56 // how far past ACTION_W to trigger delete
+
 function SwipeableCard({ onDelete, className, children }: { onDelete: () => void; className?: string; children: React.ReactNode }) {
-  const [swipeX, setSwipeX] = useState(0)
+  const [offset, setOffset] = useState(0)   // negative = swiped left
+  const [settling, setSettling] = useState(false)
   const startX = useRef(0)
-  const dragging = useRef(false)
-  const THRESHOLD = 80
+  const startOffset = useRef(0)
+  const active = useRef(false)
+
+  const snapTo = (target: number, then?: () => void) => {
+    setSettling(true)
+    setOffset(target)
+    const id = setTimeout(() => { setSettling(false); then?.() }, 260)
+    return () => clearTimeout(id)
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    active.current = true
+    startX.current = e.touches[0].clientX
+    startOffset.current = offset
+    setSettling(false)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!active.current) return
+    const dx = e.touches[0].clientX - startX.current + startOffset.current
+    if (dx > 0) { setOffset(0); return }
+    // Rubber-band past the action width
+    const raw = Math.abs(dx)
+    if (raw <= ACTION_W) {
+      setOffset(-raw)
+    } else {
+      // Dampen movement beyond the action strip
+      const extra = raw - ACTION_W
+      setOffset(-(ACTION_W + extra * 0.25))
+    }
+  }
+
+  const handleTouchEnd = () => {
+    active.current = false
+    const abs = Math.abs(offset)
+    if (abs >= ACTION_W + THRESHOLD) {
+      // Fully swiped — fly off then delete
+      setSettling(true)
+      setOffset(-400)
+      setTimeout(() => { setSettling(false); setOffset(0); onDelete() }, 240)
+    } else if (abs >= ACTION_W * 0.4) {
+      // Snapped open — show the action button
+      snapTo(-ACTION_W)
+    } else {
+      snapTo(0)
+    }
+  }
+
+  const revealRatio = Math.min(1, Math.abs(offset) / ACTION_W)
 
   return (
-    <div className="relative overflow-hidden rounded-2xl">
+    <div className="relative rounded-2xl overflow-hidden" style={{ touchAction: 'pan-y' }}>
+      {/* Delete action revealed behind */}
       <div
-        className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-500 rounded-2xl transition-all"
-        style={{ width: Math.abs(Math.min(0, swipeX)) }}
+        className="absolute inset-y-0 right-0 flex items-center justify-center rounded-2xl"
+        style={{
+          width: ACTION_W,
+          backgroundColor: `rgb(${Math.round(239 + (220 - 239) * revealRatio)},${Math.round(68 + (38 - 68) * revealRatio)},${Math.round(68 + (38 - 68) * revealRatio)})`,
+          opacity: revealRatio,
+        }}
       >
-        <span className="material-symbols-outlined text-white text-lg">delete</span>
+        <button
+          onTouchEnd={e => { e.stopPropagation(); snapTo(-400, onDelete) }}
+          onClick={onDelete}
+          className="w-full h-full flex items-center justify-center"
+        >
+          <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
+        </button>
       </div>
+      {/* Card */}
       <div
         className={className}
-        style={{ transform: `translateX(${Math.min(0, swipeX)}px)`, transition: dragging.current ? 'none' : 'transform 0.25s ease' }}
-        onTouchStart={e => { startX.current = e.touches[0].clientX; dragging.current = true }}
-        onTouchMove={e => { const dx = e.touches[0].clientX - startX.current; if (dx < 0) setSwipeX(dx) }}
-        onTouchEnd={() => {
-          dragging.current = false
-          if (swipeX < -THRESHOLD) { setSwipeX(0); onDelete() } else setSwipeX(0)
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: settling ? 'transform 0.25s cubic-bezier(0.25,1,0.5,1)' : 'none',
+          willChange: 'transform',
         }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {children}
       </div>
