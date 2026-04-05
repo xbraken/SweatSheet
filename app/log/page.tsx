@@ -10,7 +10,8 @@ type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
 type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
-type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number }
+type PendingBlock = { exercise: string; exerciseType: 'weights' | 'bodyweight' | 'timed'; sets: SetRow[] }
+type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number; pending: Record<number, PendingBlock> }
 
 // ── Swipeable card (swipe left to delete on mobile, X on desktop) ─────────────
 const ACTION_W = 72
@@ -831,6 +832,11 @@ export default function LogPage() {
       const data = await fetch('/api/log?lastSession=1').then(r => r.json())
       const exercises = data.exercises as { type: string; exercise?: string; activity?: string; sets: {weight: number; reps: number; duration_secs: number | null}[] }[]
       if (!exercises?.length) return
+      // Collect all lift exercise names for the auto-advance routine
+      const liftNames = exercises.filter(e => e.type === 'lift' && e.exercise).map(e => e.exercise!)
+      if (liftNames.length > 1) {
+        setActiveRoutine({ id: 0, name: 'Last session', exercises: liftNames, currentIndex: 0, pending: {} })
+      }
       const first = exercises[0]
       if (first.type === 'lift' && first.exercise) {
         const best = first.sets.length > 0 ? first.sets.reduce((a, b) => (b.weight > a.weight ? b : a), first.sets[0]) : null
@@ -869,11 +875,54 @@ export default function LogPage() {
     setSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(1)) } : s))
   }
 
+  // Save all pending routine blocks to DB then go to list
+  const finishRoutine = async (pending: Record<number, PendingBlock>) => {
+    const blocks = Object.values(pending)
+    if (blocks.length === 0) { setActiveRoutine(null); setView({ type: 'list' }); return }
+    setSaving(true)
+    try {
+      await Promise.all(blocks.map(b =>
+        fetch('/api/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'lift', exercise: b.exercise, sets: b.sets, exerciseType: b.exerciseType }),
+        })
+      ))
+      localStorage.removeItem(DRAFT_KEY)
+      setActiveRoutine(null)
+      setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
+      refreshCurrent()
+      setView({ type: 'list' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // Save lift / bodyweight / timed
   const saveSets = async () => {
     if (view.type !== 'lift' && view.type !== 'bodyweight' && view.type !== 'timed') return
     const doneSets = sets.filter(s => s.done)
     if (doneSets.length === 0) { setView({ type: 'list' }); return }
+
+    // In a routine — accumulate locally, save all at the end
+    if (activeRoutine) {
+      const exerciseType = (view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights') as 'weights' | 'bodyweight' | 'timed'
+      const updatedPending = { ...activeRoutine.pending, [activeRoutine.currentIndex]: { exercise: view.exercise, exerciseType, sets: doneSets } }
+      if (activeRoutine.currentIndex < activeRoutine.exercises.length - 1) {
+        // More exercises to go — advance
+        const nextIndex = activeRoutine.currentIndex + 1
+        setActiveRoutine(prev => prev ? { ...prev, currentIndex: nextIndex, pending: updatedPending } : null)
+        const nextEx = activeRoutine.exercises[nextIndex]
+        const hint = hints.find((h: ExerciseHint) => h.exercise === nextEx)
+        startExercise(nextEx, hint)
+      } else {
+        // Last exercise — save everything
+        await finishRoutine(updatedPending)
+      }
+      return
+    }
+
+    // Not in a routine — save immediately as before
     setSaving(true)
     try {
       const res = await fetch('/api/log', {
@@ -886,17 +935,7 @@ export default function LogPage() {
       localStorage.removeItem(DRAFT_KEY)
       setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
       refreshCurrent()
-      // Auto-advance if routine is active
-      if (activeRoutine && activeRoutine.currentIndex < activeRoutine.exercises.length - 1) {
-        const nextIndex = activeRoutine.currentIndex + 1
-        setActiveRoutine(prev => prev ? { ...prev, currentIndex: nextIndex } : null)
-        const nextEx = activeRoutine.exercises[nextIndex]
-        const hint = hints.find((h: ExerciseHint) => h.exercise === nextEx)
-        startExercise(nextEx, hint)
-      } else {
-        if (activeRoutine) setActiveRoutine(null)
-        setView({ type: 'list' })
-      }
+      setView({ type: 'list' })
     } finally {
       setSaving(false)
     }
@@ -1041,7 +1080,7 @@ export default function LogPage() {
                       <button
                         onClick={() => {
                           setShowRoutinePicker(false)
-                          setActiveRoutine({ id: t.id, name: t.name, exercises: t.exercises, currentIndex: 0 })
+                          setActiveRoutine({ id: t.id, name: t.name, exercises: t.exercises, currentIndex: 0, pending: {} })
                           const firstEx = t.exercises[0]
                           const hint = hints.find((h: ExerciseHint) => h.exercise === firstEx)
                           startExercise(firstEx, hint)
@@ -1253,9 +1292,13 @@ export default function LogPage() {
                 <span className="text-[10px] font-bold text-[#a48b83] ml-2 shrink-0">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
               </div>
               <div className="flex gap-1">
-                {activeRoutine.exercises.map((_, i) => (
-                  <div key={i} className="flex-1 h-1 rounded-full transition-colors"
-                    style={{ backgroundColor: i <= activeRoutine.currentIndex ? '#ff9066' : '#353534' }} />
+                {activeRoutine.exercises.map((ex, i) => (
+                  <button key={i}
+                    onClick={() => { if (i < activeRoutine.currentIndex) jumpToRoutineExercise(i) }}
+                    title={i < activeRoutine.currentIndex ? ex : undefined}
+                    className={`flex-1 h-2.5 rounded-full transition-colors ${i < activeRoutine.currentIndex ? 'cursor-pointer active:scale-90' : 'cursor-default'}`}
+                    style={{ backgroundColor: i <= activeRoutine.currentIndex ? '#ff9066' : '#353534' }}
+                  />
                 ))}
               </div>
               <p className="text-xs text-[#a48b83] mt-1.5 truncate">Next: {activeRoutine.exercises[activeRoutine.currentIndex]}</p>
@@ -1491,6 +1534,24 @@ export default function LogPage() {
     )
   }
 
+  // ── Jump to a routine exercise by index ──────────────────────────────────
+  const jumpToRoutineExercise = (index: number) => {
+    if (!activeRoutine) return
+    const pendingBlock = activeRoutine.pending[index]
+    setActiveRoutine(prev => prev ? { ...prev, currentIndex: index } : null)
+    const ex = activeRoutine.exercises[index]
+    if (pendingBlock && pendingBlock.sets.length > 0) {
+      // Restore previously accumulated sets (all done) + a fresh undone set
+      const last = pendingBlock.sets[pendingBlock.sets.length - 1]
+      setSets([...pendingBlock.sets, { id: Date.now(), weight: last.weight, reps: last.reps, duration_secs: last.duration_secs, done: false }])
+      const exType = EXERCISES.find(e => e.name === ex)?.type ?? 'weights'
+      setView({ type: exType === 'bodyweight' ? 'bodyweight' : exType === 'timed' ? 'timed' : 'lift', exercise: ex })
+    } else {
+      const hint = hints.find((h: ExerciseHint) => h.exercise === ex)
+      startExercise(ex, hint)
+    }
+  }
+
   // ── Routine progress bar (shared across lift/bodyweight/timed views) ──────
   const routineProgressBar = activeRoutine && (
     <div className="flex items-center gap-3 px-1 py-2">
@@ -1500,22 +1561,19 @@ export default function LogPage() {
           <span className="text-[10px] font-bold text-[#a48b83]">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
         </div>
         <div className="flex gap-1">
-          {activeRoutine.exercises.map((_, i) => (
-            <div
+          {activeRoutine.exercises.map((ex, i) => (
+            <button
               key={i}
-              className="flex-1 h-1 rounded-full transition-colors"
+              onClick={() => { if (i < activeRoutine.currentIndex) jumpToRoutineExercise(i) }}
+              title={i < activeRoutine.currentIndex ? ex : undefined}
+              className={`flex-1 h-2.5 rounded-full transition-colors ${i < activeRoutine.currentIndex ? 'cursor-pointer active:scale-90' : 'cursor-default'}`}
               style={{ backgroundColor: i <= activeRoutine.currentIndex ? '#ff9066' : '#353534' }}
             />
           ))}
         </div>
       </div>
       <button
-        onClick={() => {
-          setActiveRoutine(null)
-          localStorage.removeItem(DRAFT_KEY)
-          setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
-          setView({ type: 'list' })
-        }}
+        onClick={() => finishRoutine(activeRoutine.pending)}
         className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534] shrink-0"
       >
         <span className="material-symbols-outlined text-sm text-[#a48b83]">close</span>
@@ -1549,9 +1607,9 @@ export default function LogPage() {
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
             <button onClick={() => {
+              if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
               const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
-              setActiveRoutine(null)
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
@@ -1705,9 +1763,9 @@ export default function LogPage() {
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
             <button onClick={() => {
+              if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
               const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
-              setActiveRoutine(null)
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
@@ -1854,9 +1912,9 @@ export default function LogPage() {
         <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
           <div className="flex items-center justify-between">
             <button onClick={() => {
+              if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
               const hasSets = sets.some(s => s.done)
               if (hasSets && !confirm('Discard this exercise?')) return
-              setActiveRoutine(null)
               localStorage.removeItem(DRAFT_KEY)
               setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
               setView({ type: 'list' })
