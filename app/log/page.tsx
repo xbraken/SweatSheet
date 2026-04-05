@@ -21,6 +21,8 @@ function SwipeableCard({ onDelete, className, children }: { onDelete: () => void
   const startX = useRef(0)
   const curX = useRef(0)   // current committed offset (0 or -ACTION_W when snapped open)
   const isOpen = useRef(false)
+  const onDeleteRef = useRef(onDelete)
+  onDeleteRef.current = onDelete
 
   // Direct DOM style — no React re-renders during drag
   const setX = (x: number, animated: boolean) => {
@@ -40,6 +42,8 @@ function SwipeableCard({ onDelete, className, children }: { onDelete: () => void
     let locked: 'none' | 'h' | 'v' = 'none'
 
     const onStart = (e: TouchEvent) => {
+      // Clear any lingering animation so inline transform takes effect
+      el.style.animation = 'none'
       startX.current = e.touches[0].clientX
       startY = e.touches[0].clientY
       curX.current = isOpen.current ? -ACTION_W : 0
@@ -75,7 +79,7 @@ function SwipeableCard({ onDelete, className, children }: { onDelete: () => void
 
       if (abs >= ACTION_W + 44) {
         setX(-500, true)
-        setTimeout(onDelete, 260)
+        setTimeout(() => onDeleteRef.current(), 260)
       } else if (abs >= ACTION_W * 0.38) {
         isOpen.current = true
         setX(-ACTION_W, true)
@@ -93,20 +97,26 @@ function SwipeableCard({ onDelete, className, children }: { onDelete: () => void
       el.removeEventListener('touchmove', onMove)
       el.removeEventListener('touchend', onEnd)
     }
-  }, [onDelete])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Split className: animation classes go on wrapper (so they don't override card transform),
+  // visual classes (bg, rounded, padding) go on the card div that slides
+  const animClasses = (className ?? '').split(' ').filter(c => c.startsWith('animate-'))
+  const cardClasses = (className ?? '').split(' ').filter(c => !c.startsWith('animate-'))
 
   return (
-    <div className="relative rounded-2xl overflow-hidden">
+    <div className={`relative rounded-2xl overflow-hidden ${animClasses.join(' ')}`}>
       <div ref={actionRef}
         className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-500 rounded-2xl"
         style={{ width: ACTION_W, opacity: 0 }}
       >
-        <button onClick={() => { setX(-500, true); setTimeout(onDelete, 260) }}
+        <button onClick={() => { setX(-500, true); setTimeout(() => onDeleteRef.current(), 260) }}
           className="w-full h-full flex items-center justify-center">
           <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
         </button>
       </div>
-      <div ref={cardRef} className={className} style={{ willChange: 'transform' }}>
+      <div ref={cardRef} className={cardClasses.join(' ')} style={{ willChange: 'transform', touchAction: 'pan-y' }}>
         {children}
       </div>
     </div>
@@ -835,11 +845,12 @@ export default function LogPage() {
 
   // Toggle set done/undone + auto-queue next
   const toggleSet = (setId: number) => {
+    const wasDone = sets.find(s => s.id === setId)?.done
+    if (!wasDone && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40)
     setSets(prev => {
       const updated = prev.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
       if (justDone) {
-        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40)
         if (restDuration > 0) { setRestingId(setId); setRestRemaining(restDuration) }
         const loggedSet = updated.find(s => s.id === setId)!
         if (!updated.some(s => !s.done)) {
