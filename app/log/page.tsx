@@ -13,94 +13,82 @@ type Routine = { id: number; name: string; exercises: string[] }
 type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number }
 
 // ── Swipeable card (swipe left to delete on mobile, X on desktop) ─────────────
-const ACTION_W = 72 // width of revealed delete button
-const THRESHOLD = 56 // how far past ACTION_W to trigger delete
+const ACTION_W = 72
 
 function SwipeableCard({ onDelete, className, children }: { onDelete: () => void; className?: string; children: React.ReactNode }) {
-  const [offset, setOffset] = useState(0)   // negative = swiped left
-  const [settling, setSettling] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const actionRef = useRef<HTMLDivElement>(null)
   const startX = useRef(0)
-  const startOffset = useRef(0)
-  const active = useRef(false)
+  const curX = useRef(0)   // current committed offset (0 or -ACTION_W when snapped open)
+  const isOpen = useRef(false)
 
-  const snapTo = (target: number, then?: () => void) => {
-    setSettling(true)
-    setOffset(target)
-    const id = setTimeout(() => { setSettling(false); then?.() }, 260)
-    return () => clearTimeout(id)
+  // Direct DOM style — no React re-renders during drag
+  const setX = (x: number, animated: boolean) => {
+    const el = cardRef.current
+    const ac = actionRef.current
+    if (!el || !ac) return
+    el.style.transition = animated ? 'transform 0.28s cubic-bezier(0.25,1,0.5,1)' : 'none'
+    el.style.transform = `translateX(${x}px)`
+    ac.style.opacity = String(Math.min(1, Math.abs(x) / ACTION_W))
   }
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    active.current = true
-    startX.current = e.touches[0].clientX
-    startOffset.current = offset
-    setSettling(false)
-  }
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!active.current) return
-    const dx = e.touches[0].clientX - startX.current + startOffset.current
-    if (dx > 0) { setOffset(0); return }
-    // Rubber-band past the action width
-    const raw = Math.abs(dx)
-    if (raw <= ACTION_W) {
-      setOffset(-raw)
-    } else {
-      // Dampen movement beyond the action strip
-      const extra = raw - ACTION_W
-      setOffset(-(ACTION_W + extra * 0.25))
+    const onStart = (e: TouchEvent) => {
+      startX.current = e.touches[0].clientX
+      curX.current = isOpen.current ? -ACTION_W : 0
+      el.style.transition = 'none'
     }
-  }
 
-  const handleTouchEnd = () => {
-    active.current = false
-    const abs = Math.abs(offset)
-    if (abs >= ACTION_W + THRESHOLD) {
-      // Fully swiped — fly off then delete
-      setSettling(true)
-      setOffset(-400)
-      setTimeout(() => { setSettling(false); setOffset(0); onDelete() }, 240)
-    } else if (abs >= ACTION_W * 0.4) {
-      // Snapped open — show the action button
-      snapTo(-ACTION_W)
-    } else {
-      snapTo(0)
+    const onMove = (e: TouchEvent) => {
+      const dx = e.touches[0].clientX - startX.current + curX.current
+      if (dx >= 4) { setX(0, false); return }
+      const abs = Math.abs(Math.min(0, dx))
+      const x = abs <= ACTION_W ? -abs : -(ACTION_W + (abs - ACTION_W) * 0.2)
+      setX(x, false)
     }
-  }
 
-  const revealRatio = Math.min(1, Math.abs(offset) / ACTION_W)
+    const onEnd = () => {
+      const matrix = new DOMMatrixReadOnly(cardRef.current?.style.transform || '')
+      const x = matrix.m41
+      const abs = Math.abs(x)
+
+      if (abs >= ACTION_W + 44) {
+        setX(-500, true)
+        setTimeout(onDelete, 260)
+      } else if (abs >= ACTION_W * 0.38) {
+        isOpen.current = true
+        setX(-ACTION_W, true)
+      } else {
+        isOpen.current = false
+        setX(0, true)
+      }
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: true })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+    }
+  }, [onDelete])
 
   return (
-    <div className="relative rounded-2xl overflow-hidden" style={{ touchAction: 'pan-y' }}>
-      {/* Delete action revealed behind */}
-      <div
-        className="absolute inset-y-0 right-0 flex items-center justify-center rounded-2xl"
-        style={{
-          width: ACTION_W,
-          backgroundColor: `rgb(${Math.round(239 + (220 - 239) * revealRatio)},${Math.round(68 + (38 - 68) * revealRatio)},${Math.round(68 + (38 - 68) * revealRatio)})`,
-          opacity: revealRatio,
-        }}
+    <div className="relative rounded-2xl overflow-hidden">
+      <div ref={actionRef}
+        className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-500 rounded-2xl"
+        style={{ width: ACTION_W, opacity: 0 }}
       >
-        <button
-          onTouchEnd={e => { e.stopPropagation(); snapTo(-400, onDelete) }}
-          onClick={onDelete}
-          className="w-full h-full flex items-center justify-center"
-        >
+        <button onClick={() => { setX(-500, true); setTimeout(onDelete, 260) }}
+          className="w-full h-full flex items-center justify-center">
           <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
         </button>
       </div>
-      {/* Card */}
-      <div
-        className={className}
-        style={{
-          transform: `translateX(${offset}px)`,
-          transition: settling ? 'transform 0.25s cubic-bezier(0.25,1,0.5,1)' : 'none',
-          willChange: 'transform',
-        }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
+      <div ref={cardRef} className={className} style={{ willChange: 'transform' }}>
         {children}
       </div>
     </div>
