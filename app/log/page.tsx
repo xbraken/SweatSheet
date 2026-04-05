@@ -36,24 +36,42 @@ function SwipeableCard({ onDelete, className, children }: { onDelete: () => void
     const el = cardRef.current
     if (!el) return
 
+    let startY = 0
+    let locked: 'none' | 'h' | 'v' = 'none'
+
     const onStart = (e: TouchEvent) => {
       startX.current = e.touches[0].clientX
+      startY = e.touches[0].clientY
       curX.current = isOpen.current ? -ACTION_W : 0
+      locked = 'none'
       el.style.transition = 'none'
     }
 
     const onMove = (e: TouchEvent) => {
-      const dx = e.touches[0].clientX - startX.current + curX.current
-      if (dx >= 4) { setX(0, false); return }
-      const abs = Math.abs(Math.min(0, dx))
+      const dx = e.touches[0].clientX - startX.current
+      const dy = e.touches[0].clientY - startY
+
+      // Determine gesture direction on first meaningful movement
+      if (locked === 'none') {
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
+        locked = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
+      }
+
+      if (locked === 'v') return  // let the browser scroll
+
+      // Horizontal — claim the gesture
+      e.preventDefault()
+      const total = dx + curX.current
+      if (total >= 4) { setX(0, false); return }
+      const abs = Math.abs(Math.min(0, total))
       const x = abs <= ACTION_W ? -abs : -(ACTION_W + (abs - ACTION_W) * 0.2)
       setX(x, false)
     }
 
     const onEnd = () => {
+      if (locked !== 'h') return
       const matrix = new DOMMatrixReadOnly(cardRef.current?.style.transform || '')
-      const x = matrix.m41
-      const abs = Math.abs(x)
+      const abs = Math.abs(matrix.m41)
 
       if (abs >= ACTION_W + 44) {
         setX(-500, true)
@@ -68,7 +86,7 @@ function SwipeableCard({ onDelete, className, children }: { onDelete: () => void
     }
 
     el.addEventListener('touchstart', onStart, { passive: true })
-    el.addEventListener('touchmove', onMove, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })  // needs preventDefault
     el.addEventListener('touchend', onEnd, { passive: true })
     return () => {
       el.removeEventListener('touchstart', onStart)
