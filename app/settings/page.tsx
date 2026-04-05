@@ -12,6 +12,8 @@ export default function SettingsPage() {
   const [stravaSyncing, setStravaSyncing] = useState(false)
   const [stravaSyncMode, setStravaSyncMode] = useState<'latest' | 'recent'>('latest')
   const [stravaSyncResult, setStravaSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null)
   const [webhookRegistering, setWebhookRegistering] = useState(false)
   const stravaStatus = searchParams.get('strava')
@@ -382,16 +384,57 @@ export default function SettingsPage() {
           Log out
         </button>
         <button
-          onClick={async () => {
-            if (!confirm('This will permanently delete all your workout data. Are you sure?')) return
-            await fetch('/api/reset', { method: 'POST' })
-            router.push('/')
-          }}
+          onClick={() => setShowDeleteConfirm(true)}
           className="w-full bg-red-950/40 border border-red-900/40 py-4 rounded-2xl flex items-center justify-center gap-2 font-headline font-bold text-red-400 hover:bg-red-950/60 transition-colors"
         >
           <span className="material-symbols-outlined text-lg">delete_forever</span>
           Delete all my data
         </button>
+
+        {/* Delete confirmation modal */}
+        {showDeleteConfirm && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }} />
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-6 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-red-400">warning</span>
+                </div>
+                <div>
+                  <p className="font-headline font-bold text-[#e5e2e1]">Delete all data?</p>
+                  <p className="text-xs text-[#a48b83]">This cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-sm text-[#a48b83] mb-3">Type <span className="font-bold text-red-400">DELETE</span> to confirm.</p>
+              <input
+                type="text"
+                value={deleteInput}
+                onChange={e => setDeleteInput(e.target.value)}
+                placeholder="Type DELETE"
+                autoFocus
+                className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-[#e5e2e1] font-headline font-bold placeholder-[#56423c] mb-4 outline-none focus:ring-1 focus:ring-red-500/40"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}
+                  className="flex-1 py-3.5 bg-[#201f1f] text-[#a48b83] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={deleteInput !== 'DELETE'}
+                  onClick={async () => {
+                    await fetch('/api/reset', { method: 'POST' })
+                    router.push('/')
+                  }}
+                  className="flex-1 py-3.5 bg-red-500 text-white rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-30"
+                >
+                  Delete everything
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
       <BottomNav />
