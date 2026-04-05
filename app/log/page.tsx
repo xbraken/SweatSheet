@@ -852,7 +852,7 @@ export default function LogPage() {
         {showRoutinePicker && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowRoutinePicker(false)} />
-            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] max-h-[80vh] overflow-y-auto animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[80vh] overflow-y-auto animate-slide-up">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Your routines</p>
                 <button onClick={() => setShowRoutinePicker(false)}>
@@ -915,7 +915,7 @@ export default function LogPage() {
         {showRoutineEditor && editingRoutine && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setShowRoutineEditor(false)} />
-            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] max-h-[85vh] overflow-y-auto animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[85vh] overflow-y-auto animate-slide-up">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
                   {editingRoutine.id ? 'Edit routine' : 'New routine'}
@@ -1007,6 +1007,7 @@ export default function LogPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(body),
                     })
+                    if (!res.ok) { alert(`Failed to save routine: ${res.status}`); return }
                     const data = await res.json()
                     if (editingRoutine.id) {
                       setRoutines(prev => prev.map(t => t.id === editingRoutine.id ? { ...t, name: editingRoutine.name, exercises: editingRoutine.exercises } : t))

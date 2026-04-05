@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 8
 
 let _initPromise: Promise<void> | null = null
 
