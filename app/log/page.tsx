@@ -308,7 +308,7 @@ function CardioPicker({ onSelect, onClose }: {
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
       <div
         ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
+        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
       >
         <div ref={handleRef} className="w-full flex justify-center py-5 mb-2 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
           <div className="w-10 h-1 bg-[#353534] rounded-full" />
@@ -388,7 +388,7 @@ function WorkoutTypePicker({ onSelect, onRoutine, onClose }: {
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
       <div
         ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] shadow-2xl animate-slide-up"
+        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-2xl animate-slide-up"
       >
         <div ref={handleRef} className="w-full flex justify-center py-5 mb-2 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
           <div className="w-10 h-1 bg-[#353534] rounded-full" />
@@ -433,7 +433,7 @@ function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNex
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] max-h-[92vh] overflow-y-auto animate-slide-up">
+      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[92vh] overflow-y-auto animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <button onClick={onPrev} className="w-8 h-8 flex items-center justify-center">
             <span className="material-symbols-outlined text-[#a48b83]">chevron_left</span>
@@ -1159,7 +1159,7 @@ export default function LogPage() {
         {editLift && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setEditLift(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] animate-slide-up">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editLift.exercise}</h3>
                 <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
@@ -1214,7 +1214,7 @@ export default function LogPage() {
         {editCardio && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setEditCardio(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] animate-slide-up">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editCardio.activity}</h3>
                 <button onClick={() => setEditCardio(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>

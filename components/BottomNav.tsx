@@ -15,7 +15,7 @@ export default function BottomNav() {
   return (
     <>
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-50 bg-[#131313]/60 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
+      <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 bg-[#131313]/60 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
         <div className="flex justify-around items-center px-2 pb-8 pt-4">
           {tabs.map(tab => {
             const active = path === tab.href || (tab.href !== '/' && path.startsWith(tab.href))
@@ -39,7 +39,7 @@ export default function BottomNav() {
       </nav>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-screen w-56 bg-[#131313] border-r border-[#201f1f] flex-col pt-8 pb-6 px-4 z-50">
+      <aside className="hidden md:flex fixed left-0 top-0 h-screen w-56 bg-[#131313] border-r border-[#201f1f] flex-col pt-8 pb-6 px-4 z-30">
         <div className="mb-10 px-3">
           <h1 className="font-headline text-xl font-black text-[#ff9066] tracking-tight">SweatSheet</h1>
         </div>
