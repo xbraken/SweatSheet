@@ -4,40 +4,40 @@ import { getSession } from '@/lib/auth'
 
 await initDb()
 
-/** GET — list all templates for current user */
+/** GET — list all routines for current user */
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const [tplRes, exRes] = await Promise.all([
-    db.execute({ sql: 'SELECT id, name FROM templates WHERE user_id = ? ORDER BY created_at DESC', args: [session.userId] }),
+  const [rtnRes, exRes] = await Promise.all([
+    db.execute({ sql: 'SELECT id, name FROM routines WHERE user_id = ? ORDER BY created_at DESC', args: [session.userId] }),
     db.execute({
-      sql: `SELECT te.template_id, te.exercise, te.position
-            FROM template_exercises te
-            JOIN templates t ON te.template_id = t.id
-            WHERE t.user_id = ?
-            ORDER BY te.position`,
+      sql: `SELECT re.routine_id, re.exercise, re.position
+            FROM routine_exercises re
+            JOIN routines r ON re.routine_id = r.id
+            WHERE r.user_id = ?
+            ORDER BY re.position`,
       args: [session.userId],
     }),
   ])
 
-  const exercisesByTemplate = new Map<number, string[]>()
+  const exercisesByRoutine = new Map<number, string[]>()
   for (const r of exRes.rows) {
-    const tid = r.template_id as number
-    if (!exercisesByTemplate.has(tid)) exercisesByTemplate.set(tid, [])
-    exercisesByTemplate.get(tid)!.push(r.exercise as string)
+    const rid = r.routine_id as number
+    if (!exercisesByRoutine.has(rid)) exercisesByRoutine.set(rid, [])
+    exercisesByRoutine.get(rid)!.push(r.exercise as string)
   }
 
-  const templates = tplRes.rows.map(r => ({
+  const routines = rtnRes.rows.map(r => ({
     id: r.id as number,
     name: r.name as string,
-    exercises: exercisesByTemplate.get(r.id as number) ?? [],
+    exercises: exercisesByRoutine.get(r.id as number) ?? [],
   }))
 
-  return NextResponse.json({ templates })
+  return NextResponse.json({ routines })
 }
 
-/** POST — create a new template */
+/** POST — create a new routine */
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -48,22 +48,22 @@ export async function POST(req: NextRequest) {
   }
 
   const res = await db.execute({
-    sql: 'INSERT INTO templates (user_id, name) VALUES (?, ?) RETURNING id',
+    sql: 'INSERT INTO routines (user_id, name) VALUES (?, ?) RETURNING id',
     args: [session.userId, name.trim()],
   })
-  const templateId = res.rows[0].id as number
+  const routineId = res.rows[0].id as number
 
   await Promise.all(exercises.map((ex: string, i: number) =>
     db.execute({
-      sql: 'INSERT INTO template_exercises (template_id, exercise, position) VALUES (?, ?, ?)',
-      args: [templateId, ex, i],
+      sql: 'INSERT INTO routine_exercises (routine_id, exercise, position) VALUES (?, ?, ?)',
+      args: [routineId, ex, i],
     })
   ))
 
-  return NextResponse.json({ ok: true, id: templateId })
+  return NextResponse.json({ ok: true, id: routineId })
 }
 
-/** PUT — update a template (name + exercises) */
+/** PUT — update a routine (name + exercises) */
 export async function PUT(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -74,16 +74,16 @@ export async function PUT(req: NextRequest) {
   }
 
   const check = await db.execute({
-    sql: 'SELECT id FROM templates WHERE id = ? AND user_id = ?',
+    sql: 'SELECT id FROM routines WHERE id = ? AND user_id = ?',
     args: [id, session.userId],
   })
   if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await db.execute({ sql: 'UPDATE templates SET name = ? WHERE id = ?', args: [name.trim(), id] })
-  await db.execute({ sql: 'DELETE FROM template_exercises WHERE template_id = ?', args: [id] })
+  await db.execute({ sql: 'UPDATE routines SET name = ? WHERE id = ?', args: [name.trim(), id] })
+  await db.execute({ sql: 'DELETE FROM routine_exercises WHERE routine_id = ?', args: [id] })
   await Promise.all(exercises.map((ex: string, i: number) =>
     db.execute({
-      sql: 'INSERT INTO template_exercises (template_id, exercise, position) VALUES (?, ?, ?)',
+      sql: 'INSERT INTO routine_exercises (routine_id, exercise, position) VALUES (?, ?, ?)',
       args: [id, ex, i],
     })
   ))
@@ -91,7 +91,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
-/** DELETE — remove a template */
+/** DELETE — remove a routine */
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -100,11 +100,11 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   const check = await db.execute({
-    sql: 'SELECT id FROM templates WHERE id = ? AND user_id = ?',
+    sql: 'SELECT id FROM routines WHERE id = ? AND user_id = ?',
     args: [id, session.userId],
   })
   if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await db.execute({ sql: 'DELETE FROM templates WHERE id = ?', args: [id] })
+  await db.execute({ sql: 'DELETE FROM routines WHERE id = ?', args: [id] })
   return NextResponse.json({ ok: true })
 }
