@@ -1672,8 +1672,9 @@ export default function LogPage() {
     const pr = prs.get(view.exercise) ?? null
     const currentVol = sets.filter(s => s.done).reduce((sum, s) => sum + s.weight * s.reps, 0)
     const isVolPR = pr != null && currentVol > 0 && currentVol > pr.pr_volume
-    const isWeightPR = pr != null && activeSet != null &&
-      (activeSet.weight > pr.pr_weight || (activeSet.weight === pr.pr_weight && activeSet.reps > pr.pr_reps))
+    const doneSets = sets.filter(s => s.done)
+    const isWeightPR = pr != null && doneSets.some(s =>
+      s.weight > pr.pr_weight || (s.weight === pr.pr_weight && s.reps > pr.pr_reps))
     const fmtVol = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`
 
     return (
@@ -1856,7 +1857,7 @@ export default function LogPage() {
     const pr = prs.get(view.exercise) ?? null
     const currentReps = sets.filter(s => s.done).reduce((sum, s) => sum + s.reps, 0)
     const isRepTotalPR = pr != null && currentReps > 0 && currentReps > pr.pr_reps_total
-    const isSetPR = pr != null && activeSet != null && activeSet.reps > pr.pr_reps
+    const isSetPR = pr != null && sets.filter(s => s.done).some(s => s.reps > pr.pr_reps)
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -2030,7 +2031,7 @@ export default function LogPage() {
     const pr = prs.get(view.exercise) ?? null
     const currentDur = sets.filter(s => s.done).reduce((sum, s) => sum + (s.duration_secs ?? 0), 0)
     const isDurTotalPR = pr?.pr_duration_total != null && currentDur > 0 && currentDur > pr.pr_duration_total
-    const isSetDurPR = pr?.pr_duration != null && activeSet != null && activeSet.duration_secs > pr.pr_duration
+    const isSetDurPR = pr?.pr_duration != null && sets.filter(s => s.done).some(s => (s.duration_secs ?? 0) > pr.pr_duration!)
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
