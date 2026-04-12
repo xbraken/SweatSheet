@@ -7,6 +7,7 @@ import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from 
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
+type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null }
 type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
@@ -658,8 +659,9 @@ export default function LogPage() {
     }
   }, [])
 
-  // Hints + stars
+  // Hints + stars + PRs
   const [hints, setHints] = useState<ExerciseHint[]>([])
+  const [prs, setPrs] = useState<Map<string, ExercisePR>>(new Map())
   const [starred, setStarred] = useState<Set<string>>(new Set())
 
   // Saving
@@ -763,6 +765,7 @@ export default function LogPage() {
       setLoggedCardio(data.cardio ?? [])
       if (data.dates) setWorkoutDates(new Set(data.dates as string[]))
       if (data.history) setHints(data.history)
+      if (data.prs) setPrs(new Map((data.prs as ExercisePR[]).map(p => [p.exercise, p])))
       if (data.starred) setStarred(new Set(data.starred))
       setRoutines(tplData.routines ?? [])
       setLoadingToday(false)
@@ -931,7 +934,18 @@ export default function LogPage() {
         body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets, exerciseType: view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights' }),
       })
       const data = await res.json()
-      if (data.isPr) setPr({ exercise: data.exercise, weight: data.weight })
+      if (data.isPr) {
+        setPr({ exercise: data.exercise, weight: data.weight })
+        // Update local PR map so comparison stays live for the rest of the session
+        const maxWeight = Math.max(...doneSets.map(s => s.weight))
+        const maxReps = Math.max(...doneSets.filter(s => s.weight === maxWeight).map(s => s.reps))
+        const maxDuration = Math.max(...doneSets.map(s => s.duration_secs ?? 0))
+        setPrs(prev => {
+          const m = new Map(prev)
+          m.set(view.exercise, { exercise: view.exercise, pr_weight: maxWeight, pr_reps: maxReps, pr_duration: maxDuration || null })
+          return m
+        })
+      }
       localStorage.removeItem(DRAFT_KEY)
       setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
       refreshCurrent()
@@ -1410,6 +1424,49 @@ export default function LogPage() {
           </div>
         )}
 
+        {/* Volume tracker — shown when there are lifts logged for today */}
+        {loggedLifts.length > 0 && !browsedDate && (() => {
+          const byGroup = new Map<string, { sets: number; tonnage: number }>()
+          for (const lift of loggedLifts) {
+            const ex = EXERCISES.find(e => e.name === lift.exercise)
+            if (!ex) continue
+            const existing = byGroup.get(ex.category) ?? { sets: 0, tonnage: 0 }
+            const tonnage = lift.sets.reduce((sum, s) => sum + s.weight * s.reps, 0)
+            byGroup.set(ex.category, { sets: existing.sets + lift.set_count, tonnage: existing.tonnage + tonnage })
+          }
+          if (byGroup.size === 0) return null
+          const TARGET_SETS = 5
+          const totalTonnage = [...byGroup.values()].reduce((s, v) => s + v.tonnage, 0)
+          return (
+            <div className="mb-4 bg-[#201f1f] rounded-2xl px-4 py-3">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Today&apos;s volume</p>
+              <div className="space-y-2">
+                {[...byGroup.entries()].map(([cat, { sets, tonnage }]) => {
+                  const progress = Math.min(1, sets / TARGET_SETS)
+                  const color = sets >= TARGET_SETS ? '#4bdece' : sets >= 3 ? '#f5a623' : '#ff9066'
+                  return (
+                    <div key={cat}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-[#dcc1b8]">{cat}</span>
+                        <span className="text-[11px] text-[#a48b83]">
+                          {sets} set{sets !== 1 ? 's' : ''} · {tonnage >= 1000 ? `${(tonnage / 1000).toFixed(1)}t` : `${tonnage} kg`}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-[#353534] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${progress * 100}%`, backgroundColor: color }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-[10px] text-[#56423c] mt-2.5">
+                {totalTonnage >= 1000 ? `${(totalTonnage / 1000).toFixed(2)}t total today` : `${totalTonnage} kg total today`}
+              </p>
+            </div>
+          )
+        })()}
+
         {/* Add button — only shown for today */}
         {!browsedDate && (
           <div className="mt-auto">
@@ -1600,6 +1657,9 @@ export default function LogPage() {
   if (view.type === 'lift') {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
+    const pr = prs.get(view.exercise) ?? null
+    const isNewPR = pr != null && activeSet != null &&
+      (activeSet.weight > pr.pr_weight || (activeSet.weight === pr.pr_weight && activeSet.reps > pr.pr_reps))
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -1617,7 +1677,15 @@ export default function LogPage() {
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
-            <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+            <div className="flex flex-col items-center gap-0.5">
+              <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+              {pr && (
+                <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                  <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
+                  {isNewPR ? 'New PR!' : `Best ${pr.pr_weight} kg × ${pr.pr_reps}`}
+                </div>
+              )}
+            </div>
             <div className="w-16" />
           </div>
           {routineProgressBar}
@@ -1757,6 +1825,8 @@ export default function LogPage() {
   if (view.type === 'bodyweight') {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
+    const pr = prs.get(view.exercise) ?? null
+    const isNewPR = pr != null && activeSet != null && activeSet.reps > pr.pr_reps
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -1773,7 +1843,15 @@ export default function LogPage() {
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
-            <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+            <div className="flex flex-col items-center gap-0.5">
+              <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+              {pr && (
+                <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                  <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
+                  {isNewPR ? 'New PR!' : `Best ${pr.pr_reps} reps`}
+                </div>
+              )}
+            </div>
             <div className="w-16" />
           </div>
           {routineProgressBar}
@@ -1906,6 +1984,8 @@ export default function LogPage() {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const fmtDur = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+    const pr = prs.get(view.exercise) ?? null
+    const isNewPR = pr?.pr_duration != null && activeSet != null && activeSet.duration_secs > pr.pr_duration
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -1922,7 +2002,15 @@ export default function LogPage() {
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
-            <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+            <div className="flex flex-col items-center gap-0.5">
+              <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
+              {pr?.pr_duration != null && (
+                <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                  <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
+                  {isNewPR ? 'New PR!' : `Best ${fmtDur(pr.pr_duration)}`}
+                </div>
+              )}
+            </div>
             <div className="w-16" />
           </div>
           {routineProgressBar}

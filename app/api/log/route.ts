@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ exercises: [...byBlock.values()] })
   }
 
-  const [liftRes, setsRes, cardioRes, calendarRes, hintsRes, starredRes] = await Promise.all([
+  const [liftRes, setsRes, cardioRes, calendarRes, hintsRes, starredRes, prsRes] = await Promise.all([
     db.execute({
       sql: `SELECT b.id as block_id, st.exercise,
               COUNT(st.id) as set_count,
@@ -92,6 +92,17 @@ export async function GET(req: NextRequest) {
     includeAll
       ? db.execute({ sql: 'SELECT exercise FROM starred_exercises WHERE user_id = ?', args: [session.userId] })
       : Promise.resolve({ rows: [] }),
+    includeAll
+      ? db.execute({
+          sql: `SELECT exercise, MAX(weight) as pr_weight, MAX(reps) as pr_reps, MAX(duration_secs) as pr_duration
+                FROM sets st
+                JOIN blocks b ON st.block_id = b.id
+                JOIN sessions s ON b.session_id = s.id
+                WHERE s.user_id = ?
+                GROUP BY exercise`,
+          args: [session.userId],
+        })
+      : Promise.resolve({ rows: [] }),
   ])
 
   const setsByBlock: Record<number, {id: number; weight: number; reps: number; duration_secs: number | null}[]> = {}
@@ -108,6 +119,12 @@ export async function GET(req: NextRequest) {
       dates: calendarRes.rows.map(r => r.date as string),
       history: hintsRes.rows,
       starred: starredRes.rows.map(r => r.exercise as string),
+      prs: prsRes.rows.map(r => ({
+        exercise: r.exercise as string,
+        pr_weight: Number(r.pr_weight),
+        pr_reps: Number(r.pr_reps),
+        pr_duration: r.pr_duration != null ? Number(r.pr_duration) : null,
+      })),
     }),
   })
 }
