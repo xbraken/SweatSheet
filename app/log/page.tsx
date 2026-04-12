@@ -1436,49 +1436,6 @@ export default function LogPage() {
           </div>
         )}
 
-        {/* Volume tracker — shown when there are lifts logged for today */}
-        {loggedLifts.length > 0 && !browsedDate && (() => {
-          const byGroup = new Map<string, { sets: number; tonnage: number }>()
-          for (const lift of loggedLifts) {
-            const ex = EXERCISES.find(e => e.name === lift.exercise)
-            if (!ex) continue
-            const existing = byGroup.get(ex.category) ?? { sets: 0, tonnage: 0 }
-            const tonnage = lift.sets.reduce((sum, s) => sum + s.weight * s.reps, 0)
-            byGroup.set(ex.category, { sets: existing.sets + lift.set_count, tonnage: existing.tonnage + tonnage })
-          }
-          if (byGroup.size === 0) return null
-          const TARGET_SETS = 5
-          const totalTonnage = [...byGroup.values()].reduce((s, v) => s + v.tonnage, 0)
-          return (
-            <div className="mb-4 bg-[#201f1f] rounded-2xl px-4 py-3">
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Today&apos;s volume</p>
-              <div className="space-y-2">
-                {[...byGroup.entries()].map(([cat, { sets, tonnage }]) => {
-                  const progress = Math.min(1, sets / TARGET_SETS)
-                  const color = sets >= TARGET_SETS ? '#4bdece' : sets >= 3 ? '#f5a623' : '#ff9066'
-                  return (
-                    <div key={cat}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-[#dcc1b8]">{cat}</span>
-                        <span className="text-[11px] text-[#a48b83]">
-                          {sets} set{sets !== 1 ? 's' : ''} · {tonnage >= 1000 ? `${(tonnage / 1000).toFixed(1)}t` : `${tonnage} kg`}
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-[#353534] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${progress * 100}%`, backgroundColor: color }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              <p className="text-[10px] text-[#56423c] mt-2.5">
-                {totalTonnage >= 1000 ? `${(totalTonnage / 1000).toFixed(2)}t total today` : `${totalTonnage} kg total today`}
-              </p>
-            </div>
-          )
-        })()}
-
         {/* Add button — only shown for today */}
         {!browsedDate && (
           <div className="mt-auto">
