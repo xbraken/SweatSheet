@@ -7,7 +7,7 @@ import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from 
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
-type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null }
+type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null; pr_volume: number; pr_reps_total: number; pr_duration_total: number | null }
 type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
@@ -940,9 +940,21 @@ export default function LogPage() {
         const maxWeight = Math.max(...doneSets.map(s => s.weight))
         const maxReps = Math.max(...doneSets.filter(s => s.weight === maxWeight).map(s => s.reps))
         const maxDuration = Math.max(...doneSets.map(s => s.duration_secs ?? 0))
+        const newVol = doneSets.reduce((sum: number, s: SetRow) => sum + s.weight * s.reps, 0)
+        const newRepsTotal = doneSets.reduce((sum: number, s: SetRow) => sum + s.reps, 0)
+        const newDurTotal = doneSets.reduce((sum: number, s: SetRow) => sum + (s.duration_secs ?? 0), 0)
         setPrs(prev => {
           const m = new Map(prev)
-          m.set(view.exercise, { exercise: view.exercise, pr_weight: maxWeight, pr_reps: maxReps, pr_duration: maxDuration || null })
+          const old = m.get(view.exercise)
+          m.set(view.exercise, {
+            exercise: view.exercise,
+            pr_weight: maxWeight,
+            pr_reps: maxReps,
+            pr_duration: maxDuration || null,
+            pr_volume: Math.max(newVol, old?.pr_volume ?? 0),
+            pr_reps_total: Math.max(newRepsTotal, old?.pr_reps_total ?? 0),
+            pr_duration_total: Math.max(newDurTotal, old?.pr_duration_total ?? 0) || null,
+          })
           return m
         })
       }
@@ -1658,8 +1670,9 @@ export default function LogPage() {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const pr = prs.get(view.exercise) ?? null
-    const isNewPR = pr != null && activeSet != null &&
-      (activeSet.weight > pr.pr_weight || (activeSet.weight === pr.pr_weight && activeSet.reps > pr.pr_reps))
+    const currentVol = sets.filter(s => s.done).reduce((sum, s) => sum + s.weight * s.reps, 0)
+    const isNewPR = pr != null && currentVol > 0 && currentVol > pr.pr_volume
+    const fmtVol = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -1679,10 +1692,14 @@ export default function LogPage() {
             </button>
             <div className="flex flex-col items-center gap-0.5">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && (
+              {pr && pr.pr_volume > 0 && (
                 <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
                   <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
-                  {isNewPR ? 'New PR!' : `Best ${pr.pr_weight} kg × ${pr.pr_reps}`}
+                  {isNewPR
+                    ? `Vol PR! ${fmtVol(currentVol)}`
+                    : currentVol > 0
+                      ? `${fmtVol(currentVol)} / ${fmtVol(pr.pr_volume)}`
+                      : `Best ${fmtVol(pr.pr_volume)}`}
                 </div>
               )}
             </div>
@@ -1826,7 +1843,8 @@ export default function LogPage() {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const pr = prs.get(view.exercise) ?? null
-    const isNewPR = pr != null && activeSet != null && activeSet.reps > pr.pr_reps
+    const currentReps = sets.filter(s => s.done).reduce((sum, s) => sum + s.reps, 0)
+    const isNewPR = pr != null && currentReps > 0 && currentReps > pr.pr_reps_total
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -1845,10 +1863,14 @@ export default function LogPage() {
             </button>
             <div className="flex flex-col items-center gap-0.5">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && (
+              {pr && pr.pr_reps_total > 0 && (
                 <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
                   <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
-                  {isNewPR ? 'New PR!' : `Best ${pr.pr_reps} reps`}
+                  {isNewPR
+                    ? `Rep PR! ${currentReps}`
+                    : currentReps > 0
+                      ? `${currentReps} / ${pr.pr_reps_total} reps`
+                      : `Best ${pr.pr_reps_total} reps`}
                 </div>
               )}
             </div>
@@ -1985,7 +2007,8 @@ export default function LogPage() {
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const fmtDur = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     const pr = prs.get(view.exercise) ?? null
-    const isNewPR = pr?.pr_duration != null && activeSet != null && activeSet.duration_secs > pr.pr_duration
+    const currentDur = sets.filter(s => s.done).reduce((sum, s) => sum + (s.duration_secs ?? 0), 0)
+    const isNewPR = pr?.pr_duration_total != null && currentDur > 0 && currentDur > pr.pr_duration_total
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -2004,10 +2027,14 @@ export default function LogPage() {
             </button>
             <div className="flex flex-col items-center gap-0.5">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr?.pr_duration != null && (
+              {pr?.pr_duration_total != null && pr.pr_duration_total > 0 && (
                 <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
                   <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
-                  {isNewPR ? 'New PR!' : `Best ${fmtDur(pr.pr_duration)}`}
+                  {isNewPR
+                    ? `Duration PR! ${fmtDur(currentDur)}`
+                    : currentDur > 0
+                      ? `${fmtDur(currentDur)} / ${fmtDur(pr.pr_duration_total)}`
+                      : `Best ${fmtDur(pr.pr_duration_total)}`}
                 </div>
               )}
             </div>

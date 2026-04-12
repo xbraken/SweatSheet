@@ -94,11 +94,21 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ rows: [] }),
     includeAll
       ? db.execute({
-          sql: `SELECT exercise, MAX(weight) as pr_weight, MAX(reps) as pr_reps, MAX(duration_secs) as pr_duration
-                FROM sets st
-                JOIN blocks b ON st.block_id = b.id
-                JOIN sessions s ON b.session_id = s.id
-                WHERE s.user_id = ?
+          sql: `SELECT exercise, MAX(weight) as pr_weight, MAX(reps) as pr_reps, MAX(duration_secs) as pr_duration, MAX(session_vol) as pr_volume, MAX(session_reps) as pr_reps_total, MAX(session_dur) as pr_duration_total
+                FROM (
+                  SELECT st.exercise, s.id as session_id,
+                    MAX(st.weight) as weight,
+                    MAX(st.reps) as reps,
+                    MAX(st.duration_secs) as duration_secs,
+                    SUM(st.weight * st.reps) as session_vol,
+                    SUM(st.reps) as session_reps,
+                    SUM(st.duration_secs) as session_dur
+                  FROM sets st
+                  JOIN blocks b ON st.block_id = b.id
+                  JOIN sessions s ON b.session_id = s.id
+                  WHERE s.user_id = ?
+                  GROUP BY st.exercise, s.id
+                )
                 GROUP BY exercise`,
           args: [session.userId],
         })
@@ -124,6 +134,9 @@ export async function GET(req: NextRequest) {
         pr_weight: Number(r.pr_weight),
         pr_reps: Number(r.pr_reps),
         pr_duration: r.pr_duration != null ? Number(r.pr_duration) : null,
+        pr_volume: Number(r.pr_volume),
+        pr_reps_total: Number(r.pr_reps_total),
+        pr_duration_total: r.pr_duration_total != null ? Number(r.pr_duration_total) : null,
       })),
     }),
   })
