@@ -1770,6 +1770,12 @@ export default function LogPage() {
                       style={{ accentColor: '#ff9066' }}
                     />
                   </div>
+                  {/* Estimated 1RM */}
+                  {activeSet.weight > 0 && activeSet.reps > 1 && (
+                    <p className="text-center text-[11px] font-bold font-label text-[#56423c] mb-3">
+                      ~{Math.round(activeSet.weight * (1 + activeSet.reps / 30))} kg est. 1RM
+                    </p>
+                  )}
                   <button
                     onClick={() => toggleSet(activeSet.id)}
                     className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
