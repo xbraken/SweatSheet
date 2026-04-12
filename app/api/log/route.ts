@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ rows: [] }),
     includeAll
       ? db.execute({
-          sql: `SELECT exercise, MAX(weight) as pr_weight, MAX(reps) as pr_reps, MAX(duration_secs) as pr_duration, MAX(session_vol) as pr_volume, MAX(session_reps) as pr_reps_total, MAX(session_dur) as pr_duration_total
+          sql: `SELECT exercise, MAX(weight) as pr_weight, MAX(reps) as pr_reps, MAX(duration_secs) as pr_duration, MAX(session_vol) as pr_volume, MAX(session_reps) as pr_reps_total, MAX(session_dur) as pr_duration_total, MAX(set_e1rm) as pr_e1rm
                 FROM (
                   SELECT st.exercise, s.id as session_id,
                     MAX(st.weight) as weight,
@@ -102,7 +102,8 @@ export async function GET(req: NextRequest) {
                     MAX(st.duration_secs) as duration_secs,
                     SUM(st.weight * st.reps) as session_vol,
                     SUM(st.reps) as session_reps,
-                    SUM(st.duration_secs) as session_dur
+                    SUM(st.duration_secs) as session_dur,
+                    MAX(st.weight * (1.0 + st.reps / 30.0)) as set_e1rm
                   FROM sets st
                   JOIN blocks b ON st.block_id = b.id
                   JOIN sessions s ON b.session_id = s.id
@@ -137,6 +138,7 @@ export async function GET(req: NextRequest) {
         pr_volume: Number(r.pr_volume),
         pr_reps_total: Number(r.pr_reps_total),
         pr_duration_total: r.pr_duration_total != null ? Number(r.pr_duration_total) : null,
+        pr_e1rm: r.pr_e1rm != null ? Math.round(Number(r.pr_e1rm)) : null,
       })),
     }),
   })

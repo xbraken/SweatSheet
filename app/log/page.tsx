@@ -7,7 +7,7 @@ import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from 
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
-type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null; pr_volume: number; pr_reps_total: number; pr_duration_total: number | null }
+type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null; pr_volume: number; pr_reps_total: number; pr_duration_total: number | null; pr_e1rm: number | null }
 type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
@@ -954,6 +954,7 @@ export default function LogPage() {
             pr_volume: Math.max(newVol, old?.pr_volume ?? 0),
             pr_reps_total: Math.max(newRepsTotal, old?.pr_reps_total ?? 0),
             pr_duration_total: Math.max(newDurTotal, old?.pr_duration_total ?? 0) || null,
+            pr_e1rm: Math.max(Math.round(maxWeight * (1 + maxReps / 30)), old?.pr_e1rm ?? 0) || null,
           })
           return m
         })
@@ -1652,9 +1653,17 @@ export default function LogPage() {
             </button>
             <div className="flex flex-col items-center gap-1">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && (pr.pr_volume > 0 || pr.pr_weight > 0) && (
+              {pr && (pr.pr_volume > 0 || pr.pr_weight > 0 || pr.pr_e1rm) && (
                 <div className="flex items-center gap-2">
-                  {/* Volume running total vs PR */}
+                  {/* Estimated 1RM from best historical set */}
+                  {pr.pr_e1rm && (
+                    <div className="flex items-center gap-1 text-[10px] font-bold font-label text-[#56423c]">
+                      <span className="material-symbols-outlined text-[11px]">fitbit</span>
+                      {pr.pr_e1rm} kg 1RM
+                    </div>
+                  )}
+                  {pr.pr_e1rm && (pr.pr_volume > 0 || pr.pr_weight > 0) && <div className="w-px h-3 bg-[#353534]" />}
+                  {/* Volume PR */}
                   {pr.pr_volume > 0 && (
                     <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isVolPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
                       <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isVolPR ? 1 : 0}` }}>monitoring</span>
@@ -1662,7 +1671,7 @@ export default function LogPage() {
                     </div>
                   )}
                   {pr.pr_volume > 0 && pr.pr_weight > 0 && <div className="w-px h-3 bg-[#353534]" />}
-                  {/* Weight / rep PR for active set */}
+                  {/* Weight / rep PR */}
                   {pr.pr_weight > 0 && (
                     <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isWeightPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
                       <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isWeightPR ? 1 : 0}` }}>emoji_events</span>
@@ -1770,12 +1779,6 @@ export default function LogPage() {
                       style={{ accentColor: '#ff9066' }}
                     />
                   </div>
-                  {/* Estimated 1RM */}
-                  {activeSet.weight > 0 && activeSet.reps > 1 && (
-                    <p className="text-center text-[11px] font-bold font-label text-[#56423c] mb-3">
-                      ~{Math.round(activeSet.weight * (1 + activeSet.reps / 30))} kg est. 1RM
-                    </p>
-                  )}
                   <button
                     onClick={() => toggleSet(activeSet.id)}
                     className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
