@@ -1671,7 +1671,9 @@ export default function LogPage() {
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const pr = prs.get(view.exercise) ?? null
     const currentVol = sets.filter(s => s.done).reduce((sum, s) => sum + s.weight * s.reps, 0)
-    const isNewPR = pr != null && currentVol > 0 && currentVol > pr.pr_volume
+    const isVolPR = pr != null && currentVol > 0 && currentVol > pr.pr_volume
+    const isWeightPR = pr != null && activeSet != null &&
+      (activeSet.weight > pr.pr_weight || (activeSet.weight === pr.pr_weight && activeSet.reps > pr.pr_reps))
     const fmtVol = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`
 
     return (
@@ -1690,16 +1692,25 @@ export default function LogPage() {
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex flex-col items-center gap-1">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && pr.pr_volume > 0 && (
-                <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                  <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
-                  {isNewPR
-                    ? `Vol PR! ${fmtVol(currentVol)}`
-                    : currentVol > 0
-                      ? `${fmtVol(currentVol)} / ${fmtVol(pr.pr_volume)}`
-                      : `Best ${fmtVol(pr.pr_volume)}`}
+              {pr && (pr.pr_volume > 0 || pr.pr_weight > 0) && (
+                <div className="flex items-center gap-2">
+                  {/* Volume running total vs PR */}
+                  {pr.pr_volume > 0 && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isVolPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isVolPR ? 1 : 0}` }}>monitoring</span>
+                      {isVolPR ? `Vol PR! ${fmtVol(currentVol)}` : currentVol > 0 ? `${fmtVol(currentVol)} / ${fmtVol(pr.pr_volume)}` : fmtVol(pr.pr_volume)}
+                    </div>
+                  )}
+                  {pr.pr_volume > 0 && pr.pr_weight > 0 && <div className="w-px h-3 bg-[#353534]" />}
+                  {/* Weight / rep PR for active set */}
+                  {pr.pr_weight > 0 && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isWeightPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isWeightPR ? 1 : 0}` }}>emoji_events</span>
+                      {isWeightPR ? 'Weight PR!' : `${pr.pr_weight} kg × ${pr.pr_reps}`}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1844,7 +1855,8 @@ export default function LogPage() {
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const pr = prs.get(view.exercise) ?? null
     const currentReps = sets.filter(s => s.done).reduce((sum, s) => sum + s.reps, 0)
-    const isNewPR = pr != null && currentReps > 0 && currentReps > pr.pr_reps_total
+    const isRepTotalPR = pr != null && currentReps > 0 && currentReps > pr.pr_reps_total
+    const isSetPR = pr != null && activeSet != null && activeSet.reps > pr.pr_reps
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -1861,16 +1873,25 @@ export default function LogPage() {
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex flex-col items-center gap-1">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && pr.pr_reps_total > 0 && (
-                <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                  <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
-                  {isNewPR
-                    ? `Rep PR! ${currentReps}`
-                    : currentReps > 0
-                      ? `${currentReps} / ${pr.pr_reps_total} reps`
-                      : `Best ${pr.pr_reps_total} reps`}
+              {pr && (pr.pr_reps_total > 0 || pr.pr_reps > 0) && (
+                <div className="flex items-center gap-2">
+                  {/* Total reps this session vs PR */}
+                  {pr.pr_reps_total > 0 && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isRepTotalPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isRepTotalPR ? 1 : 0}` }}>monitoring</span>
+                      {isRepTotalPR ? `Rep PR! ${currentReps}` : currentReps > 0 ? `${currentReps} / ${pr.pr_reps_total} reps` : `${pr.pr_reps_total} reps`}
+                    </div>
+                  )}
+                  {pr.pr_reps_total > 0 && pr.pr_reps > 0 && <div className="w-px h-3 bg-[#353534]" />}
+                  {/* Best single set reps */}
+                  {pr.pr_reps > 0 && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isSetPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isSetPR ? 1 : 0}` }}>emoji_events</span>
+                      {isSetPR ? 'Set PR!' : `Best ${pr.pr_reps} reps`}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2008,7 +2029,8 @@ export default function LogPage() {
     const fmtDur = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     const pr = prs.get(view.exercise) ?? null
     const currentDur = sets.filter(s => s.done).reduce((sum, s) => sum + (s.duration_secs ?? 0), 0)
-    const isNewPR = pr?.pr_duration_total != null && currentDur > 0 && currentDur > pr.pr_duration_total
+    const isDurTotalPR = pr?.pr_duration_total != null && currentDur > 0 && currentDur > pr.pr_duration_total
+    const isSetDurPR = pr?.pr_duration != null && activeSet != null && activeSet.duration_secs > pr.pr_duration
 
     return (
       <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
@@ -2025,16 +2047,25 @@ export default function LogPage() {
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span className="text-sm font-bold">Back</span>
             </button>
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex flex-col items-center gap-1">
               <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr?.pr_duration_total != null && pr.pr_duration_total > 0 && (
-                <div className={`flex items-center gap-1.5 text-[10px] font-bold font-label transition-colors ${isNewPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                  <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isNewPR ? 1 : 0}` }}>emoji_events</span>
-                  {isNewPR
-                    ? `Duration PR! ${fmtDur(currentDur)}`
-                    : currentDur > 0
-                      ? `${fmtDur(currentDur)} / ${fmtDur(pr.pr_duration_total)}`
-                      : `Best ${fmtDur(pr.pr_duration_total)}`}
+              {pr && (pr.pr_duration_total != null || pr.pr_duration != null) && (
+                <div className="flex items-center gap-2">
+                  {/* Total duration this session vs PR */}
+                  {pr.pr_duration_total != null && pr.pr_duration_total > 0 && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isDurTotalPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isDurTotalPR ? 1 : 0}` }}>monitoring</span>
+                      {isDurTotalPR ? `Total PR! ${fmtDur(currentDur)}` : currentDur > 0 ? `${fmtDur(currentDur)} / ${fmtDur(pr.pr_duration_total)}` : fmtDur(pr.pr_duration_total)}
+                    </div>
+                  )}
+                  {pr.pr_duration_total != null && pr.pr_duration != null && <div className="w-px h-3 bg-[#353534]" />}
+                  {/* Best single set duration */}
+                  {pr.pr_duration != null && pr.pr_duration > 0 && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isSetDurPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isSetDurPR ? 1 : 0}` }}>emoji_events</span>
+                      {isSetDurPR ? 'Set PR!' : `Best ${fmtDur(pr.pr_duration)}`}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
