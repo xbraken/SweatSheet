@@ -1657,8 +1657,7 @@ export default function LogPage() {
                 <div className="flex items-center gap-2">
                   {/* Estimated 1RM from best historical set */}
                   {pr.pr_e1rm && (
-                    <div className="flex items-center gap-1 text-[10px] font-bold font-label text-[#56423c]">
-                      <span className="material-symbols-outlined text-[11px]">fitbit</span>
+                    <div className="text-[10px] font-bold font-label text-[#56423c]">
                       {pr.pr_e1rm} kg 1RM
                     </div>
                   )}
