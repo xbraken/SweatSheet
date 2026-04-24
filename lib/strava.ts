@@ -84,8 +84,9 @@ export async function importActivity(userId: number, activityId: number): Promis
     if (!actRes.ok) return { ok: false, error: `Activity fetch failed: ${actRes.status}` }
     const act = await actRes.json() as Record<string, unknown>
 
-    const activityType = ACTIVITY_MAP[(act.sport_type ?? act.type) as string] ?? null
-    if (!activityType) return { ok: true, skipped: true }
+    const rawType = ((act.sport_type ?? act.type) as string) || null
+    if (!rawType) return { ok: true, skipped: true }
+    const activityType = ACTIVITY_MAP[rawType] ?? rawType
 
     // Fetch streams
     const streamsRes = await fetch(
@@ -151,7 +152,7 @@ export async function importActivity(userId: number, activityId: number): Promis
       }
     }
 
-    const blockType = activityType === 'Cycling' ? 'cycle' : 'run'
+    const blockType = activityType === 'Cycling' ? 'cycle' : (activityType === 'Run' || activityType === 'Walking') ? 'run' : 'cardio'
 
     const sessionRes = await db.execute({
       sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
