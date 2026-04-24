@@ -191,10 +191,12 @@ function PrToast({ exercise, weight, onDone }: { exercise: string; weight: numbe
 
 // ── Exercise Picker Sheet ─────────────────────────────────────────────────────
 function ExercisePicker({
-  hints, starred, onSelect, onToggleStar, onClose, exerciseType, multiSelect, onMultiSelect,
+  hints, starred, prs, isLbs, onSelect, onToggleStar, onClose, exerciseType, multiSelect, onMultiSelect,
 }: {
   hints: ExerciseHint[]
   starred: Set<string>
+  prs?: Map<string, ExercisePR>
+  isLbs?: boolean
   onSelect: (name: string, hint?: ExerciseHint) => void
   onToggleStar: (name: string) => void
   onClose: () => void
@@ -211,6 +213,9 @@ function ExercisePicker({
     for (const h of hints) m.set(h.exercise, h)
     return m
   }, [hints])
+
+  const weightLabel = isLbs ? 'lbs' : 'kg'
+  const toDisplay = (kg: number) => isLbs ? Math.round(kg * 2.20462 * 10) / 10 : kg
 
   const q = search.toLowerCase()
   const filtered = useMemo(() => {
@@ -231,6 +236,7 @@ function ExercisePicker({
 
   const renderRow = (name: string) => {
     const hint = hintMap.get(name)
+    const pr = prs?.get(name)
     const isStarred = starred.has(name)
     const isSelected = multiSelect && selected.includes(name)
     const selIdx = multiSelect ? selected.indexOf(name) : -1
@@ -254,12 +260,19 @@ function ExercisePicker({
             )}
             <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
           </div>
-          {hint && !multiSelect && <span className="text-[10px] text-[#a48b83]">{
+          {!multiSelect && (pr || hint) && <span className="text-[10px] text-[#a48b83]">{
             (() => {
               const ex = EXERCISES.find(e => e.name === name)
-              if (ex?.type === 'timed') return `${Math.floor(hint.last_reps / 60)}:${String(hint.last_reps % 60).padStart(2, '0')}`
-              if (ex?.type === 'bodyweight') return hint.last_weight > 0 ? `${hint.last_weight} kg × ${hint.last_reps}` : `${hint.last_reps} reps`
-              return `${hint.last_weight} kg × ${hint.last_reps}`
+              if (pr && pr.pr_weight > 0) {
+                if (ex?.type === 'timed') { const d = pr.pr_duration ?? 0; return `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')} PR` }
+                if (ex?.type === 'bodyweight') return pr.pr_weight > 0 ? `${toDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps} PR` : `${pr.pr_reps} reps PR`
+                return `${toDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps} PR`
+              }
+              if (hint) {
+                if (ex?.type === 'timed') return `${Math.floor(hint.last_reps / 60)}:${String(hint.last_reps % 60).padStart(2, '0')}`
+                if (ex?.type === 'bodyweight') return hint.last_weight > 0 ? `${toDisplay(hint.last_weight)} ${weightLabel} × ${hint.last_reps}` : `${hint.last_reps} reps`
+                return `${toDisplay(hint.last_weight)} ${weightLabel} × ${hint.last_reps}`
+              }
             })()
           }</span>}
         </button>
@@ -1113,7 +1126,7 @@ export default function LogPage() {
         )}
         {showExPicker && (
           <ExercisePicker
-            hints={hints} starred={starred} onToggleStar={toggleStar}
+            hints={hints} starred={starred} prs={prs} isLbs={isLbs} onToggleStar={toggleStar}
             exerciseType={exerciseTypeFilter}
             onSelect={startExercise}
             onClose={() => setShowExPicker(false)}
