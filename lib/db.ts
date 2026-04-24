@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 9
 
 let _initPromise: Promise<void> | null = null
 
@@ -157,6 +157,9 @@ async function _runInit() {
 
   // Duration for timed exercises (plank, wall sit etc.)
   try { await db.execute(`ALTER TABLE sets ADD COLUMN duration_secs INTEGER`) } catch { /* exists */ }
+
+  // Notes on individual workout blocks
+  try { await db.execute(`ALTER TABLE blocks ADD COLUMN notes TEXT`) } catch { /* exists */ }
 
   // Workout routines
   await db.execute(`CREATE TABLE IF NOT EXISTS routines (

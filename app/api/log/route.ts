@@ -38,12 +38,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ exercises: [...byBlock.values()] })
   }
 
-  const [liftRes, setsRes, cardioRes, calendarRes, hintsRes, starredRes, prsRes] = await Promise.all([
+  const [liftRes, setsRes, cardioRes, sessionRes, calendarRes, hintsRes, starredRes, prsRes, unitPrefRes] = await Promise.all([
     db.execute({
       sql: `SELECT b.id as block_id, st.exercise,
               COUNT(st.id) as set_count,
               MAX(st.weight) as max_weight,
-              MAX(st.duration_secs) as max_duration
+              MAX(st.duration_secs) as max_duration,
+              MAX(b.notes) as notes
             FROM blocks b
             JOIN sessions s ON b.session_id = s.id
             JOIN sets st ON st.block_id = b.id
@@ -62,12 +63,16 @@ export async function GET(req: NextRequest) {
       args: [session.userId, today],
     }),
     db.execute({
-      sql: `SELECT b.id as block_id, c.id as cardio_id, c.activity, c.distance, c.duration, c.pace
+      sql: `SELECT b.id as block_id, c.id as cardio_id, c.activity, c.distance, c.duration, c.pace, b.notes
             FROM blocks b
             JOIN sessions s ON b.session_id = s.id
             JOIN cardio c ON c.block_id = b.id
             WHERE s.user_id = ? AND s.date = ?
             ORDER BY b.id DESC`,
+      args: [session.userId, today],
+    }),
+    db.execute({
+      sql: 'SELECT id, notes FROM sessions WHERE user_id = ? AND date = ? LIMIT 1',
       args: [session.userId, today],
     }),
     includeAll
@@ -114,6 +119,9 @@ export async function GET(req: NextRequest) {
           args: [session.userId],
         })
       : Promise.resolve({ rows: [] }),
+    includeAll
+      ? db.execute({ sql: 'SELECT unit_pref FROM users WHERE id = ?', args: [session.userId] })
+      : Promise.resolve({ rows: [] }),
   ])
 
   const setsByBlock: Record<number, {id: number; weight: number; reps: number; duration_secs: number | null}[]> = {}
@@ -126,7 +134,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     lifts: liftRes.rows.map(r => ({ ...r, sets: setsByBlock[r.block_id as number] ?? [] })),
     cardio: cardioRes.rows,
+    sessionNotes: sessionRes.rows[0]?.notes ?? null,
+    sessionId: sessionRes.rows[0]?.id ?? null,
     ...(includeAll && {
+      unit_pref: (unitPrefRes.rows[0]?.unit_pref as string) ?? 'metric',
       dates: calendarRes.rows.map(r => r.date as string),
       history: hintsRes.rows,
       starred: starredRes.rows.map(r => r.exercise as string),
@@ -177,15 +188,15 @@ export async function POST(req: NextRequest) {
     const position = posRes.rows[0].cnt as number
 
     if (body.type === 'lift') {
-      const { exercise, sets, exerciseType } = body
+      const { exercise, sets, exerciseType, notes } = body
       const doneSets = sets.filter((s: { done: boolean }) => s.done)
       if (!exercise || doneSets.length === 0) {
         return NextResponse.json({ error: 'No completed sets' }, { status: 400 })
       }
 
       const blockRes = await db.execute({
-        sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
-        args: [sessionId, 'lift', position],
+        sql: 'INSERT INTO blocks (session_id, type, position, notes) VALUES (?, ?, ?, ?) RETURNING id',
+        args: [sessionId, 'lift', position, notes || null],
       })
       const blockId = blockRes.rows[0].id as number
 
@@ -228,12 +239,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, blockId, isPr, exercise, weight: prValue })
     } else {
       // Cardio
-      const { activity, distance, time, pace } = body
-      const blockType = activity === 'Cycling' ? 'cycle' : 'run'
+      const { activity, distance, time, pace, notes } = body
+      const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'run' : 'cardio'
 
       const blockRes = await db.execute({
-        sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
-        args: [sessionId, blockType, position],
+        sql: 'INSERT INTO blocks (session_id, type, position, notes) VALUES (?, ?, ?, ?) RETURNING id',
+        args: [sessionId, blockType, position, notes || null],
       })
       const blockId = blockRes.rows[0].id as number
 
@@ -250,12 +261,50 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** PATCH — update a cardio entry */
+/** PATCH — update cardio, session notes, or block notes */
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { cardioId, distance, duration, pace } = await req.json()
+  const body = await req.json()
+
+  // Session notes
+  if ('sessionNotes' in body) {
+    const today = new Date().toISOString().split('T')[0]
+    const existing = await db.execute({
+      sql: 'SELECT id FROM sessions WHERE user_id = ? AND date = ? LIMIT 1',
+      args: [session.userId, today],
+    })
+    if (existing.rows.length > 0) {
+      await db.execute({
+        sql: 'UPDATE sessions SET notes = ? WHERE id = ?',
+        args: [body.sessionNotes || null, existing.rows[0].id as number],
+      })
+    } else {
+      await db.execute({
+        sql: 'INSERT INTO sessions (user_id, date, notes) VALUES (?, ?, ?)',
+        args: [session.userId, today, body.sessionNotes || null],
+      })
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // Block notes
+  if ('blockNotes' in body && body.blockId) {
+    const check = await db.execute({
+      sql: `SELECT b.id FROM blocks b JOIN sessions s ON b.session_id = s.id WHERE b.id = ? AND s.user_id = ?`,
+      args: [body.blockId, session.userId],
+    })
+    if (check.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    await db.execute({
+      sql: 'UPDATE blocks SET notes = ? WHERE id = ?',
+      args: [body.blockNotes || null, body.blockId],
+    })
+    return NextResponse.json({ ok: true })
+  }
+
+  // Cardio stats
+  const { cardioId, distance, duration, pace } = body
   if (!cardioId) return NextResponse.json({ error: 'cardioId required' }, { status: 400 })
 
   const check = await db.execute({

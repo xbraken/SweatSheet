@@ -8,8 +8,8 @@ import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
 type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
 type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null; pr_volume: number; pr_reps_total: number; pr_duration_total: number | null; pr_e1rm: number | null }
-type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[] }
-type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null }
+type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]; notes: string | null }
+type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null; notes: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
 type PendingBlock = { exercise: string; exerciseType: 'weights' | 'bodyweight' | 'timed'; sets: SetRow[] }
 type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number; pending: Record<number, PendingBlock> }
@@ -634,12 +634,37 @@ export default function LogPage() {
   const [cardioTime, setCardioTime] = useState('')
   const cardioPace = useMemo(() => calcPace(cardioDistance, cardioTime), [cardioDistance, cardioTime])
 
+  // Unit preference + notes
+  const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
+  const [sessionNotes, setSessionNotes] = useState('')
+  const [blockNotes, setBlockNotes] = useState('')
+  const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Screenshot parsing
   const parseInputRef = useRef<HTMLInputElement>(null)
   const [parseLoading, setParseLoading] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
 
   const [repeatLoading, setRepeatLoading] = useState(false)
+
+  const isLbs = unitPref === 'imperial'
+  const weightLabel = isLbs ? 'lbs' : 'kg'
+  const weightStep = isLbs ? 2.5 / 2.20462 : 2.5
+  const kgToDisplay = (kg: number) => isLbs ? Math.round(kg * 2.20462 * 10) / 10 : kg
+  const displayToKg = (val: number) => isLbs ? Math.round((val / 2.20462) * 100) / 100 : val
+
+  const toggleUnit = () => {
+    const next: 'metric' | 'imperial' = unitPref === 'metric' ? 'imperial' : 'metric'
+    setUnitPref(next)
+    fetch('/api/account', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unit_pref: next }) })
+  }
+
+  const saveSessionNotes = (notes: string) => {
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
+    notesTimerRef.current = setTimeout(() => {
+      fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionNotes: notes }) })
+    }, 800)
+  }
 
   const handleParseImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) { setParseError('Please upload an image file'); return }
@@ -669,8 +694,8 @@ export default function LogPage() {
   const [pr, setPr] = useState<{ exercise: string; weight: number } | null>(null)
 
   // Edit sheets
-  const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]} | null>(null)
-  const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string} | null>(null)
+  const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]; notes: string} | null>(null)
+  const [editCardio, setEditCardio] = useState<{blockId: number; cardioId: number; activity: string; distance: string; duration: string; notes: string} | null>(null)
   const [fadingBlocks, setFadingBlocks] = useState<Set<number>>(new Set())
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [pullY, setPullY] = useState(0)
@@ -749,6 +774,7 @@ export default function LogPage() {
     fetch(url).then(r => r.json()).then(data => {
       setLoggedLifts(data.lifts ?? [])
       setLoggedCardio(data.cardio ?? [])
+      setSessionNotes(data.sessionNotes ?? '')
       setLoadingToday(false)
     }).catch(() => setLoadingToday(false))
   }, [])
@@ -763,6 +789,8 @@ export default function LogPage() {
     ]).then(([data, tplData]) => {
       setLoggedLifts(data.lifts ?? [])
       setLoggedCardio(data.cardio ?? [])
+      if (data.unit_pref) setUnitPref(data.unit_pref as 'metric' | 'imperial')
+      setSessionNotes(data.sessionNotes ?? '')
       if (data.dates) setWorkoutDates(new Set(data.dates as string[]))
       if (data.history) setHints(data.history)
       if (data.prs) setPrs(new Map((data.prs as ExercisePR[]).map(p => [p.exercise, p])))
@@ -808,6 +836,7 @@ export default function LogPage() {
     const exType = EXERCISES.find(e => e.name === name)?.type ?? 'weights'
     setRestingId(null)
     setShowExPicker(false)
+    setBlockNotes('')
     if (exType === 'bodyweight') {
       setSets([{ id: Date.now(), weight: 0, reps: hint?.last_reps ?? 10, duration_secs: 0, done: false }])
       setAddWeightMode(false)
@@ -826,6 +855,7 @@ export default function LogPage() {
     setCardioDistance('')
     setCardioTime('')
     setParseError(null)
+    setBlockNotes('')
     setView({ type: 'cardio', activity })
   }
 
@@ -931,7 +961,7 @@ export default function LogPage() {
       const res = await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets, exerciseType: view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights' }),
+        body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets, exerciseType: view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights', notes: blockNotes || null }),
       })
       const data = await res.json()
       if (data.isPr) {
@@ -976,7 +1006,7 @@ export default function LogPage() {
       const res = await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'cardio', activity: view.activity, distance: cardioDistance, time: cardioTime, pace: cardioPace }),
+        body: JSON.stringify({ type: 'cardio', activity: view.activity, distance: cardioDistance, time: cardioTime, pace: cardioPace, notes: blockNotes || null }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -997,36 +1027,42 @@ export default function LogPage() {
   }
 
   const adjustEditLiftSet = (setId: number, field: 'weight' | 'reps', delta: number) => {
-    setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + delta).toFixed(1)) } : s) } : prev)
+    const step = field === 'weight' ? weightStep * Math.sign(delta) : delta
+    setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +(s[field] + step).toFixed(2)) } : s) } : prev)
   }
 
   const setEditLiftField = (setId: number, field: 'weight' | 'reps', value: number) => {
-    setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(1)) } : s) } : prev)
+    setEditLift(prev => prev ? { ...prev, sets: prev.sets.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(2)) } : s) } : prev)
   }
 
   const saveEditLift = () => {
     if (!editLift) return
-    const { blockId, sets } = editLift
+    const { blockId, sets, notes } = editLift
     setLoggedLifts(prev => prev.map(l => l.block_id !== blockId ? l : {
       ...l,
       sets,
       max_weight: Math.max(...sets.map(s => s.weight)),
+      notes: notes ?? null,
     }))
     setEditLift(null)
-    Promise.all(sets.map(s =>
-      fetch('/api/sets', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, weight: s.weight, reps: s.reps }) })
-    ))
+    Promise.all([
+      ...sets.map(s =>
+        fetch('/api/sets', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, weight: s.weight, reps: s.reps }) })
+      ),
+      fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, blockNotes: notes ?? '' }) }),
+    ])
   }
 
   const saveEditCardio = () => {
     if (!editCardio) return
-    const { blockId, cardioId, distance, duration } = editCardio
+    const { blockId, cardioId, distance, duration, notes } = editCardio
     const pace = calcPace(distance, duration)
     setLoggedCardio(prev => prev.map(c => c.block_id !== blockId ? c : {
-      ...c, distance: distance || null, duration: duration || null, pace: pace || null,
+      ...c, distance: distance || null, duration: duration || null, pace: pace || null, notes: notes ?? null,
     }))
     setEditCardio(null)
     fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardioId, distance, duration, pace }) })
+    fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockId, blockNotes: notes ?? '' }) })
   }
 
   // Delete a logged block — fade out then remove
@@ -1303,11 +1339,32 @@ export default function LogPage() {
                   : <span className="material-symbols-outlined text-[#a48b83] text-[18px]">replay</span>}
               </button>
             )}
+            <button onClick={toggleUnit} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f] text-[10px] font-bold font-label text-[#a48b83]">
+              {isLbs ? 'lbs' : 'kg'}
+            </button>
             <button onClick={() => setCalOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f]">
               <span className="material-symbols-outlined text-[#a48b83]">calendar_month</span>
             </button>
           </div>
         </header>
+
+        {/* Session notes */}
+        {!browsedDate && (
+          <div className="mb-4">
+            <textarea
+              value={sessionNotes}
+              onChange={e => { setSessionNotes(e.target.value); saveSessionNotes(e.target.value) }}
+              placeholder="Add a note for today…"
+              rows={sessionNotes ? 2 : 1}
+              className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none focus:ring-1 focus:ring-[#ff9066]/20 transition-all"
+            />
+          </div>
+        )}
+        {browsedDate && sessionNotes && (
+          <div className="mb-4 bg-[#201f1f] rounded-xl px-4 py-3">
+            <p className="text-sm text-[#a48b83] italic">{sessionNotes}</p>
+          </div>
+        )}
 
         {/* Active routine progress on list view */}
         {activeRoutine && !browsedDate && (
@@ -1379,13 +1436,13 @@ export default function LogPage() {
                       <p className="text-xs text-[#a48b83]">{l.set_count} sets{(() => {
                         const ex = EXERCISES.find(e => e.name === l.exercise)
                         if (ex?.type === 'timed') { const d = l.max_duration ?? 0; return ` · best ${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}` }
-                        if (ex?.type === 'bodyweight') return l.max_weight > 0 ? ` · ${l.max_weight} kg` : ' · bodyweight'
-                        return ` · ${l.max_weight} kg peak`
+                        if (ex?.type === 'bodyweight') return l.max_weight > 0 ? ` · ${kgToDisplay(l.max_weight)} ${weightLabel}` : ' · bodyweight'
+                        return ` · ${kgToDisplay(l.max_weight)} ${weightLabel} peak`
                       })()}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets] })}>
+                    <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets], notes: l.notes ?? '' })}>
                       <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
                     </button>
                     <button onClick={() => deleteBlock(l.block_id)} className="hidden md:block">
@@ -1400,38 +1457,46 @@ export default function LogPage() {
                         {i + 1}. {(() => {
                           const ex = EXERCISES.find(e => e.name === l.exercise)
                           if (ex?.type === 'timed') { const ds = s.duration_secs ?? 0; return `${Math.floor(ds / 60)}:${String(ds % 60).padStart(2, '0')}` }
-                          if (ex?.type === 'bodyweight') return s.weight > 0 ? `${s.weight}kg × ${s.reps}` : `${s.reps} reps`
-                          return `${s.weight}kg × ${s.reps}`
+                          if (ex?.type === 'bodyweight') return s.weight > 0 ? `${kgToDisplay(s.weight)}${weightLabel} × ${s.reps}` : `${s.reps} reps`
+                          return `${kgToDisplay(s.weight)}${weightLabel} × ${s.reps}`
                         })()}
                       </span>
                     ))}
                   </div>
                 )}
+                {l.notes && (
+                  <p className="text-xs text-[#56423c] mt-1.5 ml-9 italic">{l.notes}</p>
+                )}
               </SwipeableCard>
             ))}
             {loggedCardio.map(c => (
               <SwipeableCard key={c.block_id} onDelete={() => deleteBlock(c.block_id)}
-                className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 flex items-center justify-between ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[#4bdece]">
-                    {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
-                  </span>
-                  <div>
-                    <p className="font-headline font-bold text-[#e5e2e1]">{c.activity}</p>
-                    <p className="text-xs text-[#a48b83]">
-                      {c.distance ? `${c.distance} km` : ''}{c.distance && c.duration ? ' · ' : ''}{c.duration ?? ''}
-                      {c.pace ? ` · ${c.pace}/km` : ''}
-                    </p>
+                className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[#4bdece]">
+                      {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
+                    </span>
+                    <div>
+                      <p className="font-headline font-bold text-[#e5e2e1]">{c.activity}</p>
+                      <p className="text-xs text-[#a48b83]">
+                        {c.distance ? `${c.distance} km` : ''}{c.distance && c.duration ? ' · ' : ''}{c.duration ?? ''}
+                        {c.pace ? ` · ${c.pace}/km` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setEditCardio({ blockId: c.block_id, cardioId: c.cardio_id, activity: c.activity, distance: c.distance ?? '', duration: c.duration ?? '', notes: c.notes ?? '' })}>
+                      <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
+                    </button>
+                    <button onClick={() => deleteBlock(c.block_id)} className="hidden md:block">
+                      <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setEditCardio({ blockId: c.block_id, cardioId: c.cardio_id, activity: c.activity, distance: c.distance ?? '', duration: c.duration ?? '' })}>
-                    <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
-                  </button>
-                  <button onClick={() => deleteBlock(c.block_id)} className="hidden md:block">
-                    <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
-                  </button>
-                </div>
+                {c.notes && (
+                  <p className="text-xs text-[#56423c] mt-1.5 ml-9 italic">{c.notes}</p>
+                )}
               </SwipeableCard>
             ))}
           </div>
@@ -1459,23 +1524,24 @@ export default function LogPage() {
                 <h3 className="font-headline font-bold text-[#e5e2e1]">{editLift.exercise}</h3>
                 <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
               </div>
-              <div className="space-y-3 mb-6">
+              <div className="space-y-3 mb-4">
                 {editLift.sets.map((s, i) => (
                   <div key={s.id} className="flex items-center gap-2">
                     <span className="text-xs text-[#a48b83] w-10 shrink-0">Set {i + 1}</span>
                     <div className="flex items-center gap-1.5 flex-1">
-                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
                       <input
                         type="number"
                         inputMode="decimal"
-                        value={s.weight}
-                        onChange={e => setEditLiftField(s.id, 'weight', parseFloat(e.target.value) || 0)}
+                        value={kgToDisplay(s.weight)}
+                        onChange={e => setEditLiftField(s.id, 'weight', displayToKg(parseFloat(e.target.value) || 0))}
                         onFocus={e => e.target.select()}
                         className="font-headline font-bold text-sm w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                       />
-                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <span className="text-[10px] text-[#a48b83]">{weightLabel}</span>
+                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
                     </div>
@@ -1498,6 +1564,13 @@ export default function LogPage() {
                   </div>
                 ))}
               </div>
+              <textarea
+                value={editLift.notes}
+                onChange={e => setEditLift(prev => prev ? { ...prev, notes: e.target.value } : prev)}
+                placeholder="Add a note about this workout…"
+                rows={2}
+                className="w-full bg-[#131313] rounded-xl px-4 py-3 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-4"
+              />
               <button onClick={saveEditLift} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
                 Save changes
               </button>
@@ -1533,6 +1606,13 @@ export default function LogPage() {
                   </div>
                 ) : null
               })()}
+              <textarea
+                value={editCardio.notes}
+                onChange={e => setEditCardio(prev => prev ? { ...prev, notes: e.target.value } : prev)}
+                placeholder="Add a note about this workout…"
+                rows={2}
+                className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3"
+              />
               <button onClick={saveEditCardio} className="w-full py-3.5 bg-[#4bdece] text-[#003732] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
                 Save changes
               </button>
@@ -1658,7 +1738,7 @@ export default function LogPage() {
                   {/* Estimated 1RM from best historical set */}
                   {pr.pr_e1rm && (
                     <div className="text-[10px] font-bold font-label text-[#56423c]">
-                      {pr.pr_e1rm} kg 1RM
+                      {kgToDisplay(pr.pr_e1rm)} {weightLabel} 1RM
                     </div>
                   )}
                   {pr.pr_e1rm && (pr.pr_volume > 0 || pr.pr_weight > 0) && <div className="w-px h-3 bg-[#353534]" />}
@@ -1674,7 +1754,7 @@ export default function LogPage() {
                   {pr.pr_weight > 0 && (
                     <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isWeightPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
                       <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isWeightPR ? 1 : 0}` }}>emoji_events</span>
-                      {isWeightPR ? 'Weight PR!' : `${pr.pr_weight} kg × ${pr.pr_reps}`}
+                      {isWeightPR ? 'Weight PR!' : `${kgToDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps}`}
                     </div>
                   )}
                 </div>
@@ -1683,20 +1763,25 @@ export default function LogPage() {
             <div className="w-16" />
           </div>
           {routineProgressBar}
-          {/* Rest timer config */}
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
-            <div className="flex gap-1">
-              {REST_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setAndSaveRestDuration(opt.value)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
-                    restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
-                  }`}
-                >{opt.label}</button>
-              ))}
+          {/* Rest timer config + unit toggle */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
+              <div className="flex gap-1">
+                {REST_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAndSaveRestDuration(opt.value)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
+                      restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
+                    }`}
+                  >{opt.label}</button>
+                ))}
+              </div>
             </div>
+            <button onClick={toggleUnit} className="px-3 py-1 rounded-lg bg-[#201f1f] text-[10px] font-bold font-label text-[#a48b83]">
+              {weightLabel}
+            </button>
           </div>
         </div>
 
@@ -1706,7 +1791,7 @@ export default function LogPage() {
             <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
               <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
               <div className="flex-1 flex gap-6">
-                <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>
+                <span className="font-headline font-bold">{kgToDisplay(set.weight)} <span className="text-xs font-normal text-[#a48b83]">{weightLabel}</span></span>
                 <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
               </div>
               <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
@@ -1726,20 +1811,20 @@ export default function LogPage() {
                     <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
                     <div className="flex-1 flex gap-3">
                       <div className="flex-1">
-                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight kg</p>
+                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight {weightLabel}</p>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => updateSet(activeSet.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <button onClick={() => updateSet(activeSet.id, 'weight', -weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">remove</span>
                           </button>
                           <input
                             type="number"
                             inputMode="decimal"
-                            value={activeSet.weight}
-                            onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value) || 0)}
+                            value={kgToDisplay(activeSet.weight)}
+                            onChange={e => setSetField(activeSet.id, 'weight', displayToKg(parseFloat(e.target.value) || 0))}
                             onFocus={e => e.target.select()}
                             className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                           />
-                          <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                          <button onClick={() => updateSet(activeSet.id, 'weight', weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                             <span className="material-symbols-outlined text-sm">add</span>
                           </button>
                         </div>
@@ -1791,8 +1876,16 @@ export default function LogPage() {
           )}
         </div>
 
-        {/* Save */}
-        <div className="px-4 pb-8 pt-6 flex gap-2">
+        {/* Block notes + Save */}
+        <div className="px-4 pb-8 pt-4">
+          <textarea
+            value={blockNotes}
+            onChange={e => setBlockNotes(e.target.value)}
+            placeholder="Notes about this workout…"
+            rows={blockNotes ? 2 : 1}
+            className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
+          />
+          <div className="flex gap-2">
           {activeRoutine && (
             <button
               onClick={skipRoutineExercise}
@@ -1808,6 +1901,7 @@ export default function LogPage() {
           >
             {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
           </button>
+          </div>
         </div>
 
         <BottomNav />
@@ -1887,7 +1981,7 @@ export default function LogPage() {
               <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
               <div className="flex-1 flex gap-6">
                 <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
-                {set.weight > 0 && <span className="font-headline font-bold">{set.weight} <span className="text-xs font-normal text-[#a48b83]">kg</span></span>}
+                {set.weight > 0 && <span className="font-headline font-bold">{kgToDisplay(set.weight)} <span className="text-xs font-normal text-[#a48b83]">{weightLabel}</span></span>}
               </div>
               <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
                 <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
@@ -1936,22 +2030,22 @@ export default function LogPage() {
                   ) : (
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest">Weight kg</p>
+                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest">Weight {weightLabel}</p>
                         <button onClick={() => { setAddWeightMode(false); setSetField(activeSet.id, 'weight', 0) }} className="text-[10px] font-bold text-[#a48b83]">Remove</button>
                       </div>
                       <div className="flex items-center gap-2 justify-center">
-                        <button onClick={() => updateSet(activeSet.id, 'weight', -2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <button onClick={() => updateSet(activeSet.id, 'weight', -weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                           <span className="material-symbols-outlined text-sm">remove</span>
                         </button>
                         <input
                           type="number"
                           inputMode="decimal"
-                          value={activeSet.weight}
-                          onChange={e => setSetField(activeSet.id, 'weight', parseFloat(e.target.value) || 0)}
+                          value={kgToDisplay(activeSet.weight)}
+                          onChange={e => setSetField(activeSet.id, 'weight', displayToKg(parseFloat(e.target.value) || 0))}
                           onFocus={e => e.target.select()}
                           className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                         />
-                        <button onClick={() => updateSet(activeSet.id, 'weight', 2.5)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                        <button onClick={() => updateSet(activeSet.id, 'weight', weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
                           <span className="material-symbols-outlined text-sm">add</span>
                         </button>
                       </div>
@@ -1970,7 +2064,15 @@ export default function LogPage() {
           )}
         </div>
 
-        <div className="px-4 pb-8 pt-6 flex gap-2">
+        <div className="px-4 pb-8 pt-4">
+          <textarea
+            value={blockNotes}
+            onChange={e => setBlockNotes(e.target.value)}
+            placeholder="Notes about this workout…"
+            rows={blockNotes ? 2 : 1}
+            className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
+          />
+          <div className="flex gap-2">
           {activeRoutine && (
             <button onClick={skipRoutineExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
           )}
@@ -1981,6 +2083,7 @@ export default function LogPage() {
           >
             {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
           </button>
+          </div>
         </div>
 
         <BottomNav />
@@ -2131,7 +2234,15 @@ export default function LogPage() {
           )}
         </div>
 
-        <div className="px-4 pb-8 pt-6 flex gap-2">
+        <div className="px-4 pb-8 pt-4">
+          <textarea
+            value={blockNotes}
+            onChange={e => setBlockNotes(e.target.value)}
+            placeholder="Notes about this workout…"
+            rows={blockNotes ? 2 : 1}
+            className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
+          />
+          <div className="flex gap-2">
           {activeRoutine && (
             <button onClick={skipRoutineExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
           )}
@@ -2142,6 +2253,7 @@ export default function LogPage() {
           >
             {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
           </button>
+          </div>
         </div>
 
         <BottomNav />
@@ -2226,7 +2338,14 @@ export default function LogPage() {
         </Link>
       </div>
 
-      <div className="px-4 pb-8 pt-6">
+      <div className="px-4 pb-8 pt-4">
+        <textarea
+          value={blockNotes}
+          onChange={e => setBlockNotes(e.target.value)}
+          placeholder="Notes about this workout…"
+          rows={blockNotes ? 2 : 1}
+          className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
+        />
         <button
           onClick={saveCardio}
           disabled={saving}
