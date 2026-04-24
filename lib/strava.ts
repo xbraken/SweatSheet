@@ -115,7 +115,12 @@ export async function importActivity(userId: number, activityId: number): Promis
     const maxHR = act.max_heartrate ? Math.round(act.max_heartrate as number) : null
     const calories = act.calories ? Math.round(act.calories as number) : null
 
-    const endDate = new Date(new Date(startStr).getTime() + totalSec * 1000).toISOString()
+    let endDate: string
+    try {
+      endDate = new Date(new Date(startStr).getTime() + totalSec * 1000).toISOString()
+    } catch {
+      endDate = startStr ?? new Date().toISOString()
+    }
 
     // Build HR samples — downsample to 1 per 10s (1/sec from Strava is overkill for charts)
     const hrSamples: { offsetSec: number; bpm: number }[] = []
@@ -154,13 +159,27 @@ export async function importActivity(userId: number, activityId: number): Promis
 
     const blockType = activityType === 'Cycling' ? 'cycle' : (activityType === 'Run' || activityType === 'Walking') ? 'run' : 'cardio'
 
-    const sessionRes = await db.execute({
-      sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
+    // Find-or-create session for this date (prevents orphaned empty sessions on retry)
+    const existingSession = await db.execute({
+      sql: 'SELECT id FROM sessions WHERE user_id = ? AND date = ? LIMIT 1',
       args: [userId, date],
     })
+    const sessionId = existingSession.rows.length > 0
+      ? existingSession.rows[0].id as number
+      : (await db.execute({
+          sql: 'INSERT INTO sessions (user_id, date) VALUES (?, ?) RETURNING id',
+          args: [userId, date],
+        })).rows[0].id as number
+
+    const posRes = await db.execute({
+      sql: 'SELECT COUNT(*) as cnt FROM blocks WHERE session_id = ?',
+      args: [sessionId],
+    })
+    const position = posRes.rows[0].cnt as number
+
     const blockRes = await db.execute({
-      sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, 0) RETURNING id',
-      args: [sessionRes.rows[0].id as number, blockType],
+      sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
+      args: [sessionId, blockType, position],
     })
     const blockId = blockRes.rows[0].id as number
 
