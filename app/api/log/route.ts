@@ -99,24 +99,32 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ rows: [] }),
     includeAll
       ? db.execute({
-          sql: `SELECT exercise, MAX(weight) as pr_weight, MAX(reps) as pr_reps, MAX(duration_secs) as pr_duration, MAX(session_vol) as pr_volume, MAX(session_reps) as pr_reps_total, MAX(session_dur) as pr_duration_total, MAX(set_e1rm) as pr_e1rm
+          sql: `SELECT p.exercise, p.pr_weight,
+                  (SELECT st2.reps FROM sets st2
+                   JOIN blocks b2 ON st2.block_id = b2.id
+                   JOIN sessions s2 ON b2.session_id = s2.id
+                   WHERE st2.exercise = p.exercise AND st2.weight = p.pr_weight AND s2.user_id = ?
+                   ORDER BY st2.id DESC LIMIT 1) as pr_reps,
+                  p.pr_duration, p.pr_volume, p.pr_reps_total, p.pr_duration_total, p.pr_e1rm
                 FROM (
-                  SELECT st.exercise, s.id as session_id,
-                    MAX(st.weight) as weight,
-                    MAX(st.reps) as reps,
-                    MAX(st.duration_secs) as duration_secs,
-                    SUM(st.weight * st.reps) as session_vol,
-                    SUM(st.reps) as session_reps,
-                    SUM(st.duration_secs) as session_dur,
-                    MAX(st.weight * (1.0 + st.reps / 30.0)) as set_e1rm
-                  FROM sets st
-                  JOIN blocks b ON st.block_id = b.id
-                  JOIN sessions s ON b.session_id = s.id
-                  WHERE s.user_id = ?
-                  GROUP BY st.exercise, s.id
-                )
-                GROUP BY exercise`,
-          args: [session.userId],
+                  SELECT exercise, MAX(weight) as pr_weight, MAX(duration_secs) as pr_duration, MAX(session_vol) as pr_volume, MAX(session_reps) as pr_reps_total, MAX(session_dur) as pr_duration_total, MAX(set_e1rm) as pr_e1rm
+                  FROM (
+                    SELECT st.exercise, s.id as session_id,
+                      MAX(st.weight) as weight,
+                      MAX(st.duration_secs) as duration_secs,
+                      SUM(st.weight * st.reps) as session_vol,
+                      SUM(st.reps) as session_reps,
+                      SUM(st.duration_secs) as session_dur,
+                      MAX(st.weight * (1.0 + st.reps / 30.0)) as set_e1rm
+                    FROM sets st
+                    JOIN blocks b ON st.block_id = b.id
+                    JOIN sessions s ON b.session_id = s.id
+                    WHERE s.user_id = ?
+                    GROUP BY st.exercise, s.id
+                  )
+                  GROUP BY exercise
+                ) p`,
+          args: [session.userId, session.userId],
         })
       : Promise.resolve({ rows: [] }),
     includeAll
