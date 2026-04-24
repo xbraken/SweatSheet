@@ -12,7 +12,17 @@ const ACTIVITY_MAP: Record<string, string> = {
   EBikeRide: 'Cycling',
   Walk: 'Walking',
   Hike: 'Walking',
+  HighIntensityIntervalTraining: 'HIIT',
+  Workout: 'Workout',
+  Yoga: 'Yoga',
+  Swim: 'Swim',
+  Elliptical: 'Elliptical',
+  StairStepper: 'Stairs',
+  Rowing: 'Rowing',
 }
+
+// Strength-only activity types — these are logged in-app, don't import as cardio
+const SKIP_SPORT_TYPES = new Set(['WeightTraining', 'Crossfit'])
 
 export function stravaAuthUrl(redirectUri: string): string {
   const params = new URLSearchParams({
@@ -64,18 +74,20 @@ export async function getValidToken(userId: number): Promise<string | null> {
   return token as string
 }
 
-export async function importActivity(userId: number, activityId: number): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+export async function importActivity(userId: number, activityId: number, opts: { force?: boolean } = {}): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   try {
     const token = await getValidToken(userId)
     if (!token) return { ok: false, error: 'No Strava connection' }
 
-    // Dedup check
-    const dup = await db.execute({
-      sql: `SELECT c.id FROM cardio c JOIN blocks b ON b.id = c.block_id JOIN sessions s ON s.id = b.session_id
-            WHERE s.user_id = ? AND c.imported_from = ?`,
-      args: [userId, `strava:${activityId}`],
-    })
-    if (dup.rows.length > 0) return { ok: true, skipped: true }
+    // Dedup check (skipped when force=true so user can re-import after a delete)
+    if (!opts.force) {
+      const dup = await db.execute({
+        sql: `SELECT c.id FROM cardio c JOIN blocks b ON b.id = c.block_id JOIN sessions s ON s.id = b.session_id
+              WHERE s.user_id = ? AND c.imported_from = ?`,
+        args: [userId, `strava:${activityId}`],
+      })
+      if (dup.rows.length > 0) return { ok: true, skipped: true }
+    }
 
     // Fetch activity
     const actRes = await fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
@@ -86,6 +98,7 @@ export async function importActivity(userId: number, activityId: number): Promis
 
     const rawType = ((act.sport_type ?? act.type) as string) || null
     if (!rawType) return { ok: true, skipped: true }
+    if (SKIP_SPORT_TYPES.has(rawType)) return { ok: true, skipped: true }
     const activityType = ACTIVITY_MAP[rawType] ?? rawType
 
     // Fetch streams
@@ -157,7 +170,9 @@ export async function importActivity(userId: number, activityId: number): Promis
       }
     }
 
-    const blockType = activityType === 'Cycling' ? 'cycle' : (activityType === 'Run' || activityType === 'Walking') ? 'run' : 'cardio'
+    // Any cardio-ish activity that isn't explicitly cycling goes in a 'run' block.
+    // Block type is a coarse category; the specific activity name is preserved in cardio.activity.
+    const blockType = activityType === 'Cycling' ? 'cycle' : 'run'
 
     // Find-or-create session for this date (prevents orphaned empty sessions on retry)
     const existingSession = await db.execute({

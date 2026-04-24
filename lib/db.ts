@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 9
+const SCHEMA_VERSION = 10
 
 let _initPromise: Promise<void> | null = null
 
@@ -43,7 +43,7 @@ async function _runInit() {
   await db.execute(`CREATE TABLE IF NOT EXISTS blocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK(type IN ('lift', 'run', 'cycle', 'cardio')),
+    type TEXT NOT NULL CHECK(type IN ('lift', 'run', 'cycle')),
     position INTEGER NOT NULL DEFAULT 0
   )`)
 
@@ -160,6 +160,11 @@ async function _runInit() {
 
   // Notes on individual workout blocks
   try { await db.execute(`ALTER TABLE blocks ADD COLUMN notes TEXT`) } catch { /* exists */ }
+
+  // (Skipped) v10 migration: removing the blocks CHECK constraint via table-rebuild
+  // cascaded FK deletes in Turso and wiped sets + cardio. Reverted — instead, the
+  // Strava import now maps unmapped activity types to 'run' block type, which
+  // passes the existing CHECK(type IN ('lift', 'run', 'cycle')) constraint.
 
   // Workout routines
   await db.execute(`CREATE TABLE IF NOT EXISTS routines (

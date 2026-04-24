@@ -10,7 +10,9 @@ export default function SettingsPage() {
   const [stravaConnected, setStravaConnected] = useState(false)
   const [stravaLoading, setStravaLoading] = useState(false)
   const [stravaSyncing, setStravaSyncing] = useState(false)
-  const [stravaSyncMode, setStravaSyncMode] = useState<'latest' | 'recent'>('latest')
+  const [stravaSyncMode, setStravaSyncMode] = useState<'latest' | 'recent' | 'custom'>('latest')
+  const [stravaSyncCount, setStravaSyncCount] = useState(10)
+  const [stravaForce, setStravaForce] = useState(false)
   const [stravaSyncResult, setStravaSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
@@ -205,14 +207,46 @@ export default function SettingsPage() {
                 >
                   Last 30
                 </button>
+                <button
+                  onClick={() => setStravaSyncMode('custom')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'custom' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-[#a48b83]'}`}
+                >
+                  Custom
+                </button>
               </div>
+              {stravaSyncMode === 'custom' && (
+                <label className="flex items-center gap-2 px-1">
+                  <span className="text-xs text-[#a48b83]">Count</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={150}
+                    value={stravaSyncCount}
+                    onChange={e => setStravaSyncCount(Math.max(1, Math.min(150, Number(e.target.value) || 1)))}
+                    className="w-20 py-1 px-2 bg-[#2a2a2a] rounded-lg text-sm text-[#e5e2e1] outline-none"
+                  />
+                  <span className="text-xs text-[#a48b83]">activities (max 150)</span>
+                </label>
+              )}
+              <label className="flex items-center gap-2 px-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={stravaForce}
+                  onChange={e => setStravaForce(e.target.checked)}
+                  className="w-4 h-4 accent-[#fc4c02]"
+                />
+                <span className="text-xs text-[#a48b83]">Force re-import (ignore dedup)</span>
+              </label>
               <button
                 onClick={async () => {
                   setStravaSyncing(true)
                   setStravaSyncResult(null)
-                  const body = stravaSyncMode === 'latest'
+                  const base = stravaSyncMode === 'latest'
                     ? { pages: 1, perPage: 1 }
-                    : { pages: 1, perPage: 30 }
+                    : stravaSyncMode === 'recent'
+                    ? { pages: 1, perPage: 30 }
+                    : { pages: Math.ceil(stravaSyncCount / 30), perPage: Math.min(stravaSyncCount, 30) }
+                  const body = { ...base, force: stravaForce }
                   const res = await fetch('/api/strava/sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -227,7 +261,7 @@ export default function SettingsPage() {
               >
                 {stravaSyncing
                   ? <><div className="w-4 h-4 border-2 border-[#fc4c02]/30 border-t-[#fc4c02] rounded-full animate-spin" /> Syncing…</>
-                  : <><span className="material-symbols-outlined text-base">sync</span> {stravaSyncMode === 'latest' ? 'Sync latest activity' : 'Sync last 30 activities'}</>
+                  : <><span className="material-symbols-outlined text-base">sync</span> {stravaSyncMode === 'latest' ? 'Sync latest activity' : stravaSyncMode === 'recent' ? 'Sync last 30 activities' : `Sync last ${stravaSyncCount} activities`}</>
                 }
               </button>
               {stravaSyncResult && (

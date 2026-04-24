@@ -892,7 +892,7 @@ function RunDetailSheet({
                 className="w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors active:scale-95"
               >
                 <span className="material-symbols-outlined text-base text-[#4bdece]">compare_arrows</span>
-                Compare with another run
+                Compare with another {baseActivity(detail.activity).toLowerCase()}
               </button>
             )}
 
@@ -926,7 +926,7 @@ function RunDetailSheet({
                 {allCardio
                   .filter(r => {
                     if (!r.cardio_id || r.cardio_id === runId) return false
-                    if (!r.activity.toLowerCase().includes('run')) return false
+                    if (baseActivity(r.activity) !== baseActivity(detail.activity)) return false
                     if (!compareSearch) return true
                     const q = compareSearch.toLowerCase()
                     return r.date.includes(q) || r.activity.toLowerCase().includes(q)
