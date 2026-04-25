@@ -1512,42 +1512,41 @@ export default function ProgressPage() {
               <span className="material-symbols-outlined text-primary">expand_more</span>
             </div>
             {open && (
-              <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60" onClick={() => setOpen(false)}>
-                <div className="bg-[#1c1b1b] rounded-t-2xl max-h-[60vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="p-4 border-b border-outline-variant/20">
-                    <div className="w-8 h-1 bg-outline-variant rounded-full mx-auto mb-4" />
-                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-primary-container mb-3">Select exercise</p>
-                    <div className="flex items-center gap-2 bg-surface-container px-3 py-2 rounded-xl">
-                      <span className="material-symbols-outlined text-on-surface-variant text-xl">search</span>
-                      <input
-                        type="text"
-                        placeholder="Search exercises…"
-                        value={exerciseSearch}
-                        onChange={e => setExerciseSearch(e.target.value)}
-                        className="flex-1 bg-transparent text-sm outline-none placeholder:text-on-surface-variant"
-                      />
-                      {exerciseSearch && (
-                        <button onClick={() => setExerciseSearch('')} className="text-on-surface-variant">
-                          <span className="material-symbols-outlined text-xl">close</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="overflow-y-auto flex-1">
-                    {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).map(ex => (
-                      <button
-                        key={ex}
-                        onClick={() => { setExercise(ex); setOpen(false) }}
-                        className={`w-full px-4 py-3 text-left font-body transition-colors flex items-center justify-between ${ex === exercise ? 'text-primary' : 'hover:bg-surface-container-highest'}`}
-                      >
-                        <span>{ex}</span>
-                        {ex === exercise && <span className="material-symbols-outlined text-primary text-xl">check</span>}
+              <div className="fixed inset-0 z-50 flex flex-col bg-[#111] pt-safe">
+                <div className="flex items-center gap-3 px-4 py-4 border-b border-outline-variant/20">
+                  <button onClick={() => setOpen(false)} className="text-on-surface-variant">
+                    <span className="material-symbols-outlined">arrow_back</span>
+                  </button>
+                  <div className="flex-1 flex items-center gap-2 bg-surface-container px-3 py-2 rounded-xl">
+                    <span className="material-symbols-outlined text-on-surface-variant text-xl">search</span>
+                    <input
+                      type="text"
+                      placeholder="Search exercises…"
+                      value={exerciseSearch}
+                      onChange={e => setExerciseSearch(e.target.value)}
+                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-on-surface-variant"
+                    />
+                    {exerciseSearch && (
+                      <button onClick={() => setExerciseSearch('')} className="text-on-surface-variant">
+                        <span className="material-symbols-outlined text-xl">close</span>
                       </button>
-                    ))}
-                    {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).length === 0 && (
-                      <p className="text-center text-on-surface-variant text-sm py-8">No exercises match</p>
                     )}
                   </div>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                  {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).map(ex => (
+                    <button
+                      key={ex}
+                      onClick={() => { setExercise(ex); setOpen(false) }}
+                      className={`w-full px-4 py-4 text-left font-body transition-colors flex items-center justify-between border-b border-outline-variant/10 ${ex === exercise ? 'text-primary' : ''}`}
+                    >
+                      <span>{ex}</span>
+                      {ex === exercise && <span className="material-symbols-outlined text-primary text-xl">check</span>}
+                    </button>
+                  ))}
+                  {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).length === 0 && (
+                    <p className="text-center text-on-surface-variant text-sm py-8">No exercises match</p>
+                  )}
                 </div>
               </div>
             )}
