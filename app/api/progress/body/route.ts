@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { EXERCISES } from '@/lib/exercises'
+import { EXERCISES, SECONDARY_MUSCLES, SECONDARY_WEIGHT } from '@/lib/exercises'
 
 await initDb()
 
@@ -25,21 +25,39 @@ export async function GET(req: NextRequest) {
     })
 
     const exMap = new Map(EXERCISES.map(e => [e.name, e.category]))
-    const byCategory = new Map<string, { sets: number; lastDate: string }>()
+    type ExerciseStat = { exercise: string; sets: number; weight: number; lastDate: string }
+    const byCategory = new Map<string, { sets: number; lastDate: string; exercises: Map<string, ExerciseStat> }>()
+
+    const addContribution = (cat: string, exercise: string, sets: number, weight: number, date: string) => {
+      const cur = byCategory.get(cat) ?? { sets: 0, lastDate: '', exercises: new Map() }
+      cur.sets += sets * weight
+      if (date > cur.lastDate) cur.lastDate = date
+      const exCur = cur.exercises.get(exercise) ?? { exercise, sets: 0, weight, lastDate: '' }
+      exCur.sets += sets
+      if (date > exCur.lastDate) exCur.lastDate = date
+      cur.exercises.set(exercise, exCur)
+      byCategory.set(cat, cur)
+    }
+
     for (const r of res.rows) {
       const exercise = r.exercise as string
       const date = r.date as string
       const sets = Number(r.set_count)
-      const cat = exMap.get(exercise)
-      if (!cat) continue
-      const cur = byCategory.get(cat) ?? { sets: 0, lastDate: '' }
-      cur.sets += sets
-      if (date > cur.lastDate) cur.lastDate = date
-      byCategory.set(cat, cur)
+      const primary = exMap.get(exercise)
+      if (!primary) continue
+      addContribution(primary, exercise, sets, 1, date)
+      const secondaries = SECONDARY_MUSCLES[exercise] ?? []
+      for (const sec of secondaries) {
+        addContribution(sec, exercise, sets, SECONDARY_WEIGHT, date)
+      }
     }
 
     const categories = Array.from(byCategory.entries()).map(([category, d]) => ({
-      category, sets: d.sets, lastDate: d.lastDate,
+      category,
+      sets: Math.round(d.sets * 10) / 10,
+      lastDate: d.lastDate,
+      exercises: Array.from(d.exercises.values())
+        .sort((a, b) => b.sets * b.weight - a.sets * a.weight),
     }))
 
     return NextResponse.json({ categories })

@@ -1629,6 +1629,7 @@ export default function ProgressPage() {
         )}
       </section>
 
+      {tab !== 'body' && (
       <div key={tab} className="flex flex-col gap-12 animate-fade-in-view">
 
       {/* Lift metric toggle */}
@@ -2274,7 +2275,8 @@ export default function ProgressPage() {
 
       </div>{/* end desktop two-column */}
 
-      </div>{/* end tab content */}
+      </div>
+      )}{/* end tab content */}
 
       {/* Body weight section */}
       <section className="flex flex-col gap-3">

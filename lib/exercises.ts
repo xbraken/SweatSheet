@@ -124,3 +124,86 @@ export const EXERCISES: Exercise[] = [
 export const CATEGORIES: ExerciseCategory[] = [
   'Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Full Body', 'Olympic',
 ]
+
+// Secondary muscles trained by each exercise (gets 0.5× credit on the heatmap).
+// Only listed where the secondary engagement is meaningful.
+export const SECONDARY_MUSCLES: Record<string, ExerciseCategory[]> = {
+  // Chest pushes — triceps + front delts
+  'Bench Press': ['Shoulders', 'Arms'],
+  'Incline Bench Press': ['Shoulders', 'Arms'],
+  'Decline Bench Press': ['Shoulders', 'Arms'],
+  'Dumbbell Bench Press': ['Shoulders', 'Arms'],
+  'Incline Dumbbell Press': ['Shoulders', 'Arms'],
+  'Machine Chest Press': ['Shoulders', 'Arms'],
+  'Chest Dip': ['Shoulders', 'Arms'],
+  'Push-up': ['Shoulders', 'Arms', 'Core'],
+  'Cable Fly': ['Shoulders'],
+  'Cable Crossover': ['Shoulders'],
+  'Dumbbell Fly': ['Shoulders'],
+  'Pec Deck': ['Shoulders'],
+
+  // Back pulls — biceps + core (esp. deadlifts)
+  'Deadlift': ['Legs', 'Core'],
+  'Rack Pull': ['Legs', 'Core'],
+  'Sumo Deadlift': ['Back', 'Core'],
+  'Romanian Deadlift': ['Back', 'Core'],
+  'Stiff Leg Deadlift': ['Back', 'Core'],
+  'Barbell Row': ['Arms', 'Core'],
+  'Pendlay Row': ['Arms', 'Core'],
+  'Dumbbell Row': ['Arms', 'Core'],
+  'T-Bar Row': ['Arms', 'Core'],
+  'Seated Cable Row': ['Arms'],
+  'Pull-up': ['Arms', 'Core'],
+  'Chin-up': ['Arms', 'Core'],
+  'Lat Pulldown': ['Arms'],
+  'Straight Arm Pulldown': ['Arms'],
+  'Hyperextension': ['Core'],
+
+  // Shoulders — triceps + core for OHP
+  'Overhead Press': ['Arms', 'Core'],
+  'Dumbbell Shoulder Press': ['Arms', 'Core'],
+  'Machine Shoulder Press': ['Arms'],
+  'Arnold Press': ['Arms', 'Core'],
+  'Upright Row': ['Arms'],
+
+  // Legs — core + back for compounds
+  'Squat': ['Core'],
+  'Front Squat': ['Core', 'Shoulders'],
+  'Goblet Squat': ['Core', 'Arms'],
+  'Hack Squat': ['Core'],
+  'Leg Press': ['Core'],
+  'Bulgarian Split Squat': ['Core'],
+  'Lunge': ['Core'],
+  'Walking Lunge': ['Core'],
+  'Hip Thrust': ['Core'],
+  'Glute Bridge': ['Core'],
+  'Step Up': ['Core'],
+
+  // Arms — pushdowns/curls relatively isolated
+  'Close Grip Bench Press': ['Chest', 'Shoulders'],
+  'Skull Crusher': ['Shoulders'],
+  'Overhead Tricep Extension': ['Shoulders'],
+  'Dip': ['Chest', 'Shoulders'],
+
+  // Core — ab work that hits other groups
+  'Plank': ['Shoulders', 'Arms'],
+  'Side Plank': ['Shoulders', 'Core'],
+  'Hanging Leg Raise': ['Arms', 'Back'],
+  'Ab Wheel Rollout': ['Shoulders', 'Arms'],
+
+  // Full body — broad engagement
+  'Burpee': ['Chest', 'Shoulders', 'Arms', 'Legs', 'Core'],
+  'Kettlebell Swing': ['Back', 'Legs', 'Core', 'Shoulders'],
+  'Turkish Get-Up': ['Shoulders', 'Core', 'Legs'],
+  'Farmers Walk': ['Back', 'Arms', 'Core', 'Legs'],
+  'Battle Ropes': ['Shoulders', 'Arms', 'Core', 'Back'],
+
+  // Olympic — almost everything
+  'Clean and Jerk': ['Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
+  'Snatch': ['Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
+  'Power Clean': ['Back', 'Legs', 'Shoulders', 'Core'],
+  'Clean Pull': ['Back', 'Legs', 'Core'],
+  'Push Press': ['Shoulders', 'Arms', 'Legs', 'Core'],
+}
+
+export const SECONDARY_WEIGHT = 0.5

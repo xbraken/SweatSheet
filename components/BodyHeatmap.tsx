@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-type CategoryStat = { category: string; sets: number; lastDate: string }
+type ExerciseStat = { exercise: string; sets: number; weight: number; lastDate: string }
+type CategoryStat = { category: string; sets: number; lastDate: string; exercises: ExerciseStat[] }
 type Range = 'week' | 'month'
 
 const REGIONS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core'] as const
@@ -32,6 +33,7 @@ export default function BodyHeatmap() {
   const [range, setRange] = useState<Range>('week')
   const [stats, setStats] = useState<CategoryStat[]>([])
   const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<Region | null>(null)
 
   useEffect(() => {
     const days = range === 'week' ? 7 : 30
@@ -111,24 +113,58 @@ export default function BodyHeatmap() {
           const sets = s?.sets ?? 0
           const last = s?.lastDate ?? ''
           const pct = maxSets > 0 ? (sets / maxSets) * 100 : 0
+          const isExpanded = expanded === region
+          const canExpand = (s?.exercises?.length ?? 0) > 0
           return (
-            <div key={region} className="bg-surface-container rounded-xl p-4 flex items-center gap-4">
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ background: colorFor(region) }} />
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="font-headline text-sm font-bold text-on-surface">{region}</span>
-                  <span className="text-[11px] text-on-surface-variant">
-                    {sets > 0 ? `${sets} set${sets === 1 ? '' : 's'}` : 'untrained'}
-                  </span>
+            <div key={region} className="bg-surface-container rounded-xl overflow-hidden">
+              <button
+                onClick={() => canExpand && setExpanded(isExpanded ? null : region)}
+                disabled={!canExpand}
+                className="w-full p-4 flex items-center gap-4 text-left disabled:cursor-default"
+              >
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ background: colorFor(region) }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-baseline gap-2">
+                    <span className="font-headline text-sm font-bold text-on-surface">{region}</span>
+                    <span className="text-[11px] text-on-surface-variant">
+                      {sets > 0 ? `${sets} set${sets === 1 ? '' : 's'}` : 'untrained'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 bg-[#201f1f] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, background: colorFor(region) }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-[#56423c] mt-1">last: {relTime(last)}</div>
                 </div>
-                <div className="mt-1.5 h-1.5 bg-[#201f1f] rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${pct}%`, background: colorFor(region) }}
-                  />
+                {canExpand && (
+                  <span
+                    className="material-symbols-outlined text-[#56423c] text-base shrink-0 transition-transform"
+                    style={{ transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+                  >expand_more</span>
+                )}
+              </button>
+              {isExpanded && s && (
+                <div className="px-4 pb-4 pt-1 flex flex-col gap-1.5 border-t border-[#201f1f]">
+                  {s.exercises.map(ex => {
+                    const isPrimary = ex.weight === 1
+                    return (
+                      <div key={ex.exercise} className="flex justify-between items-center py-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm text-on-surface truncate">{ex.exercise}</span>
+                          {!isPrimary && (
+                            <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#56423c] shrink-0">secondary</span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-on-surface-variant shrink-0 ml-2">
+                          {ex.sets} set{ex.sets === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
-                <div className="text-[10px] text-[#56423c] mt-1">last: {relTime(last)}</div>
-              </div>
+              )}
             </div>
           )
         })}
