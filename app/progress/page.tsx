@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import ExercisePicker, { type ExerciseHint } from '@/components/ExercisePicker'
+import BodyHeatmap from '@/components/BodyHeatmap'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 
 function getExerciseType(name: string): ExerciseType {
@@ -1021,10 +1022,10 @@ function RunDetailSheet({
 
 export default function ProgressPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'lifts' | 'cardio'>('lifts')
+  const [tab, setTab] = useState<'lifts' | 'cardio' | 'body'>('lifts')
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('ss_prog_tab') : null
-    if (saved === 'lifts' || saved === 'cardio') setTab(saved)
+    if (saved === 'lifts' || saved === 'cardio' || saved === 'body') setTab(saved)
   }, [])
   const [exercise, setExercise] = useState('')
   const exerciseType = useMemo(() => exercise ? getExerciseType(exercise) : 'weights', [exercise])
@@ -1551,7 +1552,15 @@ export default function ProgressPage() {
           >
             CARDIO
           </button>
+          <button
+            onClick={() => setTab('body')}
+            className={`font-headline text-xl font-bold tracking-tight transition-colors ${tab === 'body' ? 'text-primary-container' : 'text-on-surface/30'}`}
+          >
+            BODY
+          </button>
         </div>
+
+        {tab === 'body' && <BodyHeatmap />}
 
         {tab === 'lifts' && exercises.length > 0 && (
           <>
@@ -1624,14 +1633,14 @@ export default function ProgressPage() {
 
       {/* Lift metric toggle */}
       {tab === 'lifts' && liftHistory.length > 0 && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
           {(['weight', 'volume', 'e1rm', 'topReps', 'avgWeight'] as const)
             .filter(m => (m !== 'e1rm' && m !== 'topReps' && m !== 'avgWeight') || exerciseType === 'weights')
             .map(m => (
             <button
               key={m}
               onClick={() => { fadeThen(() => setLiftMetric(m), 'chart'); setHoveredIdx(null) }}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
                 liftMetric === m ? 'bg-primary-container text-[#752805]' : 'bg-surface-container text-on-surface-variant'
               }`}
             >
@@ -2086,7 +2095,7 @@ export default function ProgressPage() {
 
 
         <div style={{ opacity: listAlpha, transition: listFadingOut.current ? 'opacity 0.12s ease-in-out' : 'none' }} className="flex flex-col gap-[0.35rem]">
-          {tab === 'lifts' ? (
+          {tab === 'body' ? null : tab === 'lifts' ? (
             sortedLifts.length > 0 ? (
               sortedLifts.slice(0, visibleCount).map((s, i) => {
                 const isPb = s.date === pbDate
@@ -2244,7 +2253,7 @@ export default function ProgressPage() {
               !loading && <p className="text-sm text-on-surface-variant text-center py-4">No cardio history yet</p>
             )
           )}
-          {!loading && (() => {
+          {!loading && tab !== 'body' && (() => {
             const total = tab === 'lifts' ? sortedLifts.length : sortedCardio.length
             return total > visibleCount ? (
               <button
