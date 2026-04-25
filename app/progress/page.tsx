@@ -1512,14 +1512,14 @@ export default function ProgressPage() {
               <span className="material-symbols-outlined text-primary">expand_more</span>
             </div>
             {open && (
-              <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setOpen(false)}>
-                <div className="bg-surface-container-high rounded-t-2xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60" onClick={() => setOpen(false)}>
+                <div className="bg-[#1c1b1b] rounded-t-2xl max-h-[60vh] flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b border-outline-variant/20">
+                    <div className="w-8 h-1 bg-outline-variant rounded-full mx-auto mb-4" />
                     <p className="text-[10px] font-bold font-label uppercase tracking-widest text-primary-container mb-3">Select exercise</p>
                     <div className="flex items-center gap-2 bg-surface-container px-3 py-2 rounded-xl">
                       <span className="material-symbols-outlined text-on-surface-variant text-xl">search</span>
                       <input
-                        autoFocus
                         type="text"
                         placeholder="Search exercises…"
                         value={exerciseSearch}
