@@ -12,14 +12,25 @@ jobs:
       - name: Install Turso CLI
         run: curl -sSfL https://get.tur.so/install.sh | bash
 
-      - name: Dump database
+      - name: Authenticate Turso
         env:
           TURSO_API_TOKEN: ${{ secrets.TURSO_API_TOKEN }}
+        run: |
+          mkdir -p "$HOME/.config/turso"
+          printf '{"token":"%s"}' "$TURSO_API_TOKEN" > "$HOME/.config/turso/settings.json"
+
+      - name: Dump database
         run: |
           export PATH="$HOME/.turso:$PATH"
           mkdir -p backups
           STAMP=$(date -u +%Y-%m-%d)
           turso db shell sweatsheet-restore ".dump" > "backups/sweatsheet-${STAMP}.sql"
+          # Sanity check — abort if dump looks empty / errored
+          if ! grep -q "CREATE TABLE" "backups/sweatsheet-${STAMP}.sql"; then
+            echo "Dump failed — content:"
+            cat "backups/sweatsheet-${STAMP}.sql"
+            exit 1
+          fi
           gzip "backups/sweatsheet-${STAMP}.sql"
           ls -lh backups/
 
