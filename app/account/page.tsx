@@ -334,9 +334,15 @@ export default function ProfilePage() {
 
                   return (
                     <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
-                      <button
-                        className="w-full p-4 text-left"
+                      <div
+                        role={isEmpty ? undefined : 'button'}
+                        tabIndex={isEmpty ? undefined : 0}
+                        className={`w-full p-4 text-left ${isEmpty ? '' : 'cursor-pointer'}`}
                         onClick={() => !isEmpty && setExpandedDate(expanded ? null : g.date)}
+                        onKeyDown={(e) => {
+                          if (isEmpty) return
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedDate(expanded ? null : g.date) }
+                        }}
                       >
                         <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
                         <p className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{isEmpty ? 'Empty session' : dayTitle(g)}</p>
@@ -359,7 +365,7 @@ export default function ProfilePage() {
                           ))}
                           {!isEmpty && <span className={`font-headline font-bold text-base ml-auto ${keyStat.className}`}>{keyStat.value}</span>}
                         </div>
-                      </button>
+                      </div>
 
                       {expanded && (
                         <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">

@@ -1047,7 +1047,7 @@ export default function ProgressPage() {
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>('all')
-  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume'>('weight')
+  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume' | 'e1rm' | 'topReps' | 'avgWeight'>('weight')
   useEffect(() => {
     if (typeof window === 'undefined') return
     const ls = window.localStorage
@@ -1055,7 +1055,7 @@ export default function ProgressPage() {
     const lsort = ls.getItem('ss_prog_lift_sort'); if (lsort === 'date' || lsort === 'weight' || lsort === 'volume') setLiftSort(lsort)
     const csort = ls.getItem('ss_prog_cardio_sort'); if (csort === 'date' || csort === 'distance' || csort === 'pace') setCardioSort(csort)
     const cr = ls.getItem('ss_prog_range'); if (cr === 'week' || cr === 'month' || cr === 'year' || cr === 'all') setChartRange(cr)
-    const lm = ls.getItem('ss_prog_lift_metric'); if (lm === 'weight' || lm === 'volume') setLiftMetric(lm)
+    const lm = ls.getItem('ss_prog_lift_metric'); if (lm === 'weight' || lm === 'volume' || lm === 'e1rm' || lm === 'topReps' || lm === 'avgWeight') setLiftMetric(lm)
   }, [])
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
@@ -1098,6 +1098,9 @@ export default function ProgressPage() {
   useEffect(() => { localStorage.setItem('ss_prog_cardio_sort', cardioSort) }, [cardioSort])
   useEffect(() => { localStorage.setItem('ss_prog_range', chartRange) }, [chartRange])
   useEffect(() => { localStorage.setItem('ss_prog_lift_metric', liftMetric) }, [liftMetric])
+  useEffect(() => {
+    if ((liftMetric === 'e1rm' || liftMetric === 'topReps' || liftMetric === 'avgWeight') && exerciseType !== 'weights') setLiftMetric('weight')
+  }, [exerciseType, liftMetric])
   useEffect(() => { setVisibleCount(10) }, [tab, liftSort, cardioSort, cardioActivity, runSubFilter])
   useEffect(() => { if (exercise) localStorage.setItem('ss_prog_exercise', exercise) }, [exercise])
   useEffect(() => { if (cardioActivity) localStorage.setItem('ss_prog_cardio_activity', cardioActivity) }, [cardioActivity])
@@ -1222,6 +1225,7 @@ export default function ProgressPage() {
   const liftChartPts = useMemo(() =>
     liftChartData.map(e => {
       let value: number
+      let topWeight: number | undefined
       if (exerciseType === 'timed') {
         value = liftMetric === 'weight' ? e.max_duration : e.total_duration
       } else if (exerciseType === 'bodyweight') {
@@ -1229,12 +1233,38 @@ export default function ProgressPage() {
           ? Math.max(0, ...e.rows.map(r => r.reps))
           : e.rows.reduce((a, r) => a + r.reps, 0)
       } else {
-        value = liftMetric === 'weight' ? Number(e.max_weight) : Number(e.volume)
+        if (liftMetric === 'e1rm') {
+          const best = Math.max(0, ...e.rows.map(r => r.weight * (1 + r.reps / 30)))
+          value = Math.round(best * 10) / 10
+        } else if (liftMetric === 'topReps') {
+          const topW = Math.max(0, ...e.rows.map(r => r.weight))
+          value = Math.max(0, ...e.rows.filter(r => r.weight === topW).map(r => r.reps))
+          topWeight = topW
+        } else if (liftMetric === 'avgWeight') {
+          const working = e.rows.filter(r => r.weight > 0)
+          const sum = working.reduce((a, r) => a + r.weight, 0)
+          value = working.length > 0 ? Math.round((sum / working.length) * 10) / 10 : 0
+        } else {
+          value = liftMetric === 'weight' ? Number(e.max_weight) : Number(e.volume)
+        }
       }
-      return { date: e.date, value }
+      return { date: e.date, value, topWeight }
     }),
     [liftChartData, liftMetric, exerciseType]
   )
+
+  // PR markers — first occurrence of a new running max in the visible chart range
+  const liftPrIndices = useMemo(() => {
+    const idxs = new Set<number>()
+    let best = -Infinity
+    for (let i = 0; i < liftChartPts.length; i++) {
+      if (liftChartPts[i].value > best && liftChartPts[i].value > 0) {
+        best = liftChartPts[i].value
+        idxs.add(i)
+      }
+    }
+    return idxs
+  }, [liftChartPts])
   const liftPts = liftChartPts.map(p => p.value)
   const liftSvgPts = liftPts.length > 1 ? buildSvgPoints(liftPts) : null
   const peakWeight = liftHistory.length > 0 ? Math.max(...liftHistory.map(e => Number(e.max_weight))) : null
@@ -1595,7 +1625,9 @@ export default function ProgressPage() {
       {/* Lift metric toggle */}
       {tab === 'lifts' && liftHistory.length > 0 && (
         <div className="flex gap-2">
-          {(['weight', 'volume'] as const).map(m => (
+          {(['weight', 'volume', 'e1rm', 'topReps', 'avgWeight'] as const)
+            .filter(m => (m !== 'e1rm' && m !== 'topReps' && m !== 'avgWeight') || exerciseType === 'weights')
+            .map(m => (
             <button
               key={m}
               onClick={() => { fadeThen(() => setLiftMetric(m), 'chart'); setHoveredIdx(null) }}
@@ -1605,7 +1637,11 @@ export default function ProgressPage() {
             >
               {m === 'weight'
                 ? exerciseType === 'timed' ? 'Best duration' : exerciseType === 'bodyweight' ? 'Max reps' : 'Max weight'
-                : exerciseType === 'timed' ? 'Total duration' : exerciseType === 'bodyweight' ? 'Total reps' : 'Volume'}
+                : m === 'volume'
+                ? exerciseType === 'timed' ? 'Total duration' : exerciseType === 'bodyweight' ? 'Total reps' : 'Volume'
+                : m === 'e1rm' ? 'Est. 1RM'
+                : m === 'topReps' ? 'Reps at max'
+                : 'Avg weight'}
             </button>
           ))}
         </div>
@@ -1654,7 +1690,10 @@ export default function ProgressPage() {
         <div className="flex items-center justify-between">
           <h3 className="font-headline text-sm font-bold text-on-surface-variant">
             {tab === 'lifts'
-              ? liftMetric === 'weight'
+              ? liftMetric === 'e1rm' ? 'Estimated 1RM trend'
+                : liftMetric === 'topReps' ? 'Reps at max trend'
+                : liftMetric === 'avgWeight' ? 'Avg weight trend'
+                : liftMetric === 'weight'
                 ? exerciseType === 'timed' ? 'Duration trend' : exerciseType === 'bodyweight' ? 'Reps trend' : 'Max weight trend'
                 : exerciseType === 'timed' ? 'Total duration trend' : exerciseType === 'bodyweight' ? 'Total reps trend' : 'Volume trend'
               : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
@@ -1682,19 +1721,30 @@ export default function ProgressPage() {
           {tab === 'lifts' && liftPts.length > 0 && (() => {
             const idx = hoveredIdx ?? liftPeakIdx
             const pt = liftChartPts[idx]
+            const isPr = hoveredIdx !== null && liftPrIndices.has(hoveredIdx)
             return (
               <div className="absolute top-4 right-6 flex flex-col items-end">
+                {isPr && <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#ffd5c2] mb-0.5">★ New PR</span>}
                 <span className="text-3xl font-black font-headline text-primary-container leading-none">
                   {exerciseType === 'timed' ? fmtDuration(pt?.value ?? 0)
                     : liftMetric === 'volume' ? Math.round(pt?.value ?? 0).toLocaleString()
+                    : liftMetric === 'e1rm' ? (pt?.value ?? 0).toFixed(1)
+                    : liftMetric === 'topReps' ? Math.round(pt?.value ?? 0)
+                    : liftMetric === 'avgWeight' ? (pt?.value ?? 0).toFixed(1)
                     : pt?.value}
                 </span>
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
                   {hoveredIdx !== null ? formatDate(pt.date)
                     : exerciseType === 'timed' ? (liftMetric === 'weight' ? 'best' : 'total')
                     : exerciseType === 'bodyweight' ? (liftMetric === 'weight' ? 'reps peak' : 'reps total')
+                    : liftMetric === 'e1rm' ? 'kg e1rm peak'
+                    : liftMetric === 'topReps' ? 'reps at top weight'
+                    : liftMetric === 'avgWeight' ? 'kg avg peak'
                     : liftMetric === 'weight' ? 'kg peak' : 'kg vol peak'}
                 </span>
+                {liftMetric === 'topReps' && pt?.topWeight != null && (
+                  <span className="text-[10px] text-[#56423c] mt-0.5">@ {pt.topWeight}kg</span>
+                )}
               </div>
             )
           })()}
@@ -1755,6 +1805,17 @@ export default function ProgressPage() {
                   </defs>
                   <polyline points={liftSvgPts} fill="none" stroke="#ff9066" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                   <polygon points={`0,80 ${liftSvgPts} 300,80`} fill="url(#liftGrad)" />
+                  {/* PR markers — skip the very first point (always a "PR" trivially) */}
+                  {Array.from(liftPrIndices).filter(i => i > 0).map(i => {
+                    const x = (i / Math.max(liftPts.length - 1, 1)) * 300
+                    const y = ptY(liftPts, liftPts[i], false)
+                    return (
+                      <g key={`pr-${i}`}>
+                        <circle cx={x} cy={y} r="6" fill="#ff9066" fillOpacity="0.15" />
+                        <circle cx={x} cy={y} r="3" fill="#ffd5c2" stroke="#ff9066" strokeWidth="1.5" />
+                      </g>
+                    )
+                  })}
                   {hoveredIdx !== null && <>
                     <line x1={hX} y1={0} x2={hX} y2={100} stroke="#ff9066" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
                     <circle cx={hX} cy={hY} r="5" fill="#ff9066" />
