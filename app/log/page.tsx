@@ -1,13 +1,13 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
 import Onboarding, { shouldShowOnboarding } from '@/components/Onboarding'
-import { EXERCISES, CATEGORIES, type ExerciseCategory, type ExerciseType } from '@/lib/exercises'
+import ExercisePicker, { type ExerciseHint, type ExercisePR } from '@/components/ExercisePicker'
+import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
-type ExerciseHint = { exercise: string; last_weight: number; last_reps: number }
-type ExercisePR = { exercise: string; pr_weight: number; pr_reps: number; pr_duration: number | null; pr_volume: number; pr_reps_total: number; pr_duration_total: number | null; pr_e1rm: number | null }
 type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]; notes: string | null }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null; notes: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
@@ -189,180 +189,6 @@ function PrToast({ exercise, weight, onDone }: { exercise: string; weight: numbe
   )
 }
 
-// ── Exercise Picker Sheet ─────────────────────────────────────────────────────
-function ExercisePicker({
-  hints, starred, prs, isLbs, onSelect, onToggleStar, onClose, exerciseType, multiSelect, onMultiSelect,
-}: {
-  hints: ExerciseHint[]
-  starred: Set<string>
-  prs?: Map<string, ExercisePR>
-  isLbs?: boolean
-  onSelect: (name: string, hint?: ExerciseHint) => void
-  onToggleStar: (name: string) => void
-  onClose: () => void
-  exerciseType?: ExerciseType
-  multiSelect?: boolean
-  onMultiSelect?: (names: string[]) => void
-}) {
-  const [search, setSearch] = useState('')
-  const [filterCat, setFilterCat] = useState<ExerciseCategory | null>(null)
-  const [selected, setSelected] = useState<string[]>([])
-
-  const hintMap = useMemo(() => {
-    const m = new Map<string, ExerciseHint>()
-    for (const h of hints) m.set(h.exercise, h)
-    return m
-  }, [hints])
-
-  const weightLabel = isLbs ? 'lbs' : 'kg'
-  const toDisplay = (kg: number) => isLbs ? Math.round(kg * 2.20462 * 10) / 10 : kg
-
-  const q = search.toLowerCase()
-  const filtered = useMemo(() => {
-    let list = EXERCISES
-    if (exerciseType) list = list.filter(e => e.type === exerciseType)
-    if (filterCat) list = list.filter(e => e.category === filterCat)
-    if (q) list = list.filter(e => e.name.toLowerCase().includes(q))
-    return list
-  }, [q, filterCat, exerciseType])
-
-  const availableCategories = useMemo(() => {
-    if (!exerciseType) return CATEGORIES
-    return CATEGORIES.filter(cat => EXERCISES.some(e => e.type === exerciseType && e.category === cat))
-  }, [exerciseType])
-
-  const starredList = useMemo(() => filtered.filter(e => starred.has(e.name)), [filtered, starred])
-  const unstarredList = useMemo(() => filtered.filter(e => !starred.has(e.name)), [filtered, starred])
-
-  const renderRow = (name: string) => {
-    const hint = hintMap.get(name)
-    const pr = prs?.get(name)
-    const isStarred = starred.has(name)
-    const isSelected = multiSelect && selected.includes(name)
-    const selIdx = multiSelect ? selected.indexOf(name) : -1
-    return (
-      <div key={name} className="flex items-center">
-        <button
-          onClick={() => {
-            if (multiSelect) {
-              setSelected(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])
-            } else {
-              onSelect(name, hint)
-            }
-          }}
-          className={`flex-1 flex items-center justify-between py-3 px-4 hover:bg-[#2a2a2a] active:bg-[#353534] transition-colors text-left rounded-xl ${isSelected ? 'bg-[#ff9066]/10' : ''}`}
-        >
-          <div className="flex items-center gap-3">
-            {multiSelect && (
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors ${isSelected ? 'bg-[#ff9066] border-[#ff9066] text-[#752805]' : 'border-[#56423c]'}`}>
-                {isSelected && selIdx + 1}
-              </div>
-            )}
-            <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
-          </div>
-          {!multiSelect && (pr || hint) && <span className="text-[10px] text-[#a48b83]">{
-            (() => {
-              const ex = EXERCISES.find(e => e.name === name)
-              if (pr && pr.pr_weight > 0) {
-                if (ex?.type === 'timed') { const d = pr.pr_duration ?? 0; return `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')} PR` }
-                if (ex?.type === 'bodyweight') return pr.pr_weight > 0 ? `${toDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps} PR` : `${pr.pr_reps} reps PR`
-                return `${toDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps} PR`
-              }
-              if (hint) {
-                if (ex?.type === 'timed') return `${Math.floor(hint.last_reps / 60)}:${String(hint.last_reps % 60).padStart(2, '0')}`
-                if (ex?.type === 'bodyweight') return hint.last_weight > 0 ? `${toDisplay(hint.last_weight)} ${weightLabel} × ${hint.last_reps}` : `${hint.last_reps} reps`
-                return `${toDisplay(hint.last_weight)} ${weightLabel} × ${hint.last_reps}`
-              }
-            })()
-          }</span>}
-        </button>
-        {!multiSelect && (
-          <button onClick={() => onToggleStar(name)} className="p-2 shrink-0">
-            <span
-              className={`material-symbols-outlined text-lg ${isStarred ? 'text-[#ff9066]' : 'text-[#56423c]'}`}
-              style={{ fontVariationSettings: isStarred ? "'FILL' 1" : "'FILL' 0" }}
-            >star</span>
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-[#131313] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up">
-        <div className="px-5 pt-5 pb-3 border-b border-[#201f1f]">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-headline text-lg font-bold">Choose exercise</h2>
-            <button onClick={onClose}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
-          </div>
-          <div className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-3 py-2.5">
-            <span className="material-symbols-outlined text-[#a48b83] text-lg">search</span>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search exercises…"
-              className="flex-1 bg-transparent outline-none text-sm text-[#e5e2e1] placeholder:text-[#56423c]"
-            />
-            {search && <button onClick={() => setSearch('')}><span className="material-symbols-outlined text-[#a48b83] text-sm">close</span></button>}
-          </div>
-          <div className="flex gap-1.5 mt-3 overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setFilterCat(null)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${!filterCat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
-            >All</button>
-            {availableCategories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setFilterCat(filterCat === cat ? null : cat)}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${filterCat === cat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
-              >{cat}</button>
-            ))}
-          </div>
-        </div>
-        <div className={`flex-1 overflow-y-auto px-2 ${multiSelect && selected.length > 0 ? 'pb-24' : 'pb-32 md:pb-8'}`}>
-          {starredList.length > 0 && (
-            <>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#ff9066] px-4 pt-4 pb-1">Starred</p>
-              {starredList.map(e => renderRow(e.name))}
-            </>
-          )}
-          {unstarredList.length > 0 && (
-            <>
-              {starredList.length > 0 && <div className="mx-4 my-2 border-t border-[#201f1f]" />}
-              {!search && !filterCat
-                ? CATEGORIES.filter(cat => unstarredList.some(e => e.category === cat)).map(cat => (
-                    <div key={cat}>
-                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-4 pt-4 pb-1">{cat}</p>
-                      {unstarredList.filter(e => e.category === cat).map(e => renderRow(e.name))}
-                    </div>
-                  ))
-                : unstarredList.map(e => renderRow(e.name))
-              }
-            </>
-          )}
-          {filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <span className="material-symbols-outlined text-4xl text-[#353534] mb-3">search_off</span>
-              <p className="text-sm text-[#a48b83]">No exercises match &ldquo;{search}&rdquo;</p>
-            </div>
-          )}
-        </div>
-        {multiSelect && selected.length > 0 && (
-          <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-[#131313] via-[#131313] to-transparent pt-8">
-            <button
-              onClick={() => { onMultiSelect?.(selected); onClose() }}
-              className="w-full py-4 bg-[#ff9066] text-[#752805] rounded-2xl font-headline font-bold text-sm active:scale-95 transition-transform"
-            >
-              Add {selected.length} exercise{selected.length !== 1 ? 's' : ''}
-            </button>
-          </div>
-        )}
-      </div>
-    </>
-  )
-}
 
 // ── Cardio type picker sheet ──────────────────────────────────────────────────
 function CardioPicker({ onSelect, onClose }: {
@@ -650,6 +476,8 @@ export default function LogPage() {
   // Unit preference + notes
   const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
   const [sessionNotes, setSessionNotes] = useState('')
+  const [notesTarget, setNotesTarget] = useState<'session' | 'block' | null>(null)
+  const [notesDraft, setNotesDraft] = useState('')
   const [blockNotes, setBlockNotes] = useState('')
   const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -1093,6 +921,46 @@ export default function LogPage() {
     })
   }
 
+  // Notes editor — portaled to body so it overlays whichever view is active
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const notesEditorPortal = notesTarget && mounted ? createPortal(
+    <>
+      <div className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm" onClick={() => setNotesTarget(null)} />
+      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[71] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] animate-slide-up">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-headline text-base font-bold">{notesTarget === 'session' ? 'Note for today' : 'Note for this exercise'}</h3>
+          <button onClick={() => setNotesTarget(null)}>
+            <span className="material-symbols-outlined text-[#a48b83]">close</span>
+          </button>
+        </div>
+        <textarea
+          value={notesDraft}
+          onChange={e => setNotesDraft(e.target.value)}
+          placeholder={notesTarget === 'session' ? 'How did the session feel? Anything to remember…' : 'Form cues, RPE, anything to remember…'}
+          rows={6}
+          autoFocus
+          className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-sm text-[#e5e2e1] placeholder:text-[#56423c] resize-none outline-none focus:ring-1 focus:ring-[#ff9066]/30"
+        />
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setNotesTarget(null)}
+            className="flex-1 py-3 rounded-xl bg-[#201f1f] text-sm font-headline font-bold text-[#a48b83]"
+          >Cancel</button>
+          <button
+            onClick={() => {
+              if (notesTarget === 'session') { setSessionNotes(notesDraft); saveSessionNotes(notesDraft) }
+              else { setBlockNotes(notesDraft) }
+              setNotesTarget(null)
+            }}
+            className="flex-1 py-3 rounded-xl bg-[#ff9066] text-[#752805] text-sm font-headline font-bold"
+          >Save</button>
+        </div>
+      </div>
+    </>,
+    document.body
+  ) : null
+
   // ── List view ───────────────────────────────────────────────────────────────
   if (view.type === 'list') {
     return (
@@ -1135,6 +1003,8 @@ export default function LogPage() {
         {showCardioPicker && (
           <CardioPicker onSelect={startCardio} onClose={() => setShowCardioPicker(false)} />
         )}
+
+        {notesEditorPortal}
 
         {/* Routine Picker */}
         {showRoutinePicker && (
@@ -1363,15 +1233,18 @@ export default function LogPage() {
 
         {/* Session notes */}
         {!browsedDate && (
-          <div className="mb-4">
-            <textarea
-              value={sessionNotes}
-              onChange={e => { setSessionNotes(e.target.value); saveSessionNotes(e.target.value) }}
-              placeholder="Add a note for today…"
-              rows={sessionNotes ? 2 : 1}
-              className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none focus:ring-1 focus:ring-[#ff9066]/20 transition-all"
-            />
-          </div>
+          <button
+            onClick={() => { setNotesDraft(sessionNotes); setNotesTarget('session') }}
+            className="w-full mb-4 bg-[#201f1f] rounded-xl px-4 py-3 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+          >
+            <span className="material-symbols-outlined text-[#a48b83] text-lg shrink-0">{sessionNotes ? 'sticky_note_2' : 'add_notes'}</span>
+            {sessionNotes ? (
+              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{sessionNotes}</p>
+            ) : (
+              <span className="text-sm text-[#56423c] flex-1">Add a note for today…</span>
+            )}
+            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0">edit</span>
+          </button>
         )}
         {browsedDate && sessionNotes && (
           <div className="mb-4 bg-[#201f1f] rounded-xl px-4 py-3">
@@ -1650,6 +1523,7 @@ export default function LogPage() {
         )}
 
         <BottomNav />
+        {notesEditorPortal}
       </main>
     )
   }
@@ -1891,13 +1765,19 @@ export default function LogPage() {
 
         {/* Block notes + Save */}
         <div className="px-4 pb-8 pt-4">
-          <textarea
-            value={blockNotes}
-            onChange={e => setBlockNotes(e.target.value)}
-            placeholder="Notes about this workout…"
-            rows={blockNotes ? 2 : 1}
-            className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
-          />
+          <button
+            type="button"
+            onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
+            className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+          >
+            <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
+            {blockNotes ? (
+              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
+            ) : (
+              <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+            )}
+            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
+          </button>
           <div className="flex gap-2">
           {activeRoutine && (
             <button
@@ -1918,6 +1798,7 @@ export default function LogPage() {
         </div>
 
         <BottomNav />
+        {notesEditorPortal}
       </main>
     )
   }
@@ -2078,13 +1959,19 @@ export default function LogPage() {
         </div>
 
         <div className="px-4 pb-8 pt-4">
-          <textarea
-            value={blockNotes}
-            onChange={e => setBlockNotes(e.target.value)}
-            placeholder="Notes about this workout…"
-            rows={blockNotes ? 2 : 1}
-            className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
-          />
+          <button
+            type="button"
+            onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
+            className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+          >
+            <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
+            {blockNotes ? (
+              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
+            ) : (
+              <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+            )}
+            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
+          </button>
           <div className="flex gap-2">
           {activeRoutine && (
             <button onClick={skipRoutineExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
@@ -2100,6 +1987,7 @@ export default function LogPage() {
         </div>
 
         <BottomNav />
+        {notesEditorPortal}
       </main>
     )
   }
@@ -2248,13 +2136,19 @@ export default function LogPage() {
         </div>
 
         <div className="px-4 pb-8 pt-4">
-          <textarea
-            value={blockNotes}
-            onChange={e => setBlockNotes(e.target.value)}
-            placeholder="Notes about this workout…"
-            rows={blockNotes ? 2 : 1}
-            className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
-          />
+          <button
+            type="button"
+            onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
+            className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+          >
+            <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
+            {blockNotes ? (
+              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
+            ) : (
+              <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+            )}
+            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
+          </button>
           <div className="flex gap-2">
           {activeRoutine && (
             <button onClick={skipRoutineExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
@@ -2270,6 +2164,7 @@ export default function LogPage() {
         </div>
 
         <BottomNav />
+        {notesEditorPortal}
       </main>
     )
   }
@@ -2352,13 +2247,19 @@ export default function LogPage() {
       </div>
 
       <div className="px-4 pb-8 pt-4">
-        <textarea
-          value={blockNotes}
-          onChange={e => setBlockNotes(e.target.value)}
-          placeholder="Notes about this workout…"
-          rows={blockNotes ? 2 : 1}
-          className="w-full bg-[#201f1f] rounded-xl px-4 py-2.5 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3 transition-all"
-        />
+        <button
+          type="button"
+          onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
+          className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+        >
+          <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
+          {blockNotes ? (
+            <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
+          ) : (
+            <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+          )}
+          <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
+        </button>
         <button
           onClick={saveCardio}
           disabled={saving}
@@ -2369,6 +2270,7 @@ export default function LogPage() {
       </div>
 
       <BottomNav />
+      {notesEditorPortal}
     </main>
   )
 }

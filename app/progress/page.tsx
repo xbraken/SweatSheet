@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
+import ExercisePicker, { type ExerciseHint } from '@/components/ExercisePicker'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 
 function getExerciseType(name: string): ExerciseType {
@@ -1020,40 +1021,42 @@ function RunDetailSheet({
 
 export default function ProgressPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'lifts' | 'cardio'>(() =>
-    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_tab') as 'lifts' | 'cardio') || 'lifts'
-  )
+  const [tab, setTab] = useState<'lifts' | 'cardio'>('lifts')
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('ss_prog_tab') : null
+    if (saved === 'lifts' || saved === 'cardio') setTab(saved)
+  }, [])
   const [exercise, setExercise] = useState('')
   const exerciseType = useMemo(() => exercise ? getExerciseType(exercise) : 'weights', [exercise])
   const [open, setOpen] = useState(false)
-  const [exerciseSearch, setExerciseSearch] = useState('')
   const [cardioOpen, setCardioOpen] = useState(false)
   const [exercises, setExercises] = useState<string[]>([])
+  const [pickerHints, setPickerHints] = useState<ExerciseHint[]>([])
+  const [starred, setStarred] = useState<Set<string>>(new Set())
   const [liftHistory, setLiftHistory] = useState<LiftEntry[]>([])
   const [cardioHistory, setCardioHistory] = useState<CardioEntry[]>([])
   const [cardioActivity, setCardioActivity] = useState('')
   const [runSubFilter, setRunSubFilter] = useState<'all' | 'interval' | 'run'>('all')
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(true)
-  const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>(() =>
-    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_cardio_metric') as 'pace' | 'distance') || 'pace'
-  )
+  const [cardioMetric, setCardioMetric] = useState<'pace' | 'distance'>('pace')
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
-  const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>(() =>
-    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_lift_sort') as 'date' | 'weight' | 'volume') || 'date'
-  )
-  const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>(() =>
-    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_cardio_sort') as 'date' | 'distance' | 'pace') || 'date'
-  )
+  const [liftSort, setLiftSort] = useState<'date' | 'weight' | 'volume'>('date')
+  const [cardioSort, setCardioSort] = useState<'date' | 'distance' | 'pace'>('date')
   const [calMonthOffset, setCalMonthOffset] = useState(0)
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-  const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>(() =>
-    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_range') as 'week' | 'month' | 'year' | 'all') || 'all'
-  )
-  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume'>(() =>
-    (typeof localStorage !== 'undefined' && localStorage.getItem('ss_prog_lift_metric') as 'weight' | 'volume') || 'weight'
-  )
+  const [chartRange, setChartRange] = useState<'week' | 'month' | 'year' | 'all'>('all')
+  const [liftMetric, setLiftMetric] = useState<'weight' | 'volume'>('weight')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const ls = window.localStorage
+    const cm = ls.getItem('ss_prog_cardio_metric'); if (cm === 'pace' || cm === 'distance') setCardioMetric(cm)
+    const lsort = ls.getItem('ss_prog_lift_sort'); if (lsort === 'date' || lsort === 'weight' || lsort === 'volume') setLiftSort(lsort)
+    const csort = ls.getItem('ss_prog_cardio_sort'); if (csort === 'date' || csort === 'distance' || csort === 'pace') setCardioSort(csort)
+    const cr = ls.getItem('ss_prog_range'); if (cr === 'week' || cr === 'month' || cr === 'year' || cr === 'all') setChartRange(cr)
+    const lm = ls.getItem('ss_prog_lift_metric'); if (lm === 'weight' || lm === 'volume') setLiftMetric(lm)
+  }, [])
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
@@ -1139,6 +1142,27 @@ export default function ProgressPage() {
       }
       setLoading(false)
     }).catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/exercises').then(r => r.json()).then(data => {
+      if (Array.isArray(data.history)) setPickerHints(data.history)
+      if (Array.isArray(data.starred)) setStarred(new Set(data.starred))
+    }).catch(() => {})
+  }, [])
+
+  const toggleStar = useCallback((exercise: string) => {
+    setStarred(prev => {
+      const next = new Set(prev)
+      if (next.has(exercise)) {
+        next.delete(exercise)
+        fetch('/api/exercises/starred', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exercise }) })
+      } else {
+        next.add(exercise)
+        fetch('/api/exercises/starred', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exercise }) })
+      }
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -1502,7 +1526,7 @@ export default function ProgressPage() {
         {tab === 'lifts' && exercises.length > 0 && (
           <>
             <div
-              onClick={() => { setExerciseSearch(''); setOpen(true) }}
+              onClick={() => setOpen(true)}
               className="bg-surface-container-low p-4 flex justify-between items-center rounded-xl cursor-pointer hover:bg-surface-container-high transition-colors"
             >
               <div>
@@ -1512,43 +1536,14 @@ export default function ProgressPage() {
               <span className="material-symbols-outlined text-primary">expand_more</span>
             </div>
             {open && (
-              <div className="fixed inset-0 z-50 flex flex-col bg-[#111] pt-safe animate-fade-in">
-                <div className="flex items-center gap-3 px-4 py-4 border-b border-outline-variant/20">
-                  <button onClick={() => setOpen(false)} className="text-on-surface-variant">
-                    <span className="material-symbols-outlined">arrow_back</span>
-                  </button>
-                  <div className="flex-1 flex items-center gap-2 bg-surface-container px-3 py-2 rounded-xl">
-                    <span className="material-symbols-outlined text-on-surface-variant text-xl">search</span>
-                    <input
-                      type="text"
-                      placeholder="Search exercises…"
-                      value={exerciseSearch}
-                      onChange={e => setExerciseSearch(e.target.value)}
-                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-on-surface-variant"
-                    />
-                    {exerciseSearch && (
-                      <button onClick={() => setExerciseSearch('')} className="text-on-surface-variant">
-                        <span className="material-symbols-outlined text-xl">close</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="overflow-y-auto flex-1">
-                  {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).map(ex => (
-                    <button
-                      key={ex}
-                      onClick={() => { setExercise(ex); setOpen(false) }}
-                      className={`w-full px-4 py-4 text-left font-body transition-colors flex items-center justify-between border-b border-outline-variant/10 ${ex === exercise ? 'text-primary' : ''}`}
-                    >
-                      <span>{ex}</span>
-                      {ex === exercise && <span className="material-symbols-outlined text-primary text-xl">check</span>}
-                    </button>
-                  ))}
-                  {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).length === 0 && (
-                    <p className="text-center text-on-surface-variant text-sm py-8">No exercises match</p>
-                  )}
-                </div>
-              </div>
+              <ExercisePicker
+                hints={pickerHints}
+                starred={starred}
+                onSelect={(name) => { setExercise(name); setOpen(false) }}
+                onToggleStar={toggleStar}
+                onClose={() => setOpen(false)}
+                restrictTo={exercises}
+              />
             )}
           </>
         )}

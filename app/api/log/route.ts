@@ -80,10 +80,11 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ rows: [] }),
     includeAll
       ? db.execute({
-          sql: `SELECT exercise, last_weight, last_reps FROM (
+          sql: `SELECT exercise, last_weight, last_reps, last_date FROM (
                   SELECT st.exercise,
                     st.weight as last_weight,
                     st.reps as last_reps,
+                    s.date as last_date,
                     ROW_NUMBER() OVER (PARTITION BY st.exercise ORDER BY s.date DESC, b.id DESC, st.id DESC) as rn
                   FROM sets st
                   JOIN blocks b ON st.block_id = b.id
