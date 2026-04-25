@@ -9,23 +9,24 @@ jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Turso CLI
-        run: curl -sSfL https://get.tur.so/install.sh | bash
+      - uses: actions/checkout@v4
 
-      - name: Authenticate Turso
-        env:
-          TURSO_API_TOKEN: ${{ secrets.TURSO_API_TOKEN }}
-        run: |
-          mkdir -p "$HOME/.config/turso"
-          printf '{"token":"%s"}' "$TURSO_API_TOKEN" > "$HOME/.config/turso/settings.json"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
 
       - name: Dump database
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: |
-          export PATH="$HOME/.turso:$PATH"
           mkdir -p backups
           STAMP=$(date -u +%Y-%m-%d)
-          turso db shell sweatsheet-restore ".dump" > "backups/sweatsheet-${STAMP}.sql"
-          # Sanity check — abort if dump looks empty / errored
+          node scripts/backup.mjs > "backups/sweatsheet-${STAMP}.sql"
           if ! grep -q "CREATE TABLE" "backups/sweatsheet-${STAMP}.sql"; then
             echo "Dump failed — content:"
             cat "backups/sweatsheet-${STAMP}.sql"
