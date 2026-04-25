@@ -2096,7 +2096,7 @@ export default function ProgressPage() {
 
 
         <div style={{ opacity: listAlpha, transition: listFadingOut.current ? 'opacity 0.12s ease-in-out' : 'none' }} className="flex flex-col gap-[0.35rem]">
-          {tab === 'body' ? null : tab === 'lifts' ? (
+          {tab === 'lifts' ? (
             sortedLifts.length > 0 ? (
               sortedLifts.slice(0, visibleCount).map((s, i) => {
                 const isPb = s.date === pbDate
@@ -2254,7 +2254,7 @@ export default function ProgressPage() {
               !loading && <p className="text-sm text-on-surface-variant text-center py-4">No cardio history yet</p>
             )
           )}
-          {!loading && tab !== 'body' && (() => {
+          {!loading && (() => {
             const total = tab === 'lifts' ? sortedLifts.length : sortedCardio.length
             return total > visibleCount ? (
               <button
