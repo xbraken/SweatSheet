@@ -1512,7 +1512,7 @@ export default function ProgressPage() {
               <span className="material-symbols-outlined text-primary">expand_more</span>
             </div>
             {open && (
-              <div className="fixed inset-0 z-50 flex flex-col bg-[#111] pt-safe">
+              <div className="fixed inset-0 z-50 flex flex-col bg-[#111] pt-safe animate-fade-in">
                 <div className="flex items-center gap-3 px-4 py-4 border-b border-outline-variant/20">
                   <button onClick={() => setOpen(false)} className="text-on-surface-variant">
                     <span className="material-symbols-outlined">arrow_back</span>
