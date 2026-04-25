@@ -1026,6 +1026,7 @@ export default function ProgressPage() {
   const [exercise, setExercise] = useState('')
   const exerciseType = useMemo(() => exercise ? getExerciseType(exercise) : 'weights', [exercise])
   const [open, setOpen] = useState(false)
+  const [exerciseSearch, setExerciseSearch] = useState('')
   const [cardioOpen, setCardioOpen] = useState(false)
   const [exercises, setExercises] = useState<string[]>([])
   const [liftHistory, setLiftHistory] = useState<LiftEntry[]>([])
@@ -1499,9 +1500,9 @@ export default function ProgressPage() {
         </div>
 
         {tab === 'lifts' && exercises.length > 0 && (
-          <div className="relative">
+          <>
             <div
-              onClick={() => setOpen(o => !o)}
+              onClick={() => { setExerciseSearch(''); setOpen(true) }}
               className="bg-surface-container-low p-4 flex justify-between items-center rounded-xl cursor-pointer hover:bg-surface-container-high transition-colors"
             >
               <div>
@@ -1511,19 +1512,46 @@ export default function ProgressPage() {
               <span className="material-symbols-outlined text-primary">expand_more</span>
             </div>
             {open && (
-              <div className="absolute top-full left-0 right-0 bg-surface-container-high rounded-xl mt-1 z-10 border border-outline-variant/20 overflow-hidden">
-                {exercises.map(ex => (
-                  <button
-                    key={ex}
-                    onClick={() => { setExercise(ex); setOpen(false) }}
-                    className="w-full px-4 py-3 text-left font-body hover:bg-surface-container-highest transition-colors"
-                  >
-                    {ex}
-                  </button>
-                ))}
+              <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setOpen(false)}>
+                <div className="bg-surface-container-high rounded-t-2xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-outline-variant/20">
+                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-primary-container mb-3">Select exercise</p>
+                    <div className="flex items-center gap-2 bg-surface-container px-3 py-2 rounded-xl">
+                      <span className="material-symbols-outlined text-on-surface-variant text-xl">search</span>
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Search exercises…"
+                        value={exerciseSearch}
+                        onChange={e => setExerciseSearch(e.target.value)}
+                        className="flex-1 bg-transparent text-sm outline-none placeholder:text-on-surface-variant"
+                      />
+                      {exerciseSearch && (
+                        <button onClick={() => setExerciseSearch('')} className="text-on-surface-variant">
+                          <span className="material-symbols-outlined text-xl">close</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).map(ex => (
+                      <button
+                        key={ex}
+                        onClick={() => { setExercise(ex); setOpen(false) }}
+                        className={`w-full px-4 py-3 text-left font-body transition-colors flex items-center justify-between ${ex === exercise ? 'text-primary' : 'hover:bg-surface-container-highest'}`}
+                      >
+                        <span>{ex}</span>
+                        {ex === exercise && <span className="material-symbols-outlined text-primary text-xl">check</span>}
+                      </button>
+                    ))}
+                    {exercises.filter(ex => ex.toLowerCase().includes(exerciseSearch.toLowerCase())).length === 0 && (
+                      <p className="text-center text-on-surface-variant text-sm py-8">No exercises match</p>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
-          </div>
+          </>
         )}
 
         {tab === 'lifts' && !loading && exercises.length === 0 && (
