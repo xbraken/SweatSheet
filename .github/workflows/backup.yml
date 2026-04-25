@@ -1,0 +1,31 @@
+name: Daily Turso backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 03:00 UTC daily
+  workflow_dispatch:       # allow manual runs
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Turso CLI
+        run: curl -sSfL https://get.tur.so/install.sh | bash
+
+      - name: Dump database
+        env:
+          TURSO_API_TOKEN: ${{ secrets.TURSO_API_TOKEN }}
+        run: |
+          export PATH="$HOME/.turso:$PATH"
+          mkdir -p backups
+          STAMP=$(date -u +%Y-%m-%d)
+          turso db shell sweatsheet-restore ".dump" > "backups/sweatsheet-${STAMP}.sql"
+          gzip "backups/sweatsheet-${STAMP}.sql"
+          ls -lh backups/
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweatsheet-backup-${{ github.run_id }}
+          path: backups/*.sql.gz
+          retention-days: 90
