@@ -87,8 +87,9 @@ function dayKeyStat(g: DayGroup): { value: string; className: string } {
     return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`, className: 'text-[#4bdece]' }
   }
   if (g.cardio) {
+    const totalDist = g.cardio.reduce((sum, c) => sum + (Number(c.distance) || 0), 0)
+    if (totalDist > 0) return { value: `${totalDist.toFixed(1)} km`, className: 'text-[#ff9066]' }
     const c = g.cardio[0]
-    if (c?.distance && Number(c.distance) > 0) return { value: `${Number(c.distance).toFixed(1)} km`, className: 'text-[#ff9066]' }
     if (c?.duration) return { value: c.duration, className: 'text-[#ff9066]' }
   }
   return { value: '—', className: 'text-[#a48b83]' }
