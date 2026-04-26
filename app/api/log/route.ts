@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
                    JOIN blocks b2 ON st2.block_id = b2.id
                    JOIN sessions s2 ON b2.session_id = s2.id
                    WHERE st2.exercise = p.exercise AND st2.weight = p.pr_weight AND s2.user_id = ?
-                   ORDER BY st2.id DESC LIMIT 1) as pr_reps,
+                   ORDER BY st2.reps DESC LIMIT 1) as pr_reps,
                   p.pr_duration, p.pr_volume, p.pr_reps_total, p.pr_duration_total, p.pr_e1rm
                 FROM (
                   SELECT exercise, MAX(weight) as pr_weight, MAX(duration_secs) as pr_duration, MAX(session_vol) as pr_volume, MAX(session_reps) as pr_reps_total, MAX(session_dur) as pr_duration_total, MAX(set_e1rm) as pr_e1rm
