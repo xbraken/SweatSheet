@@ -105,6 +105,53 @@ async function resizeAvatar(file: File): Promise<string> {
   })
 }
 
+function WorkoutCalendar({ workoutDates, today }: { workoutDates: Set<string>; today: string }) {
+  const [month, setMonth] = useState(() => new Date(today + 'T12:00:00'))
+  const year = month.getFullYear()
+  const m = month.getMonth()
+  const firstDay = (new Date(year, m, 1).getDay() + 6) % 7 // Mon-start
+  const daysInMonth = new Date(year, m + 1, 0).getDate()
+  const isCurrentMonth = year === new Date(today).getFullYear() && m === new Date(today).getMonth()
+
+  return (
+    <div className="bg-[#1c1b1b] rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-7 h-7 flex items-center justify-center text-[#a48b83] active:opacity-60">
+          <span className="material-symbols-outlined text-lg">chevron_left</span>
+        </button>
+        <p className="font-headline font-bold text-sm text-[#e5e2e1]">
+          {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+        </p>
+        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} disabled={isCurrentMonth} className="w-7 h-7 flex items-center justify-center text-[#a48b83] disabled:opacity-20 active:opacity-60">
+          <span className="material-symbols-outlined text-lg">chevron_right</span>
+        </button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {['M','T','W','T','F','S','S'].map((d, i) => (
+          <div key={i} className="text-center text-[10px] font-bold font-label text-[#56423c]">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-y-1">
+        {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const day = i + 1
+          const date = `${year}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const hasWorkout = workoutDates.has(date)
+          const isToday = date === today
+          return (
+            <div key={date} className="flex flex-col items-center justify-center py-1">
+              <div className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold
+                ${isToday ? 'bg-[#ff9066]/20 text-[#ff9066]' : hasWorkout ? 'bg-[#ff9066] text-[#5b1b00]' : 'text-[#353534]'}`}>
+                {day}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function BwSparkline({ data }: { data: { date: string; weight_kg: number }[] }) {
   const W = 260, H = 52
   if (data.length < 2) return null
@@ -248,6 +295,9 @@ export default function ProfilePage() {
     return allDayGroups.filter(g => new Date(g.date + 'T12:00:00') >= cutoff)
   }, [allDayGroups, filter])
 
+  const today = new Date().toISOString().split('T')[0]
+  const workoutDates = useMemo(() => new Set(sessions.map(s => s.date)), [sessions])
+
   async function shareDay(g: DayGroup) {
     const url = `${window.location.origin}/w/${encodeURIComponent(username)}/${g.date}`
     if (navigator.share) {
@@ -314,6 +364,9 @@ export default function ProfilePage() {
                 </button>
               ))}
             </div>
+
+            {/* Workout calendar */}
+            <WorkoutCalendar workoutDates={workoutDates} today={today} />
 
             {/* Body weight sparkline */}
             <BwSparkline data={bwHistory} />
