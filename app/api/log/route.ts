@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
             FROM sessions s
             JOIN blocks b ON b.session_id = s.id
             LEFT JOIN sets st ON st.block_id = b.id AND b.type = 'lift'
-            LEFT JOIN cardio c ON c.block_id = b.id AND b.type = 'cardio'
+            LEFT JOIN cardio c ON c.block_id = b.id AND b.type != 'lift'
             WHERE s.user_id = ? AND s.date < ?
             ORDER BY s.date DESC, b.id ASC, st.position ASC
             LIMIT 80`,
@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Cardio
       const { activity, distance, time, pace, notes } = body
-      const blockType = activity === 'Cycling' ? 'cycle' : activity === 'Walking' ? 'run' : 'cardio'
+      const blockType = activity === 'Cycling' ? 'cycle' : 'run'
 
       const blockRes = await db.execute({
         sql: 'INSERT INTO blocks (session_id, type, position, notes) VALUES (?, ?, ?, ?) RETURNING id',
