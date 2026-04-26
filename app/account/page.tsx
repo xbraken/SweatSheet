@@ -114,24 +114,24 @@ function WorkoutCalendar({ workoutDates, today }: { workoutDates: Set<string>; t
   const isCurrentMonth = year === new Date(today).getFullYear() && m === new Date(today).getMonth()
 
   return (
-    <div className="bg-[#1c1b1b] rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-7 h-7 flex items-center justify-center text-[#a48b83] active:opacity-60">
-          <span className="material-symbols-outlined text-lg">chevron_left</span>
+    <div className="bg-[#1c1b1b] rounded-2xl px-3 py-3 mb-3">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-6 h-6 flex items-center justify-center text-[#a48b83] active:opacity-60">
+          <span className="material-symbols-outlined text-base">chevron_left</span>
         </button>
-        <p className="font-headline font-bold text-sm text-[#e5e2e1]">
+        <p className="font-headline font-bold text-xs text-[#e5e2e1]">
           {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
         </p>
-        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} disabled={isCurrentMonth} className="w-7 h-7 flex items-center justify-center text-[#a48b83] disabled:opacity-20 active:opacity-60">
-          <span className="material-symbols-outlined text-lg">chevron_right</span>
+        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} disabled={isCurrentMonth} className="w-6 h-6 flex items-center justify-center text-[#a48b83] disabled:opacity-20 active:opacity-60">
+          <span className="material-symbols-outlined text-base">chevron_right</span>
         </button>
       </div>
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 mb-0.5">
         {['M','T','W','T','F','S','S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] font-bold font-label text-[#56423c]">{d}</div>
+          <div key={i} className="text-center text-[9px] font-bold font-label text-[#56423c]">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-y-1">
+      <div className="grid grid-cols-7">
         {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
         {Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1
@@ -139,8 +139,8 @@ function WorkoutCalendar({ workoutDates, today }: { workoutDates: Set<string>; t
           const hasWorkout = workoutDates.has(date)
           const isToday = date === today
           return (
-            <div key={date} className="flex flex-col items-center justify-center py-1">
-              <div className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold
+            <div key={date} className="flex items-center justify-center py-0.5">
+              <div className={`w-6 h-6 flex items-center justify-center rounded-full text-[10px] font-bold
                 ${isToday ? 'bg-[#ff9066]/20 text-[#ff9066]' : hasWorkout ? 'bg-[#ff9066] text-[#5b1b00]' : 'text-[#353534]'}`}>
                 {day}
               </div>
