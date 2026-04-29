@@ -201,6 +201,8 @@ function CardioPicker({ onSelect, onClose }: {
     { label: 'Cycling', icon: 'directions_bike' },
     { label: 'Interval run', icon: 'directions_run' },
   ]
+  const [customMode, setCustomMode] = useState(false)
+  const [customName, setCustomName] = useState('')
   const dragY = useRef(0)
   const dragDelta = useRef(0)
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -280,6 +282,40 @@ function CardioPicker({ onSelect, onClose }: {
               <span className="font-headline font-bold text-[#e5e2e1]">{o.label}</span>
             </button>
           ))}
+          {customMode ? (
+            <div className="flex items-center gap-2 p-4 bg-[#201f1f] rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-[#4bdece]/10 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[#4bdece]">sports</span>
+              </div>
+              <input
+                autoFocus
+                type="text"
+                placeholder="e.g. SkiErg, Rowing…"
+                value={customName}
+                onChange={e => setCustomName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && customName.trim()) { onSelect(customName.trim()); onClose() } }}
+                className="flex-1 bg-transparent font-headline font-bold text-[#e5e2e1] outline-none placeholder:text-[#56423c]"
+              />
+              {customName.trim() && (
+                <button
+                  onClick={() => { onSelect(customName.trim()); onClose() }}
+                  className="text-[#4bdece] active:opacity-60"
+                >
+                  <span className="material-symbols-outlined">arrow_forward</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setCustomMode(true)}
+              className="flex items-center gap-4 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#4bdece]/10 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[#4bdece]">add</span>
+              </div>
+              <span className="font-headline font-bold text-[#e5e2e1]">Custom</span>
+            </button>
+          )}
         </div>
       </div>
     </>
