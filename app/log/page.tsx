@@ -323,9 +323,10 @@ function CardioPicker({ onSelect, onClose }: {
 }
 
 // ── Workout Type Picker Sheet ────────────────────────────────────────────────
-function WorkoutTypePicker({ onSelect, onRoutine, onClose }: {
+function WorkoutTypePicker({ onSelect, onRoutine, onPlanToday, onClose }: {
   onSelect: (type: 'weights' | 'bodyweight' | 'timed' | 'cardio') => void
   onRoutine: () => void
+  onPlanToday: () => void
   onClose: () => void
 }) {
   const options: { label: string; value: 'weights' | 'bodyweight' | 'timed' | 'cardio'; icon: string; color: string; bgColor: string }[] = [
@@ -403,6 +404,13 @@ function WorkoutTypePicker({ onSelect, onRoutine, onClose }: {
         >
           <span className="material-symbols-outlined text-xl text-[#ff9066]">assignment</span>
           <span className="font-headline font-bold text-sm text-[#dcc1b8]">Use a routine</span>
+        </button>
+        <button
+          onClick={() => { onPlanToday(); onClose() }}
+          className="mt-2 w-full flex items-center justify-center gap-2 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534]"
+        >
+          <span className="material-symbols-outlined text-xl text-[#ff9066]">edit_note</span>
+          <span className="font-headline font-bold text-sm text-[#dcc1b8]">Plan today&apos;s session</span>
         </button>
       </div>
     </>
@@ -492,6 +500,9 @@ export default function LogPage() {
   const [showRoutinePicker, setShowRoutinePicker] = useState(false)
   const [showRoutineEditor, setShowRoutineEditor] = useState(false)
   const [editingRoutine, setEditingRoutine] = useState<{ id?: number; name: string; exercises: string[] } | null>(null)
+  const [showPlanToday, setShowPlanToday] = useState(false)
+  const [planTodayExercises, setPlanTodayExercises] = useState<string[]>([])
+  const [planTodayExPickerOpen, setPlanTodayExPickerOpen] = useState(false)
   const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine | null>(null)
   const [routineExPickerOpen, setRoutineExPickerOpen] = useState(false)
 
@@ -1047,6 +1058,7 @@ export default function LogPage() {
               else { setExerciseTypeFilter(t); setShowExPicker(true) }
             }}
             onRoutine={() => setShowRoutinePicker(true)}
+            onPlanToday={() => { setPlanTodayExercises([]); setShowPlanToday(true) }}
             onClose={() => setShowTypePicker(false)}
           />
         )}
@@ -1257,6 +1269,84 @@ export default function LogPage() {
           />
         )}
 
+        {/* Plan Today — ephemeral session planner */}
+        {showPlanToday && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setShowPlanToday(false)} />
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[85vh] overflow-y-auto animate-slide-up">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Plan today&apos;s session</p>
+                <button onClick={() => setShowPlanToday(false)}>
+                  <span className="material-symbols-outlined text-[#a48b83]">close</span>
+                </button>
+              </div>
+              {planTodayExercises.length > 0 && (
+                <div className="flex flex-col gap-2 mb-4">
+                  {planTodayExercises.map((ex, i) => (
+                    <div key={`${ex}-${i}`} className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-4 py-3">
+                      <span className="text-xs font-bold text-[#a48b83] w-5">{i + 1}</span>
+                      <span className="flex-1 text-sm text-[#e5e2e1]">{ex}</span>
+                      <button
+                        onClick={() => setPlanTodayExercises(prev => { const a = [...prev]; if (i > 0) { [a[i-1], a[i]] = [a[i], a[i-1]] } return a })}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i > 0 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        disabled={i === 0}
+                      >
+                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_less</span>
+                      </button>
+                      <button
+                        onClick={() => setPlanTodayExercises(prev => { const a = [...prev]; if (i < a.length - 1) { [a[i], a[i+1]] = [a[i+1], a[i]] } return a })}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i < planTodayExercises.length - 1 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        disabled={i === planTodayExercises.length - 1}
+                      >
+                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_more</span>
+                      </button>
+                      <button
+                        onClick={() => setPlanTodayExercises(prev => prev.filter((_, j) => j !== i))}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534]"
+                      >
+                        <span className="material-symbols-outlined text-sm text-red-400">close</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => { setShowPlanToday(false); setPlanTodayExPickerOpen(true) }}
+                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-[#353534] rounded-xl mb-4 active:scale-95 transition-transform"
+              >
+                <span className="material-symbols-outlined text-lg text-[#ff9066]">add</span>
+                <span className="text-sm font-bold text-[#dcc1b8]">Add exercise</span>
+              </button>
+              <button
+                disabled={planTodayExercises.length === 0}
+                onClick={() => {
+                  setShowPlanToday(false)
+                  const firstEx = planTodayExercises[0]
+                  const hint = hints.find((h: ExerciseHint) => h.exercise === firstEx)
+                  setActiveRoutine({ id: -1, name: "Today's session", exercises: planTodayExercises, currentIndex: 0, pending: {} })
+                  startExercise(firstEx, hint)
+                }}
+                className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-40"
+              >
+                Start session
+              </button>
+            </div>
+          </>
+        )}
+        {planTodayExPickerOpen && (
+          <ExercisePicker
+            hints={hints} starred={starred} onToggleStar={toggleStar}
+            multiSelect
+            onSelect={() => {}}
+            onMultiSelect={(names) => {
+              setPlanTodayExercises(prev => [...prev, ...names])
+              setPlanTodayExPickerOpen(false)
+              setShowPlanToday(true)
+            }}
+            onClose={() => { setPlanTodayExPickerOpen(false); setShowPlanToday(true) }}
+          />
+        )}
+
         <header className="mb-6 flex items-start justify-between">
           <div>
             <p className="font-label text-[#a48b83] text-xs uppercase tracking-widest mb-1">
@@ -1322,14 +1412,14 @@ export default function LogPage() {
               <div className="flex gap-1">
                 {activeRoutine.exercises.map((ex, i) => (
                   <button key={i}
-                    onClick={() => { if (i < activeRoutine.currentIndex) jumpToRoutineExercise(i) }}
-                    title={i < activeRoutine.currentIndex ? ex : undefined}
-                    className={`flex-1 h-2.5 rounded-full transition-colors ${i < activeRoutine.currentIndex ? 'cursor-pointer active:scale-90' : 'cursor-default'}`}
+                    onClick={() => { if (i !== activeRoutine.currentIndex) jumpToRoutineExercise(i) }}
+                    title={ex}
+                    className={`flex-1 h-2.5 rounded-full transition-colors ${i !== activeRoutine.currentIndex ? 'cursor-pointer active:scale-90' : 'cursor-default'}`}
                     style={{ backgroundColor: i <= activeRoutine.currentIndex ? '#ff9066' : '#353534' }}
                   />
                 ))}
               </div>
-              <p className="text-xs text-[#a48b83] mt-1.5 truncate">Next: {activeRoutine.exercises[activeRoutine.currentIndex]}</p>
+              <p className="text-xs text-[#a48b83] mt-1.5 truncate">Up next: {activeRoutine.exercises[activeRoutine.currentIndex]}</p>
             </div>
             <button
               onClick={() => {
@@ -1585,8 +1675,15 @@ export default function LogPage() {
   // ── Jump to a routine exercise by index ──────────────────────────────────
   const jumpToRoutineExercise = (index: number) => {
     if (!activeRoutine) return
-    const pendingBlock = activeRoutine.pending[index]
-    setActiveRoutine(prev => prev ? { ...prev, currentIndex: index } : null)
+    // Save any done sets from the current exercise before switching
+    const currentDone = sets.filter(s => s.done)
+    let updatedPending = activeRoutine.pending
+    if (currentDone.length > 0 && view.type !== 'list' && view.type !== 'cardio' && view.type !== 'run' && view.type !== 'cycle') {
+      const exerciseType = (view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights') as 'weights' | 'bodyweight' | 'timed'
+      updatedPending = { ...activeRoutine.pending, [activeRoutine.currentIndex]: { exercise: (view as { exercise: string }).exercise, exerciseType, sets: currentDone } }
+    }
+    const pendingBlock = updatedPending[index]
+    setActiveRoutine(prev => prev ? { ...prev, currentIndex: index, pending: updatedPending } : null)
     const ex = activeRoutine.exercises[index]
     if (pendingBlock && pendingBlock.sets.length > 0) {
       // Restore previously accumulated sets (all done) + a fresh undone set
@@ -1605,16 +1702,16 @@ export default function LogPage() {
     <div className="flex items-center gap-3 px-1 py-2">
       <div className="flex-1 flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold font-label text-[#dcc1b8]">{activeRoutine.name}</span>
+          <span className="text-xs font-bold font-label text-[#dcc1b8]">{activeRoutine.exercises[activeRoutine.currentIndex]}</span>
           <span className="text-[10px] font-bold text-[#a48b83]">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
         </div>
         <div className="flex gap-1">
           {activeRoutine.exercises.map((ex, i) => (
             <button
               key={i}
-              onClick={() => { if (i < activeRoutine.currentIndex) jumpToRoutineExercise(i) }}
-              title={i < activeRoutine.currentIndex ? ex : undefined}
-              className={`flex-1 h-2.5 rounded-full transition-colors ${i < activeRoutine.currentIndex ? 'cursor-pointer active:scale-90' : 'cursor-default'}`}
+              onClick={() => { if (i !== activeRoutine.currentIndex) jumpToRoutineExercise(i) }}
+              title={ex}
+              className={`flex-1 h-2.5 rounded-full transition-colors ${i !== activeRoutine.currentIndex ? 'cursor-pointer active:scale-90' : 'cursor-default'}`}
               style={{ backgroundColor: i <= activeRoutine.currentIndex ? '#ff9066' : '#353534' }}
             />
           ))}
