@@ -529,6 +529,20 @@ export default function LogPage() {
   const weightStep = isLbs ? 2.5 / 2.20462 : 2.5
   const kgToDisplay = (kg: number) => isLbs ? Math.round(kg * 2.20462 * 10) / 10 : kg
   const displayToKg = (val: number) => isLbs ? Math.round((val / 2.20462) * 100) / 100 : val
+  // Raw string while user is typing — avoids cursor jumping from kg↔lbs round-trip on iOS
+  const [weightInputVal, setWeightInputVal] = useState('')
+  const weightInputProps = (kgVal: number, onCommit: (kg: number) => void) => ({
+    type: 'text' as const,
+    inputMode: 'decimal' as const,
+    value: weightInputVal || String(kgToDisplay(kgVal) || ''),
+    onFocus: (e: React.FocusEvent<HTMLInputElement>) => { setWeightInputVal(String(kgToDisplay(kgVal) || '')); e.target.select() },
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      setWeightInputVal(e.target.value)
+      const num = parseFloat(e.target.value)
+      if (!isNaN(num) && num >= 0) onCommit(displayToKg(num))
+    },
+    onBlur: () => setWeightInputVal(''),
+  })
 
   const toggleUnit = () => {
     const next: 'metric' | 'imperial' = unitPref === 'metric' ? 'imperial' : 'metric'
@@ -1455,11 +1469,7 @@ export default function LogPage() {
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
                       <input
-                        type="number"
-                        inputMode="decimal"
-                        value={kgToDisplay(s.weight)}
-                        onChange={e => setEditLiftField(s.id, 'weight', displayToKg(parseFloat(e.target.value) || 0))}
-                        onFocus={e => e.target.select()}
+                        {...weightInputProps(s.weight, kg => setEditLiftField(s.id, 'weight', kg))}
                         className="font-headline font-bold text-sm w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                       />
                       <span className="text-[10px] text-[#a48b83]">{weightLabel}</span>
@@ -1740,11 +1750,7 @@ export default function LogPage() {
                             <span className="material-symbols-outlined text-sm">remove</span>
                           </button>
                           <input
-                            type="number"
-                            inputMode="decimal"
-                            value={kgToDisplay(activeSet.weight)}
-                            onChange={e => setSetField(activeSet.id, 'weight', displayToKg(parseFloat(e.target.value) || 0))}
-                            onFocus={e => e.target.select()}
+                            {...weightInputProps(activeSet.weight, kg => setSetField(activeSet.id, 'weight', kg))}
                             className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                           />
                           <button onClick={() => updateSet(activeSet.id, 'weight', weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
@@ -1968,11 +1974,7 @@ export default function LogPage() {
                           <span className="material-symbols-outlined text-sm">remove</span>
                         </button>
                         <input
-                          type="number"
-                          inputMode="decimal"
-                          value={kgToDisplay(activeSet.weight)}
-                          onChange={e => setSetField(activeSet.id, 'weight', displayToKg(parseFloat(e.target.value) || 0))}
-                          onFocus={e => e.target.select()}
+                          {...weightInputProps(activeSet.weight, kg => setSetField(activeSet.id, 'weight', kg))}
                           className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
                         />
                         <button onClick={() => updateSet(activeSet.id, 'weight', weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
