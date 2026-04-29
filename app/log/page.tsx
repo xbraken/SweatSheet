@@ -527,21 +527,29 @@ export default function LogPage() {
   const isLbs = unitPref === 'imperial'
   const weightLabel = isLbs ? 'lbs' : 'kg'
   const weightStep = isLbs ? 2.5 / 2.20462 : 2.5
-  const kgToDisplay = (kg: number) => isLbs ? Math.round(kg * 2.20462 * 10) / 10 : kg
+  const kgToDisplay = (kg: number) => {
+    if (!isLbs) return kg
+    const lbs = kg * 2.20462
+    const rounded = Math.round(lbs * 10) / 10
+    // Snap to whole number if within 0.15 lbs (handles floating-point round-trip drift)
+    const whole = Math.round(rounded)
+    return Math.abs(rounded - whole) <= 0.15 ? whole : rounded
+  }
   const displayToKg = (val: number) => isLbs ? Math.round((val / 2.20462) * 100) / 100 : val
   // Raw string while user is typing — avoids cursor jumping from kg↔lbs round-trip on iOS
-  const [weightInputVal, setWeightInputVal] = useState('')
+  // null = not focused (show stored value); string = focused (show raw input, including empty)
+  const [weightInputVal, setWeightInputVal] = useState<string | null>(null)
   const weightInputProps = (kgVal: number, onCommit: (kg: number) => void) => ({
     type: 'text' as const,
     inputMode: 'decimal' as const,
-    value: weightInputVal || String(kgToDisplay(kgVal) || ''),
+    value: weightInputVal !== null ? weightInputVal : String(kgToDisplay(kgVal) || ''),
     onFocus: (e: React.FocusEvent<HTMLInputElement>) => { setWeightInputVal(String(kgToDisplay(kgVal) || '')); e.target.select() },
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
       setWeightInputVal(e.target.value)
       const num = parseFloat(e.target.value)
       if (!isNaN(num) && num >= 0) onCommit(displayToKg(num))
     },
-    onBlur: () => setWeightInputVal(''),
+    onBlur: () => setWeightInputVal(null),
   })
 
   const toggleUnit = () => {
