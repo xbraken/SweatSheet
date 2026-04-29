@@ -1678,9 +1678,9 @@ export default function LogPage() {
     // Save any done sets from the current exercise before switching
     const currentDone = sets.filter(s => s.done)
     let updatedPending = activeRoutine.pending
-    if (currentDone.length > 0 && view.type !== 'list' && view.type !== 'cardio' && view.type !== 'run' && view.type !== 'cycle') {
+    if (currentDone.length > 0 && (view.type === 'lift' || view.type === 'bodyweight' || view.type === 'timed')) {
       const exerciseType = (view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights') as 'weights' | 'bodyweight' | 'timed'
-      updatedPending = { ...activeRoutine.pending, [activeRoutine.currentIndex]: { exercise: (view as { exercise: string }).exercise, exerciseType, sets: currentDone } }
+      updatedPending = { ...activeRoutine.pending, [activeRoutine.currentIndex]: { exercise: view.exercise, exerciseType, sets: currentDone } }
     }
     const pendingBlock = updatedPending[index]
     setActiveRoutine(prev => prev ? { ...prev, currentIndex: index, pending: updatedPending } : null)
