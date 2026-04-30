@@ -107,9 +107,10 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
 
   async function shareDay(g: DayGroup) {
     if (!profile) return
-    const url = `${window.location.origin}/w/${encodeURIComponent(profile.username)}/${g.date}`
-    if (navigator.share) {
-      await navigator.share({ title: `${profile.username}'s workout`, url })
+    const url = `${window.location.origin}/social/${encodeURIComponent(profile.username)}`
+    const isMobile = navigator.maxTouchPoints > 0 && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+    if (isMobile && navigator.share) {
+      await navigator.share({ title: `${profile.username} on SweatSheet`, url })
     } else {
       await navigator.clipboard.writeText(url)
       setCopiedDate(g.date)

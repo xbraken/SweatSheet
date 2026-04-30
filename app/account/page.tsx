@@ -299,14 +299,38 @@ export default function ProfilePage() {
   const workoutDates = useMemo(() => new Set(sessions.map(s => s.date)), [sessions])
 
   async function shareDay(g: DayGroup) {
-    const url = `${window.location.origin}/w/${encodeURIComponent(username)}/${g.date}`
-    if (navigator.share) {
+    const isMobile = navigator.maxTouchPoints > 0 && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+
+    const urlPromise = (async () => {
+      try {
+        const res = await fetch('/api/sessions/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: g.date }),
+        })
+        if (res.ok) {
+          const { slug } = await res.json()
+          if (slug) return `${window.location.origin}/s/${slug}`
+        }
+      } catch { /* fall back */ }
+      return `${window.location.origin}/sessions/${g.date}`
+    })()
+
+    if (isMobile && navigator.share) {
+      const url = await urlPromise
       await navigator.share({ title: dayTitle(g), url })
-    } else {
-      await navigator.clipboard.writeText(url)
-      setCopiedDate(g.date)
-      setTimeout(() => setCopiedDate(null), 2000)
+      return
     }
+
+    try {
+      const blobPromise = urlPromise.then(u => new Blob([u], { type: 'text/plain' }))
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blobPromise })])
+    } catch {
+      const url = await urlPromise
+      await navigator.clipboard.writeText(url)
+    }
+    setCopiedDate(g.date)
+    setTimeout(() => setCopiedDate(null), 2000)
   }
 
   return (

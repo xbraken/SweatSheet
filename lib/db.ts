@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 10
+const SCHEMA_VERSION = 11
 
 let _initPromise: Promise<void> | null = null
 
@@ -181,6 +181,16 @@ async function _runInit() {
   )`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_routines_user ON routines(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_routine_exercises_routine ON routine_exercises(routine_id)`)
+
+  // Public share links — one slug per (user, date) for sharing a day's workouts
+  await db.execute(`CREATE TABLE IF NOT EXISTS share_links (
+    slug TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, date)
+  )`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_share_links_user ON share_links(user_id)`)
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)

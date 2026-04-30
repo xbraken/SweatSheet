@@ -70,27 +70,47 @@ function buildShareText(date: string, sessions: SessionBlock[]): string {
 export default function SessionDetailPage({ params }: { params: Promise<{ date: string }> }) {
   const router = useRouter()
   const [date, setDate] = useState('')
-  const [username, setUsername] = useState('')
   const [data, setData] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
   async function shareWorkout() {
     if (!data || data.sessions.length === 0) return
-    const url = username
-      ? `${window.location.origin}/w/${encodeURIComponent(username)}/${date}`
-      : window.location.href
-    if (navigator.share) {
+    const isMobile = navigator.maxTouchPoints > 0 && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+
+    const urlPromise = (async () => {
+      try {
+        const res = await fetch('/api/sessions/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date }),
+        })
+        if (res.ok) {
+          const { slug } = await res.json()
+          if (slug) return `${window.location.origin}/s/${slug}`
+        }
+      } catch { /* fall back */ }
+      return window.location.href
+    })()
+
+    if (isMobile && navigator.share) {
+      const url = await urlPromise
       await navigator.share({ title: `Workout — ${date}`, url })
-    } else {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      return
     }
+
+    try {
+      const blobPromise = urlPromise.then(u => new Blob([u], { type: 'text/plain' }))
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blobPromise })])
+    } catch {
+      const url = await urlPromise
+      await navigator.clipboard.writeText(url)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   useEffect(() => {
-    fetch('/api/account').then(r => r.json()).then(d => setUsername(d.username ?? '')).catch(() => {})
     params.then(p => {
       setDate(p.date)
       fetch(`/api/sessions/by-date/${p.date}`)

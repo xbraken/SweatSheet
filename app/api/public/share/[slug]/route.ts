@@ -3,12 +3,20 @@ import { db, initDb } from '@/lib/db'
 
 await initDb()
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ username: string; date: string }> }) {
-  const { username, date } = await params
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
 
-  const userRes = await db.execute({ sql: 'SELECT id FROM users WHERE username = ?', args: [username] })
-  if (userRes.rows.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  const userId = userRes.rows[0].id as number
+  const linkRes = await db.execute({
+    sql: `SELECT sl.user_id, sl.date, u.username
+          FROM share_links sl JOIN users u ON u.id = sl.user_id
+          WHERE sl.slug = ?`,
+    args: [slug],
+  })
+  if (linkRes.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const userId = linkRes.rows[0].user_id as number
+  const date = linkRes.rows[0].date as string
+  const username = linkRes.rows[0].username as string
 
   const sessionsRes = await db.execute({
     sql: 'SELECT id, created_at FROM sessions WHERE user_id = ? AND date = ? ORDER BY created_at',

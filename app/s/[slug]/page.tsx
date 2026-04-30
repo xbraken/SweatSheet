@@ -42,14 +42,14 @@ function formatDate(dateStr: string): string {
   })
 }
 
-export default function PublicWorkoutPage({ params }: { params: Promise<{ username: string; date: string }> }) {
+export default function SharedWorkoutPage({ params }: { params: Promise<{ slug: string }> }) {
   const [data, setData] = useState<WorkoutData | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
     params.then(p => {
-      fetch(`/api/public/workout/${encodeURIComponent(p.username)}/${p.date}`)
+      fetch(`/api/public/share/${encodeURIComponent(p.slug)}`)
         .then(r => {
           if (r.status === 404) { setNotFound(true); setLoading(false); return null }
           return r.json()
@@ -71,7 +71,7 @@ export default function PublicWorkoutPage({ params }: { params: Promise<{ userna
         )}
       </header>
 
-      {!loading && data && (
+      {!loading && data && !isEmpty && (
         <div className="max-w-[390px] mx-auto px-6 pt-2 pb-2">
           <h1 className="font-headline text-xl font-black text-[#e5e2e1] tracking-tight">
             {formatDate(data.date)}
@@ -85,12 +85,12 @@ export default function PublicWorkoutPage({ params }: { params: Promise<{ userna
             <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
           </div>
         ) : notFound ? (
-          <p className="text-center text-[#a48b83] pt-20">User not found</p>
+          <p className="text-center text-[#a48b83] pt-20">This share link is invalid or has been revoked</p>
         ) : isEmpty ? (
           <p className="text-center text-[#a48b83] pt-20">No workout recorded for this day</p>
         ) : (
           <div className="space-y-6 animate-fade-in">
-            {data!.sessions.map((sess, si) => {
+            {data!.sessions.map((sess) => {
               const time = formatTime(sess.createdAt)
               const cardioTime = sess.cardio[0]?.started_at ? formatTime(sess.cardio[0].started_at) : null
               const displayTime = cardioTime ?? time
