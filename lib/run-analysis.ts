@@ -8,23 +8,39 @@ export type DistanceSample = { time_offset_sec: number; distance_km: number }
 export const ZONE_PCT = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0] as const
 export type ZoneSeconds = { z1: number; z2: number; z3: number; z4: number; z5: number }
 
-/** Fastest contiguous sub-segment covering targetKm (seconds). Sliding window over cumulative distance. */
+/** Fastest contiguous sub-segment covering targetKm (seconds). Sliding window over cumulative distance.
+ *  Discards segments faster than 2:30/km — those are GPS / import glitches, not actual paces. */
+const MIN_PLAUSIBLE_SEC_PER_KM = 150 // 2:30/km is faster than amateur elite
+
 export function findBestSegment(samples: DistanceSample[], targetKm: number): number | null {
   if (samples.length < 2) return null
-  const maxDist = samples[samples.length - 1].distance_km
+  // Defensive cleanup: enforce monotonic non-decreasing distance + strictly increasing time.
+  const clean: DistanceSample[] = []
+  let lastKm = -Infinity
+  let lastT = -Infinity
+  for (const s of samples) {
+    if (s.time_offset_sec > lastT && s.distance_km >= lastKm) {
+      clean.push(s)
+      lastKm = s.distance_km
+      lastT = s.time_offset_sec
+    }
+  }
+  if (clean.length < 2) return null
+  const maxDist = clean[clean.length - 1].distance_km
   if (maxDist < targetKm) return null
+  const minSec = targetKm * MIN_PLAUSIBLE_SEC_PER_KM
   let bestSec = Infinity
   let j = 0
-  for (let i = 0; i < samples.length; i++) {
+  for (let i = 0; i < clean.length; i++) {
     if (j <= i) j = i + 1
-    while (j < samples.length && samples[j].distance_km - samples[i].distance_km < targetKm) j++
-    if (j >= samples.length) break
-    const d0 = j > 0 ? samples[j - 1].distance_km - samples[i].distance_km : 0
-    const d1 = samples[j].distance_km - samples[i].distance_km
+    while (j < clean.length && clean[j].distance_km - clean[i].distance_km < targetKm) j++
+    if (j >= clean.length) break
+    const d0 = j > 0 ? clean[j - 1].distance_km - clean[i].distance_km : 0
+    const d1 = clean[j].distance_km - clean[i].distance_km
     const frac = d1 > d0 ? (targetKm - d0) / (d1 - d0) : 0
-    const endTime = samples[j - 1].time_offset_sec + frac * (samples[j].time_offset_sec - samples[j - 1].time_offset_sec)
-    const segTime = endTime - samples[i].time_offset_sec
-    if (segTime < bestSec) bestSec = segTime
+    const endTime = clean[j - 1].time_offset_sec + frac * (clean[j].time_offset_sec - clean[j - 1].time_offset_sec)
+    const segTime = endTime - clean[i].time_offset_sec
+    if (segTime >= minSec && segTime < bestSec) bestSec = segTime
   }
   return isFinite(bestSec) ? Math.round(bestSec) : null
 }

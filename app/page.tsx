@@ -5,6 +5,15 @@ import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import LogoutButton from '@/components/LogoutButton'
 
+function toSecondsLoose(str: string | null): number {
+  if (!str) return 0
+  const parts = str.split(':').map(Number)
+  if (parts.some(isNaN)) return 0
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return 0
+}
+
 async function getTodayData(userId: number) {
   const today = new Date().toISOString().split('T')[0]
 
@@ -19,7 +28,12 @@ async function getTodayData(userId: number) {
     return d.toISOString().split('T')[0]
   })
 
-  const [todaySession, weekSessions, weekStats] = await Promise.all([
+  // Date 28 days back for load window
+  const load28Start = new Date(now)
+  load28Start.setDate(now.getDate() - 27)
+  const load28StartStr = load28Start.toISOString().split('T')[0]
+
+  const [todaySession, weekSessions, weekStats, loadRows] = await Promise.all([
     db.execute({
       sql: `SELECT s.id, s.date,
         (SELECT COUNT(*) FROM blocks b WHERE b.session_id = s.id AND b.type = 'lift') as lift_blocks,
@@ -43,7 +57,55 @@ async function getTodayData(userId: number) {
         WHERE s.date >= ? AND s.date <= ? AND s.user_id = ?`,
       args: [weekDates[0], weekDates[6], userId],
     }),
+    db.execute({
+      sql: `SELECT s.date,
+              COUNT(DISTINCT st.id) as set_count,
+              GROUP_CONCAT(c.duration) as cardio_durations
+            FROM sessions s
+            LEFT JOIN blocks b ON b.session_id = s.id
+            LEFT JOIN sets st ON st.block_id = b.id
+            LEFT JOIN cardio c ON c.block_id = b.id
+            WHERE s.date >= ? AND s.user_id = ?
+            GROUP BY s.date`,
+      args: [load28StartStr, userId],
+    }),
   ])
+
+  // Build minutes-per-day map. Lifts approximated at 3 min/set (working+rest).
+  const minutesByDate = new Map<string, number>()
+  for (const r of loadRows.rows) {
+    const date = r.date as string
+    const sets = Number(r.set_count ?? 0)
+    const cardios = (r.cardio_durations as string | null) ?? ''
+    const cardioMin = cardios.split(',').filter(Boolean).reduce((a, s) => a + toSecondsLoose(s) / 60, 0)
+    minutesByDate.set(date, Math.round(sets * 3 + cardioMin))
+  }
+
+  // Sum last 7 days vs prior 21 days + collect daily series (oldest → newest)
+  let last7 = 0
+  let prior21 = 0
+  const dailyMinutes: number[] = []
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    const key = d.toISOString().split('T')[0]
+    const m = minutesByDate.get(key) ?? 0
+    dailyMinutes.push(m)
+    if (i < 7) last7 += m
+    else prior21 += m
+  }
+  const prior21Weekly = prior21 / 3 // normalize to weekly
+
+  // Streak: consecutive days ending at today (or yesterday if today is rest)
+  let streak = 0
+  for (let i = 0; i < 28; i++) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    const key = d.toISOString().split('T')[0]
+    if ((minutesByDate.get(key) ?? 0) > 0) streak++
+    else if (i === 0) continue // allow today to be rest without breaking the streak
+    else break
+  }
 
   const ws = weekStats.rows[0]
   return {
@@ -53,6 +115,13 @@ async function getTodayData(userId: number) {
     weekVolume: Number(ws?.total_volume ?? 0),
     weekDistance: Number(ws?.total_distance ?? 0),
     sessionCount: weekSessions.rows.length,
+    load: {
+      last7Min: last7,
+      prior21Weekly: Math.round(prior21Weekly),
+      ratio: prior21Weekly > 0 ? last7 / prior21Weekly : null,
+      streak,
+      dailyMinutes,
+    },
   }
 }
 
@@ -66,7 +135,18 @@ export default async function TodayPage() {
   const hour = now.getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  const { today, completedDates, weekDates, weekVolume, weekDistance, sessionCount } = await getTodayData(session.userId)
+  const { today, completedDates, weekDates, weekVolume, weekDistance, sessionCount, load } = await getTodayData(session.userId)
+
+  // Translate load signals into a tone + message
+  const loadStatus = (() => {
+    if (load.ratio === null && load.streak === 0) return null
+    const r = load.ratio
+    if (r !== null && r > 1.5) return { tone: 'warn', label: 'Ramping up fast', hint: 'Consider an easier day' }
+    if (r !== null && r < 0.5 && load.prior21Weekly > 0) return { tone: 'muted', label: 'Detrained', hint: 'Easy build back up' }
+    if (load.streak >= 6) return { tone: 'warn', label: `${load.streak} days straight`, hint: 'A rest day would help' }
+    if (load.streak >= 3) return { tone: 'ok', label: `${load.streak} day streak`, hint: 'Looking consistent' }
+    return { tone: 'ok', label: 'Balanced', hint: 'Train as planned' }
+  })()
 
   const week = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const todayIdx = (now.getDay() + 6) % 7
@@ -153,6 +233,65 @@ export default async function TodayPage() {
       </section>
 
       </div>{/* end two-column wrapper */}
+
+      {/* Training load — last 7d minutes vs prior 21d baseline + streak */}
+      {loadStatus && (load.last7Min > 0 || load.prior21Weekly > 0) && (() => {
+        const toneClass = loadStatus.tone === 'warn'
+          ? 'bg-orange-950/40 border-orange-900/40'
+          : loadStatus.tone === 'muted'
+            ? 'bg-[#201f1f] border-[#353534]/40'
+            : 'bg-[#201f1f] border-[#353534]/40'
+        const accent = loadStatus.tone === 'warn' ? 'text-orange-400' : loadStatus.tone === 'muted' ? 'text-[#a48b83]' : 'text-[#4bdece]'
+        const ratioPct = load.ratio !== null ? Math.round((load.ratio - 1) * 100) : null
+        return (
+          <section className="mb-10">
+            <h3 className="font-headline text-sm font-bold text-[#a48b83] mb-4 uppercase tracking-widest">Load</h3>
+            <div className={`rounded-2xl border p-4 flex flex-col gap-3 ${toneClass}`}>
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className={`font-headline font-black text-lg ${accent}`}>{loadStatus.label}</p>
+                  <p className="text-xs text-[#a48b83] mt-0.5">{loadStatus.hint}</p>
+                </div>
+                {ratioPct !== null && (
+                  <div className="text-right">
+                    <span className={`text-2xl font-black font-headline ${accent}`}>
+                      {ratioPct >= 0 ? '+' : ''}{ratioPct}%
+                    </span>
+                    <p className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83]">vs 3-wk avg</p>
+                  </div>
+                )}
+              </div>
+              {/* 28-day daily minutes sparkline (oldest → newest). Last 7 days highlighted. */}
+              {load.dailyMinutes.some(m => m > 0) && (() => {
+                const max = Math.max(1, ...load.dailyMinutes)
+                return (
+                  <div className="flex items-end gap-[2px] h-8">
+                    {load.dailyMinutes.map((m, i) => {
+                      const inLast7 = i >= load.dailyMinutes.length - 7
+                      const heightPct = m > 0 ? Math.max(8, (m / max) * 100) : 0
+                      const color = m === 0 ? '#2a2a2a' : inLast7
+                        ? (loadStatus.tone === 'warn' ? '#fb923c' : '#4bdece')
+                        : '#4a4a4a'
+                      return (
+                        <div
+                          key={i}
+                          className="flex-1 rounded-sm"
+                          style={{ height: m > 0 ? `${heightPct}%` : '2px', backgroundColor: color }}
+                          title={`${m} min`}
+                        />
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+              <div className="flex justify-between text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                <span>Last 7d: <span className="text-[#e5e2e1] normal-case">{Math.round(load.last7Min / 60)}h {load.last7Min % 60}m</span></span>
+                <span>Streak: <span className="text-[#e5e2e1] normal-case">{load.streak} day{load.streak === 1 ? '' : 's'}</span></span>
+              </div>
+            </div>
+          </section>
+        )
+      })()}
 
       {/* Weekly summary */}
       {(weekVolume > 0 || weekDistance > 0) && (

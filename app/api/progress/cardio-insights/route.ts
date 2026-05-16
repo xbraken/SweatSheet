@@ -114,8 +114,17 @@ export async function GET(_req: NextRequest) {
         weeklyVolume.set(wk, cur)
       }
 
-      const dist = distByRun.get(cardioId) ?? []
+      const distRaw = distByRun.get(cardioId) ?? []
       const hr = hrByRun.get(cardioId) ?? []
+
+      // Sanity-check distance samples against the recorded distance.
+      // If they disagree by >20% the samples are corrupt (duplicate import / unit error)
+      // — exclude this run from sample-based metrics rather than report fake PRs.
+      const sampleMaxKm = distRaw.length > 0 ? distRaw[distRaw.length - 1].distance_km : 0
+      const samplesPlausible = distKm > 0 && sampleMaxKm > 0
+        ? Math.abs(sampleMaxKm - distKm) / distKm <= 0.20
+        : distRaw.length > 1
+      const dist = samplesPlausible ? distRaw : []
 
       // Best segments
       for (const { label, km } of RACE_DISTANCES) {
