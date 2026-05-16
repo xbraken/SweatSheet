@@ -69,8 +69,8 @@ type RunDetail = {
 type CardioInsights = {
   userHrMax: number
   bestSegments: Record<'5K' | '10K' | 'Half' | 'Marathon', { seconds: number; cardio_id: number; date: string } | null>
-  weeklyVolume: { weekStart: string; km: number; runs: number }[]
-  weeklyZones: { weekStart: string; z1: number; z2: number; z3: number; z4: number; z5: number }[]
+  weeklyVolume: { weekStart: string; activity: string; km: number; sessions: number }[]
+  weeklyZones: { weekStart: string; activity: string; z1: number; z2: number; z3: number; z4: number; z5: number }[]
   z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[]
 }
 type CalendarDay = {
@@ -1767,9 +1767,11 @@ export default function ProgressPage() {
         )
       })()}
 
-      {/* Weekly volume — 8-week bar chart with avg line */}
-      {tab === 'cardio' && cardioInsights && cardioInsights.weeklyVolume.length > 0 && (() => {
-        const wv = cardioInsights.weeklyVolume
+      {/* Weekly volume — 8-week bar chart with avg line, filtered by activity selector */}
+      {tab === 'cardio' && cardioInsights && cardioActivity && cardioInsights.weeklyVolume.some(w => w.activity === cardioActivity) && (() => {
+        // Filter by the currently selected cardio activity (Run / Cycling / etc.)
+        const wv = cardioInsights.weeklyVolume.filter(w => w.activity === cardioActivity)
+        const sessionWord = cardioActivity === 'Run' ? 'run' : cardioActivity.toLowerCase()
         const todayWk = (() => {
           const d = new Date()
           const dow = (d.getDay() + 6) % 7
@@ -1777,7 +1779,7 @@ export default function ProgressPage() {
           return d.toISOString().slice(0, 10)
         })()
         // Build a continuous 8-week window so zero-km weeks still show
-        const weeks: { weekStart: string; km: number; runs: number }[] = []
+        const weeks: { weekStart: string; km: number; sessions: number }[] = []
         const start = new Date(todayWk + 'T00:00:00Z')
         start.setUTCDate(start.getUTCDate() - 7 * 7) // 8 weeks total including current
         const byWeek = new Map(wv.map(w => [w.weekStart, w]))
@@ -1785,7 +1787,8 @@ export default function ProgressPage() {
           const ws = new Date(start)
           ws.setUTCDate(ws.getUTCDate() + i * 7)
           const key = ws.toISOString().slice(0, 10)
-          weeks.push(byWeek.get(key) ?? { weekStart: key, km: 0, runs: 0 })
+          const found = byWeek.get(key)
+          weeks.push(found ? { weekStart: key, km: found.km, sessions: found.sessions } : { weekStart: key, km: 0, sessions: 0 })
         }
         const thisWeek = weeks[weeks.length - 1].km
         const prior = weeks.slice(0, -1)
@@ -1839,7 +1842,7 @@ export default function ProgressPage() {
                       <div
                         className={`w-full rounded-t-sm transition-colors ${isCurrent ? 'bg-[#4bdece]' : isEmpty ? 'bg-[#2a2a2a]' : 'bg-[#4bdece]/40'}`}
                         style={{ height: isEmpty ? '2px' : `${heightPct}%` }}
-                        title={`${w.weekStart}: ${w.km.toFixed(1)} km · ${w.runs} run${w.runs === 1 ? '' : 's'}`}
+                        title={`${w.weekStart}: ${w.km.toFixed(1)} km · ${w.sessions} ${sessionWord}${w.sessions === 1 ? '' : 's'}`}
                       />
                     </div>
                   )
@@ -1862,9 +1865,27 @@ export default function ProgressPage() {
         )
       })()}
 
-      {/* HR zone distribution — last 4 weeks stacked */}
-      {tab === 'cardio' && cardioInsights && cardioInsights.weeklyZones.length > 0 && (() => {
-        const wz = cardioInsights.weeklyZones.slice(-8)
+      {/* HR zone distribution — last 8 weeks stacked, filtered by activity selector */}
+      {tab === 'cardio' && cardioInsights && cardioActivity && cardioInsights.weeklyZones.some(w => w.activity === cardioActivity) && (() => {
+        // Build a continuous 8-week window for the active cardio activity
+        const filtered = cardioInsights.weeklyZones.filter(w => w.activity === cardioActivity)
+        const byWeek = new Map(filtered.map(w => [w.weekStart, w]))
+        const todayWk = (() => {
+          const d = new Date()
+          const dow = (d.getDay() + 6) % 7
+          d.setDate(d.getDate() - dow)
+          return d.toISOString().slice(0, 10)
+        })()
+        const wz: { weekStart: string; z1: number; z2: number; z3: number; z4: number; z5: number }[] = []
+        const start = new Date(todayWk + 'T00:00:00Z')
+        start.setUTCDate(start.getUTCDate() - 7 * 7)
+        for (let i = 0; i < 8; i++) {
+          const ws = new Date(start)
+          ws.setUTCDate(ws.getUTCDate() + i * 7)
+          const key = ws.toISOString().slice(0, 10)
+          const f = byWeek.get(key)
+          wz.push(f ? { weekStart: key, z1: f.z1, z2: f.z2, z3: f.z3, z4: f.z4, z5: f.z5 } : { weekStart: key, z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 })
+        }
         const totals = wz.map(w => w.z1 + w.z2 + w.z3 + w.z4 + w.z5)
         const maxTotal = Math.max(1, ...totals)
         const zoneColors = ['#5b8def', '#4bdece', '#a0e857', '#ffb84d', '#ff6b6b']
