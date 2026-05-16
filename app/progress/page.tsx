@@ -1237,16 +1237,14 @@ export default function ProgressPage() {
     }).catch(() => {})
   }, [])
 
-  // Fetch cardio insights once the tab is opened (lazy — server aggregates samples).
-  const insightsFetched = useRef(false)
+  // Fetch cardio insights eagerly on mount so the cardio tab is fully populated
+  // by the time the user switches to it (parallel with main session fetch).
   useEffect(() => {
-    if (tab !== 'cardio' || insightsFetched.current) return
-    insightsFetched.current = true
     fetch('/api/progress/cardio-insights')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setCardioInsights(d) })
       .catch(() => {})
-  }, [tab])
+  }, [])
 
   const toggleStar = useCallback((exercise: string) => {
     setStarred(prev => {
@@ -1726,6 +1724,20 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {/* Skeleton placeholders while cardio insights load (endpoint aggregates all HR/distance samples) */}
+      {tab === 'cardio' && !cardioInsights && (
+        <div className="flex flex-col gap-4 animate-pulse">
+          <div className="flex flex-col gap-2">
+            <div className="h-3 w-32 bg-[#1a1a1a] rounded" />
+            <div className="flex gap-2 overflow-hidden">
+              {[0,1,2,3].map(i => <div key={i} className="bg-[#131313] rounded-xl h-[68px] min-w-[80px] shrink-0" />)}
+            </div>
+          </div>
+          <div className="bg-[#131313] rounded-xl h-[180px]" />
+          <div className="bg-[#131313] rounded-xl h-[200px]" />
+        </div>
+      )}
+
       {/* Real best-segment PRs (computed from distance samples — actual fastest window) */}
       {tab === 'cardio' && cardioInsights && (() => {
         const labels: ('5K' | '10K' | 'Half' | 'Marathon')[] = ['5K', '10K', 'Half', 'Marathon']
@@ -1908,45 +1920,6 @@ export default function ProgressPage() {
                 </div>
               ))}
             </div>
-          </div>
-        )
-      })()}
-
-      {/* Easy-pace (Z2) trend */}
-      {tab === 'cardio' && cardioInsights && cardioInsights.z2Trend.length >= 2 && (() => {
-        const pts = cardioInsights.z2Trend.slice(-20)
-        const paces = pts.map(p => p.paceSec)
-        const min = Math.min(...paces), max = Math.max(...paces), range = max - min || 1
-        const svgPts = pts.map((p, i) => {
-          const x = (i / Math.max(pts.length - 1, 1)) * 300
-          // invert: faster (lower sec) = higher on chart
-          const y = 10 + ((p.paceSec - min) / range) * 60
-          return `${x},${y}`
-        }).join(' ')
-        const latest = pts[pts.length - 1]
-        function fmtPace(sec: number) {
-          return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
-        }
-        return (
-          <div className="bg-[#131313] rounded-xl p-4 flex flex-col gap-2">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Easy-pace trend · Z2</p>
-                <span className="text-xs text-[#5a5a5a]">{pts.length} runs with ≥10 min in Z2</span>
-              </div>
-              <div className="text-right">
-                <span className="text-lg font-black font-headline text-[#4bdece]">{fmtPace(latest.paceSec)} <span className="text-xs font-normal text-[#a48b83]">/km</span></span>
-                <p className="text-[9px] text-[#5a5a5a]">{formatDate(latest.date)}</p>
-              </div>
-            </div>
-            <svg className="w-full h-20" viewBox="0 0 300 80" preserveAspectRatio="none">
-              <polyline points={svgPts} fill="none" stroke="#4bdece" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              {pts.map((p, i) => {
-                const x = (i / Math.max(pts.length - 1, 1)) * 300
-                const y = 10 + ((p.paceSec - min) / range) * 60
-                return <circle key={i} cx={x} cy={y} r="2" fill="#4bdece" />
-              })}
-            </svg>
           </div>
         )
       })()}
