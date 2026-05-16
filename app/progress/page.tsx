@@ -5,6 +5,7 @@ import BottomNav from '@/components/BottomNav'
 import ExercisePicker, { type ExerciseHint } from '@/components/ExercisePicker'
 import BodyHeatmap from '@/components/BodyHeatmap'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
+import { zoneSeconds, decouplingPct, negativeSplit } from '@/lib/run-analysis'
 
 function getExerciseType(name: string): ExerciseType {
   return EXERCISES.find(e => e.name === name)?.type ?? 'weights'
@@ -65,6 +66,13 @@ type RunDetail = {
   hrSamples: HrSample[]
   distanceSamples: DistanceSample[]
 }
+type CardioInsights = {
+  userHrMax: number
+  bestSegments: Record<'5K' | '10K' | 'Half' | 'Marathon', { seconds: number; cardio_id: number; date: string } | null>
+  weeklyVolume: { weekStart: string; km: number; runs: number }[]
+  weeklyZones: { weekStart: string; z1: number; z2: number; z3: number; z4: number; z5: number }[]
+  z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[]
+}
 type CalendarDay = {
   date: string
   max_weight: number | null
@@ -120,11 +128,13 @@ function trendPercent(values: number[], lowerIsBetter = false): number | null {
 function RunDetailSheet({
   runId,
   allCardio,
+  userHrMax,
   onClose,
   onDeleted,
 }: {
   runId: number
   allCardio: CardioEntry[]
+  userHrMax?: number
   onClose: () => void
   onDeleted?: (id: number) => void
 }) {
@@ -333,6 +343,16 @@ function RunDetailSheet({
   // ── Best segments ──────────────────────────────────────────────────────────
   const best5KSec = hasPace ? findBestSegment(distSamples, 5.0) : null
   const best10KSec = hasPace ? findBestSegment(distSamples, 10.0) : null
+  const bestHalfSec = hasPace ? findBestSegment(distSamples, 21.0975) : null
+  const bestMarathonSec = hasPace ? findBestSegment(distSamples, 42.195) : null
+
+  // ── Zone breakdown / decoupling / split badges ────────────────────────────
+  const zones = (userHrMax && hasHr) ? zoneSeconds(detail.hrSamples, userHrMax) : null
+  const zoneTotal = zones ? zones.z1 + zones.z2 + zones.z3 + zones.z4 + zones.z5 : 0
+  const decouple = hasHr && hasPace
+    ? decouplingPct(detail.hrSamples, distSamples, durationSec)
+    : null
+  const negSplit = hasPace ? negativeSplit(distSamples) : null
 
   // ── Km splits ──────────────────────────────────────────────────────────────
   const kmSplits = hasPace ? computeKmSplits(distSamples) : []
@@ -657,23 +677,84 @@ function RunDetailSheet({
             </div>
           )}
 
-          {/* Best Segments */}
-          {(best5KSec !== null || best10KSec !== null) && (
-            <div className="mt-4 flex gap-2 animate-fade-in" style={{ animationDelay: '120ms' }}>
-              {best5KSec !== null && (
-                <div className="flex-1 bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
-                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Best 5K</span>
-                  <span className="text-xl font-black font-headline text-[#4bdece]">{fmtSegTime(best5KSec)}</span>
+          {/* Best Segments — actual fastest sub-window across the run */}
+          {(best5KSec !== null || best10KSec !== null || bestHalfSec !== null || bestMarathonSec !== null) && (
+            <div className="mt-4 flex gap-2 overflow-x-auto no-scrollbar animate-fade-in" style={{ animationDelay: '120ms' }}>
+              {[
+                { label: 'Best 5K', sec: best5KSec },
+                { label: 'Best 10K', sec: best10KSec },
+                { label: 'Best Half', sec: bestHalfSec },
+                { label: 'Best Marathon', sec: bestMarathonSec },
+              ].filter(b => b.sec !== null).map(b => (
+                <div key={b.label} className="flex-1 min-w-[100px] bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
+                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">{b.label}</span>
+                  <span className="text-xl font-black font-headline text-[#4bdece]">{fmtSegTime(b.sec!)}</span>
                 </div>
-              )}
-              {best10KSec !== null && (
-                <div className="flex-1 bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
-                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Best 10K</span>
-                  <span className="text-xl font-black font-headline text-[#4bdece]">{fmtSegTime(best10KSec)}</span>
-                </div>
-              )}
+              ))}
             </div>
           )}
+
+          {/* Run quality badges — negative split + decoupling */}
+          {(negSplit || decouple !== null) && (
+            <div className="mt-4 flex gap-2 flex-wrap animate-fade-in" style={{ animationDelay: '140ms' }}>
+              {negSplit && (() => {
+                const isNeg = negSplit.delta < -5
+                const isEven = Math.abs(negSplit.delta) <= 30
+                const color = isNeg ? '#4bdece' : isEven ? '#dcc1b8' : '#ff9066'
+                const label = isNeg ? 'Negative split' : isEven ? 'Even split' : 'Positive split'
+                const delta = negSplit.delta
+                const sign = delta > 0 ? '+' : ''
+                return (
+                  <div className="bg-[#131313] rounded-xl px-3 py-2 flex flex-col">
+                    <span className="text-[9px] font-bold font-label uppercase tracking-wider" style={{ color }}>{label}</span>
+                    <span className="text-xs text-[#a48b83]">2nd half {sign}{Math.round(delta)}s</span>
+                  </div>
+                )
+              })()}
+              {decouple !== null && (() => {
+                const isBad = decouple > 5
+                const isOk = decouple <= 5 && decouple >= -2
+                const color = isBad ? '#ff9066' : isOk ? '#4bdece' : '#dcc1b8'
+                const label = isBad ? 'Aerobic decoupling' : 'Solid aerobic'
+                return (
+                  <div className="bg-[#131313] rounded-xl px-3 py-2 flex flex-col">
+                    <span className="text-[9px] font-bold font-label uppercase tracking-wider" style={{ color }}>{label}</span>
+                    <span className="text-xs text-[#a48b83]">{decouple > 0 ? '+' : ''}{decouple.toFixed(1)}% EF drift</span>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* HR zone breakdown */}
+          {zones && zoneTotal > 60 && (() => {
+            const zArr = [zones.z1, zones.z2, zones.z3, zones.z4, zones.z5]
+            const zColors = ['#5b8def', '#4bdece', '#a0e857', '#ffb84d', '#ff6b6b']
+            const zLabels = ['Z1 Recovery', 'Z2 Easy', 'Z3 Tempo', 'Z4 Threshold', 'Z5 VO2max']
+            return (
+              <div className="mt-4 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '180ms' }}>
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Time in zones</p>
+                  <p className="text-[9px] text-[#5a5a5a]">HRmax {userHrMax}</p>
+                </div>
+                <div className="flex h-3 rounded-full overflow-hidden mb-3">
+                  {zArr.map((sec, i) => sec > 0 && (
+                    <div key={i} style={{ flexGrow: sec / zoneTotal, backgroundColor: zColors[i] }} title={`${zLabels[i]}: ${Math.round(sec/60)} min`} />
+                  ))}
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {zArr.map((sec, i) => (
+                    <div key={i} className="flex flex-col items-center">
+                      <div className="w-2 h-2 rounded-sm mb-1" style={{ backgroundColor: zColors[i] }} />
+                      <span className="text-[9px] font-bold font-label text-[#a48b83]">Z{i+1}</span>
+                      <span className="text-[10px] font-mono text-[#e5e2e1]">{Math.round(sec/60)}m</span>
+                      <span className="text-[8px] text-[#5a5a5a]">{Math.round((sec/zoneTotal)*100)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Km Splits */}
           {kmSplits.length > 0 && (() => {
@@ -1058,6 +1139,7 @@ export default function ProgressPage() {
     const cr = ls.getItem('ss_prog_range'); if (cr === 'week' || cr === 'month' || cr === 'year' || cr === 'all') setChartRange(cr)
     const lm = ls.getItem('ss_prog_lift_metric'); if (lm === 'weight' || lm === 'volume' || lm === 'e1rm' || lm === 'topReps' || lm === 'avgWeight') setLiftMetric(lm)
   }, [])
+  const [cardioInsights, setCardioInsights] = useState<CardioInsights | null>(null)
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
@@ -1154,6 +1236,17 @@ export default function ProgressPage() {
       if (Array.isArray(data.starred)) setStarred(new Set(data.starred))
     }).catch(() => {})
   }, [])
+
+  // Fetch cardio insights once the tab is opened (lazy — server aggregates samples).
+  const insightsFetched = useRef(false)
+  useEffect(() => {
+    if (tab !== 'cardio' || insightsFetched.current) return
+    insightsFetched.current = true
+    fetch('/api/progress/cardio-insights')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCardioInsights(d) })
+      .catch(() => {})
+  }, [tab])
 
   const toggleStar = useCallback((exercise: string) => {
     setStarred(prev => {
@@ -1386,47 +1479,6 @@ export default function ProgressPage() {
     if (runs.length === 0) return null
     return runs.reduce((best, e) => (toSeconds(e.pace) ?? Infinity) < (toSeconds(best.pace) ?? Infinity) ? e : best)
   }, [filteredCardioHistory])
-
-  // Personal records: fastest run in each distance bracket (uses all history, not range-filtered)
-  const raceRecords = useMemo(() => {
-    const BRACKETS = [
-      { label: '5K',       target: 5.0,     min: 4.6 },
-      { label: '10K',      target: 10.0,    min: 9.2 },
-      { label: 'Half',     target: 21.0975, min: 19.5 },
-      { label: 'Marathon', target: 42.195,  min: 40.0 },
-    ]
-    const runs = cardioHistory.filter(e =>
-      e.activity.toLowerCase().includes('run') && e.distance && e.duration
-    )
-
-    // Estimate time at exactly targetKm using average pace (totalTime * target / actualDist)
-    function estimatedSec(e: typeof runs[0], target: number): number {
-      const d = parseFloat(e.distance ?? '')
-      const t = toSeconds(e.duration)
-      if (!t || !d || d <= 0) return Infinity
-      return t * (target / d)
-    }
-    function fmtSec(sec: number): string {
-      const h = Math.floor(sec / 3600)
-      const m = Math.floor((sec % 3600) / 60)
-      const s = Math.round(sec % 60)
-      if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-      return `${m}:${String(s).padStart(2, '0')}`
-    }
-
-    return BRACKETS.flatMap(b => {
-      // Include any run long enough to cover the distance
-      const matching = runs.filter(e => {
-        const d = parseFloat(e.distance ?? '')
-        return !isNaN(d) && d >= b.min
-      })
-      if (matching.length === 0) return []
-      const fastest = matching.reduce((best, e) =>
-        estimatedSec(e, b.target) < estimatedSec(best, b.target) ? e : best
-      )
-      return [{ label: b.label, entry: fastest, count: matching.length, time: fmtSec(estimatedSec(fastest, b.target)) }]
-    })
-  }, [cardioHistory])
 
   // ── Calendar heat-map ───────────────────────────────────────────────────────
   const calMonthDate = useMemo(() => {
@@ -1674,23 +1726,230 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {/* Personal records row */}
-      {tab === 'cardio' && raceRecords.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
-          {raceRecords.map(({ label, entry, count, time }) => (
-            <button
-              key={label}
-              onClick={() => entry.cardio_id && setSelectedRunId(entry.cardio_id)}
-              className="bg-[#131313] rounded-xl px-4 py-3 flex flex-col gap-0.5 shrink-0 active:scale-[0.97] transition-transform text-left min-w-[80px]"
-            >
-              <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#4bdece]">{label}</span>
-              <span className="text-lg font-black font-headline text-[#e5e2e1] leading-tight">{time}</span>
-              <span className="text-[9px] text-[#a48b83]">{formatDate(entry.date)}</span>
-              {count > 1 && <span className="text-[8px] text-[#5a5a5a]">{count} runs</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Real best-segment PRs (computed from distance samples — actual fastest window) */}
+      {tab === 'cardio' && cardioInsights && (() => {
+        const labels: ('5K' | '10K' | 'Half' | 'Marathon')[] = ['5K', '10K', 'Half', 'Marathon']
+        const tiles = labels.map(l => ({ label: l, rec: cardioInsights.bestSegments[l] })).filter(t => t.rec)
+        if (tiles.length === 0) return null
+        function fmtSec(sec: number) {
+          const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60)
+          return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`
+        }
+        return (
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Best segment PRs</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
+              {tiles.map(({ label, rec }) => (
+                <button
+                  key={label}
+                  onClick={() => rec && setSelectedRunId(rec.cardio_id)}
+                  className="bg-[#131313] rounded-xl px-4 py-3 flex flex-col gap-0.5 shrink-0 active:scale-[0.97] transition-transform text-left min-w-[80px]"
+                >
+                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#4bdece]">{label}</span>
+                  <span className="text-lg font-black font-headline text-[#e5e2e1] leading-tight">{fmtSec(rec!.seconds)}</span>
+                  <span className="text-[9px] text-[#a48b83]">{formatDate(rec!.date)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Weekly volume — 8-week bar chart with avg line */}
+      {tab === 'cardio' && cardioInsights && cardioInsights.weeklyVolume.length > 0 && (() => {
+        const wv = cardioInsights.weeklyVolume
+        const todayWk = (() => {
+          const d = new Date()
+          const dow = (d.getDay() + 6) % 7
+          d.setDate(d.getDate() - dow)
+          return d.toISOString().slice(0, 10)
+        })()
+        // Build a continuous 8-week window so zero-km weeks still show
+        const weeks: { weekStart: string; km: number; runs: number }[] = []
+        const start = new Date(todayWk + 'T00:00:00Z')
+        start.setUTCDate(start.getUTCDate() - 7 * 7) // 8 weeks total including current
+        const byWeek = new Map(wv.map(w => [w.weekStart, w]))
+        for (let i = 0; i < 8; i++) {
+          const ws = new Date(start)
+          ws.setUTCDate(ws.getUTCDate() + i * 7)
+          const key = ws.toISOString().slice(0, 10)
+          weeks.push(byWeek.get(key) ?? { weekStart: key, km: 0, runs: 0 })
+        }
+        const thisWeek = weeks[weeks.length - 1].km
+        const prior = weeks.slice(0, -1)
+        const baseline = prior.length > 0 ? prior.reduce((a, b) => a + b.km, 0) / prior.length : 0
+        const ratio = baseline > 0 ? thisWeek / baseline : null
+        const maxKm = Math.max(1, ...weeks.map(w => w.km))
+        const avgKm = weeks.reduce((a, b) => a + b.km, 0) / weeks.length
+        const avgY = maxKm > 0 ? 100 - (avgKm / maxKm) * 100 : 100
+        const totalKm = weeks.reduce((a, b) => a + b.km, 0)
+        return (
+          <div className="bg-[#131313] rounded-xl p-4 flex flex-col gap-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">This week</p>
+                <span className="text-3xl font-black font-headline text-[#4bdece]">{thisWeek.toFixed(1)} <span className="text-sm font-normal text-[#a48b83]">km</span></span>
+                <p className="text-[10px] text-[#5a5a5a] mt-0.5">{totalKm.toFixed(0)} km · 8 wk</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">vs 7-wk avg</p>
+                {ratio !== null ? (
+                  <span className={`text-xl font-black font-headline ${ratio > 1.5 ? 'text-orange-400' : ratio < 0.5 ? 'text-red-400' : 'text-[#e5e2e1]'}`}>
+                    {ratio >= 1 ? '+' : ''}{Math.round((ratio - 1) * 100)}%
+                  </span>
+                ) : (
+                  <span className="text-sm text-[#5a5a5a]">no baseline</span>
+                )}
+                <p className="text-[9px] text-[#5a5a5a]">avg {baseline.toFixed(1)} km</p>
+              </div>
+            </div>
+
+            <div className="relative">
+              {/* Avg dashed line overlay (positioned in the bar area, which is 96px tall) */}
+              {avgKm > 0 && (
+                <div
+                  className="absolute left-0 right-0 border-t border-dashed border-[#4bdece]/40 z-10 pointer-events-none"
+                  style={{ top: `${avgY}%`, height: 0 }}
+                />
+              )}
+              <div className="flex items-end gap-1.5 h-24">
+                {weeks.map(w => {
+                  const isCurrent = w.weekStart === todayWk
+                  const isEmpty = w.km === 0
+                  const heightPct = isEmpty ? 0 : Math.max(4, (w.km / maxKm) * 100)
+                  return (
+                    <div key={w.weekStart} className="flex-1 h-full flex flex-col justify-end items-center gap-1">
+                      {!isEmpty && (
+                        <span className={`text-[9px] font-bold font-headline ${isCurrent ? 'text-[#4bdece]' : 'text-[#a48b83]'}`}>
+                          {w.km.toFixed(0)}
+                        </span>
+                      )}
+                      <div
+                        className={`w-full rounded-t-sm transition-colors ${isCurrent ? 'bg-[#4bdece]' : isEmpty ? 'bg-[#2a2a2a]' : 'bg-[#4bdece]/40'}`}
+                        style={{ height: isEmpty ? '2px' : `${heightPct}%` }}
+                        title={`${w.weekStart}: ${w.km.toFixed(1)} km · ${w.runs} run${w.runs === 1 ? '' : 's'}`}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Week labels (Mon DD) */}
+              <div className="flex gap-1.5 mt-1.5">
+                {weeks.map(w => {
+                  const d = new Date(w.weekStart + 'T00:00:00Z')
+                  const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+                  return (
+                    <span key={w.weekStart} className="flex-1 text-center text-[9px] font-bold font-label text-[#5a5a5a] uppercase tracking-wider">
+                      {label}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* HR zone distribution — last 4 weeks stacked */}
+      {tab === 'cardio' && cardioInsights && cardioInsights.weeklyZones.length > 0 && (() => {
+        const wz = cardioInsights.weeklyZones.slice(-8)
+        const totals = wz.map(w => w.z1 + w.z2 + w.z3 + w.z4 + w.z5)
+        const maxTotal = Math.max(1, ...totals)
+        const zoneColors = ['#5b8def', '#4bdece', '#a0e857', '#ffb84d', '#ff6b6b']
+        const zoneLabels = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
+        return (
+          <div className="bg-[#131313] rounded-xl p-4 flex flex-col gap-3">
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Time in HR zones · last 8 wk</p>
+              <p className="text-[9px] text-[#5a5a5a]">HRmax {cardioInsights.userHrMax || '—'}</p>
+            </div>
+            <div>
+              <div className="flex items-end gap-1.5 h-24">
+                {wz.map((w, i) => {
+                  const total = totals[i]
+                  const heightPct = total > 0 ? (total / maxTotal) * 100 : 0
+                  const zones = [w.z1, w.z2, w.z3, w.z4, w.z5]
+                  return (
+                    <div key={w.weekStart} className="flex-1 h-full flex flex-col justify-end items-center gap-1" title={`${w.weekStart}: ${Math.round(total/60)} min`}>
+                      {total > 0 && (() => {
+                        const mins = Math.round(total / 60)
+                        const label = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
+                        return <span className="text-[9px] font-bold font-headline text-[#a48b83]">{label}</span>
+                      })()}
+                      <div className="w-full relative rounded-t-sm overflow-hidden" style={{ height: `${heightPct}%`, minHeight: total > 0 ? '3px' : '2px', backgroundColor: total > 0 ? undefined : '#2a2a2a' }}>
+                        {total > 0 && zones.map((z, zi) => {
+                          if (z <= 0) return null
+                          const offsetPct = zones.slice(0, zi).reduce((a, b) => a + b, 0) / total * 100
+                          const hPct = (z / total) * 100
+                          return <div key={zi} className="absolute left-0 right-0" style={{ bottom: `${offsetPct}%`, height: `${hPct}%`, backgroundColor: zoneColors[zi] }} />
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex gap-1.5 mt-1.5">
+                {wz.map(w => {
+                  const d = new Date(w.weekStart + 'T00:00:00Z')
+                  const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+                  return (
+                    <span key={w.weekStart} className="flex-1 text-center text-[9px] font-bold font-label text-[#5a5a5a] uppercase tracking-wider">
+                      {label}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              {zoneLabels.map((l, i) => (
+                <div key={l} className="flex items-center gap-1">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: zoneColors[i] }} />
+                  <span className="text-[10px] font-bold font-label text-[#a48b83]">{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Easy-pace (Z2) trend */}
+      {tab === 'cardio' && cardioInsights && cardioInsights.z2Trend.length >= 2 && (() => {
+        const pts = cardioInsights.z2Trend.slice(-20)
+        const paces = pts.map(p => p.paceSec)
+        const min = Math.min(...paces), max = Math.max(...paces), range = max - min || 1
+        const svgPts = pts.map((p, i) => {
+          const x = (i / Math.max(pts.length - 1, 1)) * 300
+          // invert: faster (lower sec) = higher on chart
+          const y = 10 + ((p.paceSec - min) / range) * 60
+          return `${x},${y}`
+        }).join(' ')
+        const latest = pts[pts.length - 1]
+        function fmtPace(sec: number) {
+          return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
+        }
+        return (
+          <div className="bg-[#131313] rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">Easy-pace trend · Z2</p>
+                <span className="text-xs text-[#5a5a5a]">{pts.length} runs with ≥10 min in Z2</span>
+              </div>
+              <div className="text-right">
+                <span className="text-lg font-black font-headline text-[#4bdece]">{fmtPace(latest.paceSec)} <span className="text-xs font-normal text-[#a48b83]">/km</span></span>
+                <p className="text-[9px] text-[#5a5a5a]">{formatDate(latest.date)}</p>
+              </div>
+            </div>
+            <svg className="w-full h-20" viewBox="0 0 300 80" preserveAspectRatio="none">
+              <polyline points={svgPts} fill="none" stroke="#4bdece" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              {pts.map((p, i) => {
+                const x = (i / Math.max(pts.length - 1, 1)) * 300
+                const y = 10 + ((p.paceSec - min) / range) * 60
+                return <circle key={i} cx={x} cy={y} r="2" fill="#4bdece" />
+              })}
+            </svg>
+          </div>
+        )
+      })()}
 
       {/* Desktop: chart + history side by side */}
       <div className="flex flex-col gap-12 md:grid md:grid-cols-2 md:gap-8">
@@ -2399,6 +2658,7 @@ export default function ProgressPage() {
         <RunDetailSheet
           runId={selectedRunId}
           allCardio={cardioHistory as CardioEntry[]}
+          userHrMax={cardioInsights?.userHrMax}
           onClose={() => setSelectedRunId(null)}
           onDeleted={(id) => {
             setFadingRunIds(prev => new Set([...prev, id]))
