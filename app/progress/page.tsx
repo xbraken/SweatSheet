@@ -98,6 +98,16 @@ function toSeconds(str: string | null): number | null {
   return null
 }
 
+/** Like toSeconds, but a bare number ("10") means minutes ("10:00"), not seconds */
+function toSecondsMinDefault(str: string | null): number | null {
+  if (!str) return null
+  if (!str.includes(':')) {
+    const mins = Number(str)
+    return isNaN(mins) ? null : Math.round(mins * 60)
+  }
+  return toSeconds(str)
+}
+
 /** Build SVG polyline string scaled to 300×80 viewBox. invert=true means lower value sits higher on screen */
 function buildSvgPoints(values: number[], invert = false): string {
   const max = Math.max(...values)
@@ -150,6 +160,10 @@ function RunDetailSheet({
   const [editingStats, setEditingStats] = useState(false)
   const [editDist, setEditDist] = useState('')
   const [editDuration, setEditDuration] = useState('')
+  const [editingSegment, setEditingSegment] = useState(false)
+  const [segRows, setSegRows] = useState<{ start: string; end: string; speed: string }[]>([{ start: '', end: '', speed: '' }])
+  const [segSaving, setSegSaving] = useState(false)
+  const [segError, setSegError] = useState('')
   const [isClosing, setIsClosing] = useState(false)
 
   function handleClose() {
@@ -202,11 +216,16 @@ function RunDetailSheet({
       const dd = samples[j].distance_km - samples[j - 1].distance_km
       return dd > 0 && dt > 0 ? dt / dd : 0
     })
-    // Smooth with a 7-point moving average to reduce GPS noise
-    return raw.map((_, i) => {
+    // Smooth with a 7-point median filter — unlike a moving average, a median rejects
+    // isolated GPS/watch noise spikes without blurring a genuine sustained step change
+    // (e.g. a manually corrected pace segment) into a fake ramp.
+    return raw.map((v, i) => {
       const s = Math.max(0, i - 3), e = Math.min(raw.length, i + 4)
-      const slice = raw.slice(s, e).filter(v => v > 0)
-      return slice.length > 0 ? slice.reduce((a, b) => a + b, 0) / slice.length : 0
+      const slice = raw.slice(s, e).filter(x => x > 0)
+      if (slice.length === 0) return v
+      const sorted = [...slice].sort((a, b) => a - b)
+      const mid = Math.floor(sorted.length / 2)
+      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
     })
   }
 
@@ -1082,6 +1101,97 @@ function RunDetailSheet({
             </div>
           )}
 
+          {/* Correct pace segment(s) — for treadmill runs where the Watch's pace is off.
+              Type a bare number ("10") for a whole minute, or "10:43" for minute:second. */}
+          {hasPace && !compareDetail && !editingSegment && (
+            <button
+              onClick={() => { setSegRows([{ start: '', end: '', speed: '' }]); setSegError(''); setEditingSegment(true) }}
+              className="mt-3 w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors"
+            >
+              <span className="material-symbols-outlined text-base text-[#a48b83]">speed</span>
+              Correct pace segment
+            </button>
+          )}
+          {editingSegment && (
+            <div className="mt-3 bg-[#131313] rounded-2xl p-4">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Correct pace segment(s)</p>
+              <div className="flex flex-col gap-2 mb-3">
+                {segRows.map((row, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+                    <div className="bg-[#201f1f] rounded-xl p-2.5 text-center">
+                      <input type="text" value={row.start} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, start: e.target.value } : r))} placeholder="10 or 10:43" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-[#353534] placeholder:text-xs" />
+                      <span className="block text-[9px] font-label uppercase tracking-widest text-[#a48b83] mt-1">Start</span>
+                    </div>
+                    <div className="bg-[#201f1f] rounded-xl p-2.5 text-center">
+                      <input type="text" value={row.end} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, end: e.target.value } : r))} placeholder="15 or 15:20" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-[#353534] placeholder:text-xs" />
+                      <span className="block text-[9px] font-label uppercase tracking-widest text-[#a48b83] mt-1">End</span>
+                    </div>
+                    <div className="bg-[#201f1f] rounded-xl p-2.5 text-center">
+                      <input type="number" value={row.speed} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, speed: e.target.value } : r))} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-[#353534]" />
+                      <span className="block text-[9px] font-label uppercase tracking-widest text-[#a48b83] mt-1">km/h</span>
+                    </div>
+                    <button
+                      onClick={() => setSegRows(rows => rows.filter((_, ri) => ri !== i))}
+                      disabled={segRows.length === 1}
+                      className="w-8 h-8 flex items-center justify-center text-[#a48b83] disabled:opacity-30"
+                    >
+                      <span className="material-symbols-outlined text-lg">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setSegRows(rows => [...rows, { start: '', end: '', speed: '' }])}
+                className="w-full py-2 mb-3 rounded-xl border border-dashed border-[#353534] text-[#a48b83] text-xs font-bold flex items-center justify-center gap-1 hover:bg-[#201f1f] transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">add</span>
+                Add segment
+              </button>
+              {segError && <p className="text-xs text-red-400 mb-3">{segError}</p>}
+              <div className="flex gap-2">
+                <button onClick={() => setEditingSegment(false)} className="flex-1 py-2.5 rounded-xl border border-[#353534] text-[#a48b83] text-sm font-bold transition-colors hover:bg-[#201f1f]">Cancel</button>
+                <button
+                  disabled={segSaving}
+                  onClick={async () => {
+                    const parsed = segRows.map(row => ({
+                      startSec: toSecondsMinDefault(row.start),
+                      endSec: toSecondsMinDefault(row.end),
+                      speedKmh: parseFloat(row.speed),
+                    }))
+                    const invalid = parsed.some(p =>
+                      p.startSec === null || p.endSec === null || isNaN(p.speedKmh)
+                      || p.startSec < 0 || p.endSec <= p.startSec || p.speedKmh <= 0
+                    )
+                    if (invalid) {
+                      setSegError('Enter a valid start/end and speed for every segment (e.g. "10" or "10:43")')
+                      return
+                    }
+                    // Apply earliest-start-first so each correction's forward-shift composes predictably
+                    const ordered = [...parsed].sort((a, b) => (a.startSec as number) - (b.startSec as number))
+                    setSegSaving(true)
+                    setSegError('')
+                    let lastRes: { ok: boolean; error?: string; distance?: string; pace?: string; distanceSamples?: DistanceSample[] } | null = null
+                    for (const seg of ordered) {
+                      lastRes = await fetch(`/api/run/${runId}/segment`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(seg),
+                      }).then(r => r.json())
+                      if (!lastRes?.ok) break
+                    }
+                    setSegSaving(false)
+                    if (!lastRes?.ok) { setSegError(lastRes?.error ?? 'Failed to save'); return }
+                    setDetail({ ...detail, distance: lastRes.distance ?? null, pace: lastRes.pace ?? null, distanceSamples: lastRes.distanceSamples ?? detail.distanceSamples })
+                    setEditingSegment(false)
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-[#4bdece] text-[#003732] text-sm font-bold disabled:opacity-50"
+                >
+                  {segSaving ? 'Saving…' : segRows.length > 1 ? `Apply ${segRows.length} segments` : 'Apply'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Delete */}
           <button
             onClick={async () => {
@@ -1772,10 +1882,13 @@ export default function ProgressPage() {
         // Filter by the currently selected cardio activity (Run / Cycling / etc.)
         const wv = cardioInsights.weeklyVolume.filter(w => w.activity === cardioActivity)
         const sessionWord = cardioActivity === 'Run' ? 'run' : cardioActivity.toLowerCase()
+        // Use UTC day-of-week (not local) so this matches lib/run-analysis.ts's weekStart(),
+        // which keys weeks in UTC — a local-time computation here would drift by a day
+        // whenever the browser's time zone differs from UTC, making every week's data miss.
         const todayWk = (() => {
           const d = new Date()
-          const dow = (d.getDay() + 6) % 7
-          d.setDate(d.getDate() - dow)
+          const dow = (d.getUTCDay() + 6) % 7
+          d.setUTCDate(d.getUTCDate() - dow)
           return d.toISOString().slice(0, 10)
         })()
         // Build a continuous 8-week window so zero-km weeks still show
@@ -1870,10 +1983,11 @@ export default function ProgressPage() {
         // Build a continuous 8-week window for the active cardio activity
         const filtered = cardioInsights.weeklyZones.filter(w => w.activity === cardioActivity)
         const byWeek = new Map(filtered.map(w => [w.weekStart, w]))
+        // UTC-based, matching lib/run-analysis.ts's weekStart() — see comment on the volume widget above
         const todayWk = (() => {
           const d = new Date()
-          const dow = (d.getDay() + 6) % 7
-          d.setDate(d.getDate() - dow)
+          const dow = (d.getUTCDay() + 6) % 7
+          d.setUTCDate(d.getUTCDate() - dow)
           return d.toISOString().slice(0, 10)
         })()
         const wz: { weekStart: string; z1: number; z2: number; z3: number; z4: number; z5: number }[] = []
