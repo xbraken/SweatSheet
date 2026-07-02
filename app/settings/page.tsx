@@ -19,6 +19,9 @@ export default function SettingsPage() {
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null)
   const [webhookRegistering, setWebhookRegistering] = useState(false)
   const stravaStatus = searchParams.get('strava')
+  const [intervalsSyncing, setIntervalsSyncing] = useState(false)
+  const [intervalsForce, setIntervalsForce] = useState(false)
+  const [intervalsSyncResult, setIntervalsSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
   const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -312,6 +315,62 @@ export default function SettingsPage() {
           )}
         </div>
       </section>
+
+      {/* Intervals.icu — single global API key, so only its owner account gets this section */}
+      {username === 'edmond' && (
+      <section className="flex flex-col gap-4 mb-8">
+        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Intervals.icu</h3>
+        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#4bdece]/20 rounded-xl flex items-center justify-center">
+              <span className="material-symbols-outlined text-[#4bdece] text-xl">directions_run</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[#e5e2e1]">Intervals.icu</p>
+              <p className="text-xs text-[#a48b83]">Auto-syncs when you open the app (daily cron as backup)</p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 px-1 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={intervalsForce}
+              onChange={e => setIntervalsForce(e.target.checked)}
+              className="w-4 h-4 accent-[#4bdece]"
+            />
+            <span className="text-xs text-[#a48b83]">Force re-import (ignore dedup)</span>
+          </label>
+          <button
+            onClick={async () => {
+              setIntervalsSyncing(true)
+              setIntervalsSyncResult(null)
+              const res = await fetch('/api/intervals/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ force: intervalsForce }),
+              }).then(r => r.json())
+              setIntervalsSyncing(false)
+              setIntervalsSyncResult({ imported: res.imported ?? 0, skipped: res.skipped ?? 0 })
+              setTimeout(() => setIntervalsSyncResult(null), 4000)
+            }}
+            disabled={intervalsSyncing}
+            className="w-full py-3 bg-[#4bdece]/10 text-[#4bdece] rounded-xl text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+          >
+            {intervalsSyncing
+              ? <><div className="w-4 h-4 border-2 border-[#4bdece]/30 border-t-[#4bdece] rounded-full animate-spin" /> Syncing…</>
+              : <><span className="material-symbols-outlined text-base">sync</span> Sync now</>
+            }
+          </button>
+          {intervalsSyncResult && (
+            <p className="text-xs text-center text-[#a48b83]">
+              {intervalsSyncResult.imported > 0
+                ? `✓ ${intervalsSyncResult.imported} imported, ${intervalsSyncResult.skipped} already up to date`
+                : `All ${intervalsSyncResult.skipped} activities already up to date`
+              }
+            </p>
+          )}
+        </div>
+      </section>
+      )}
 
       {/* Shortcut sync */}
       <section className="flex flex-col gap-4 mb-8">

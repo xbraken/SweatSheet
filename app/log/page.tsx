@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
+import { useIntervalsSyncTrigger } from '@/components/IntervalsSyncTrigger'
 import Onboarding, { shouldShowOnboarding } from '@/components/Onboarding'
 import ExercisePicker, { type ExerciseHint, type ExercisePR } from '@/components/ExercisePicker'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
@@ -482,6 +483,8 @@ type View =
   | { type: 'cardio'; activity: string }
 
 export default function LogPage() {
+  useIntervalsSyncTrigger()
+
   const [view, setView] = useState<View>({ type: 'list' })
 
   // Today's logged exercises

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import LogoutButton from '@/components/LogoutButton'
+import IntervalsSyncTrigger from '@/components/IntervalsSyncTrigger'
 
 function toSecondsLoose(str: string | null): number {
   if (!str) return 0
@@ -153,6 +154,7 @@ export default async function TodayPage() {
 
   return (
     <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12 animate-fade-in-view">
+      <IntervalsSyncTrigger />
       {/* Header */}
       <header className="mb-10 flex justify-between items-start">
         <div>
