@@ -26,7 +26,8 @@ export function makeDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       type TEXT NOT NULL,
-      position INTEGER NOT NULL DEFAULT 0
+      position INTEGER NOT NULL DEFAULT 0,
+      notes TEXT
     );
 
     CREATE TABLE sets (
@@ -36,7 +37,8 @@ export function makeDb() {
       weight REAL NOT NULL,
       reps INTEGER NOT NULL,
       position INTEGER NOT NULL DEFAULT 0,
-      logged_at TEXT
+      logged_at TEXT,
+      duration_secs INTEGER
     );
 
     CREATE TABLE cardio (

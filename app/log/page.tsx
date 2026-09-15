@@ -14,6 +14,8 @@ type LoggedCardio = { block_id: number; cardio_id: number; activity: string; dis
 type Routine = { id: number; name: string; exercises: string[] }
 type PendingBlock = { exercise: string; exerciseType: 'weights' | 'bodyweight' | 'timed'; sets: SetRow[] }
 type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number; pending: Record<number, PendingBlock> }
+type HistorySet = { weight: number; reps: number; duration_secs: number | null }
+type HistoryEntry = { date: string; block_id: number; notes: string | null; sets: HistorySet[] }
 
 // ── Swipeable card (swipe left to delete on mobile, X on desktop) ─────────────
 const ACTION_W = 72
@@ -148,6 +150,17 @@ function calcPace(distStr: string, timeStr: string): string {
   const m = Math.floor(secPerKm / 60)
   const s = Math.round(secPerKm % 60)
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+// How long ago a logged session was — "today", "3d ago", "2w ago"
+function relDay(dateStr: string): string {
+  const days = Math.floor((Date.now() - new Date(dateStr + 'T00:00:00').getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`
+  return `${Math.floor(days / 365)}y ago`
 }
 
 // ── Rest Timer Button ─────────────────────────────────────────────────────────
@@ -602,6 +615,12 @@ export default function LogPage() {
   const [prs, setPrs] = useState<Map<string, ExercisePR>>(new Map())
   const [starred, setStarred] = useState<Set<string>>(new Set())
 
+  // Recent sessions for the exercise being logged — reference/baseline sheet
+  const [historyFor, setHistoryFor] = useState<string | null>(null)
+  const [historyCache, setHistoryCache] = useState<Record<string, HistoryEntry[]>>({})
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+
   // Saving
   const [saving, setSaving] = useState(false)
   const [pr, setPr] = useState<{ exercise: string; weight: number } | null>(null)
@@ -993,6 +1012,38 @@ export default function LogPage() {
     })
   }
 
+  // ── Recent sessions for one exercise ──────────────────────────────────────
+  // Opened from the logging header so the last few sessions are available as a
+  // baseline mid-workout. Cached per exercise; re-fetched each open so a block
+  // saved earlier today shows up.
+  const openHistory = (exercise: string) => {
+    setHistoryFor(exercise)
+    setHistoryError(null)
+    setHistoryLoading(historyCache[exercise] === undefined)
+    fetch(`/api/exercises/history?exercise=${encodeURIComponent(exercise)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setHistoryCache(prev => ({ ...prev, [exercise]: (data.entries ?? []) as HistoryEntry[] }))
+      })
+      .catch(() => setHistoryError('Could not load recent sessions'))
+      .finally(() => setHistoryLoading(false))
+  }
+
+  // Header button — sits where the back-button spacer used to be
+  const historyButton = (exercise: string) => (
+    <div className="w-16 flex justify-end">
+      <button
+        onClick={() => openHistory(exercise)}
+        aria-label={`Recent ${exercise} sessions`}
+        title="Recent sessions"
+        className="w-9 h-9 rounded-lg bg-[#201f1f] flex items-center justify-center active:scale-90 transition-transform hover:bg-[#2a2a2a]"
+      >
+        <span className="material-symbols-outlined text-[#a48b83] text-lg">history</span>
+      </button>
+    </div>
+  )
+
   // Notes editor — portaled to body so it overlays whichever view is active
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
@@ -1032,6 +1083,82 @@ export default function LogPage() {
     </>,
     document.body
   ) : null
+
+  // Recent-sessions sheet — portaled like the notes editor so it overlays any logging view
+  const historySheetPortal = historyFor && mounted ? (() => {
+    const exercise = historyFor
+    const exType = EXERCISES.find(e => e.name === exercise)?.type ?? 'weights'
+    const entries = historyCache[exercise]
+    const fmtDur = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+
+    const fmtSet = (s: HistorySet) => {
+      if (exType === 'timed') return fmtDur(s.duration_secs ?? 0)
+      if (exType === 'bodyweight') return s.weight > 0 ? `+${kgToDisplay(s.weight)} ${weightLabel} × ${s.reps}` : `${s.reps} reps`
+      return `${kgToDisplay(s.weight)} ${weightLabel} × ${s.reps}`
+    }
+
+    const summary = (entrySets: HistorySet[]) => {
+      const n = `${entrySets.length} set${entrySets.length !== 1 ? 's' : ''}`
+      if (exType === 'timed') return `${n} · ${fmtDur(entrySets.reduce((sum, s) => sum + (s.duration_secs ?? 0), 0))} total`
+      if (exType === 'bodyweight') return `${n} · ${entrySets.reduce((sum, s) => sum + s.reps, 0)} reps`
+      const top = entrySets.reduce((a, b) => (b.weight > a.weight ? b : a), entrySets[0])
+      const vol = Math.round(kgToDisplay(entrySets.reduce((sum, s) => sum + s.weight * s.reps, 0)))
+      const volStr = vol >= 10000 ? `${(vol / 1000).toFixed(1)}k ${weightLabel}` : `${vol} ${weightLabel}`
+      return `${n} · top ${kgToDisplay(top.weight)} ${weightLabel} × ${top.reps} · ${volStr}`
+    }
+
+    return createPortal(
+      <>
+        <div className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm" onClick={() => setHistoryFor(null)} />
+        <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[71] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] animate-slide-up flex flex-col max-h-[78vh]">
+          <div className="flex items-start justify-between mb-3 shrink-0">
+            <div>
+              <h3 className="font-headline text-base font-bold">{exercise}</h3>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#56423c] mt-0.5">Recent sessions</p>
+            </div>
+            <button onClick={() => setHistoryFor(null)}>
+              <span className="material-symbols-outlined text-[#a48b83]">close</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
+            {!entries && historyLoading && (
+              <div className="flex justify-center py-10">
+                <div className="w-5 h-5 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {!entries && historyError && (
+              <p className="text-sm text-red-400 text-center py-10">{historyError}</p>
+            )}
+            {entries?.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <span className="material-symbols-outlined text-3xl text-[#353534] mb-2">history</span>
+                <p className="text-sm text-[#a48b83]">No previous sessions yet</p>
+                <p className="text-xs text-[#56423c] mt-1">Log this exercise once and it&rsquo;ll show up here as a baseline.</p>
+              </div>
+            )}
+            {entries?.map(entry => (
+              <div key={entry.block_id} className="bg-[#201f1f] rounded-xl px-4 py-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="font-headline text-sm font-bold text-[#e5e2e1]">
+                    {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </p>
+                  <span className="text-[10px] font-bold font-label text-[#56423c] shrink-0">{relDay(entry.date)}</span>
+                </div>
+                <p className="text-[10px] font-bold font-label text-[#a48b83] mt-0.5">{summary(entry.sets)}</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {entry.sets.map((s, i) => (
+                    <span key={i} className="px-2 py-1 rounded-lg bg-[#2a2a2a] text-[11px] font-headline font-bold text-[#dcc1b8]">{fmtSet(s)}</span>
+                  ))}
+                </div>
+                {entry.notes && <p className="text-xs text-[#a48b83] italic mt-2 whitespace-pre-wrap">{entry.notes}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </>,
+      document.body
+    )
+  })() : null
 
   // ── List view ───────────────────────────────────────────────────────────────
   if (view.type === 'list') {
@@ -1801,7 +1928,7 @@ export default function LogPage() {
                 </div>
               )}
             </div>
-            <div className="w-16" />
+            {historyButton(view.exercise)}
           </div>
           {routineProgressBar}
           {/* Rest timer config + unit toggle */}
@@ -1949,6 +2076,7 @@ export default function LogPage() {
 
         <BottomNav />
         {notesEditorPortal}
+        {historySheetPortal}
       </main>
     )
   }
@@ -1999,7 +2127,7 @@ export default function LogPage() {
                 </div>
               )}
             </div>
-            <div className="w-16" />
+            {historyButton(view.exercise)}
           </div>
           {routineProgressBar}
           <div className="flex items-center gap-2">
@@ -2134,6 +2262,7 @@ export default function LogPage() {
 
         <BottomNav />
         {notesEditorPortal}
+        {historySheetPortal}
       </main>
     )
   }
@@ -2185,7 +2314,7 @@ export default function LogPage() {
                 </div>
               )}
             </div>
-            <div className="w-16" />
+            {historyButton(view.exercise)}
           </div>
           {routineProgressBar}
           <div className="flex items-center gap-2">
@@ -2311,6 +2440,7 @@ export default function LogPage() {
 
         <BottomNav />
         {notesEditorPortal}
+        {historySheetPortal}
       </main>
     )
   }

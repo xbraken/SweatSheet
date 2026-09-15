@@ -7,6 +7,7 @@ Built this because my workout data was scattered across Zepp, Apple Watch, and t
 ## What it does
 
 - **Set tracking** — log exercises, weights, reps as you go. Rest timer between sets, kg/lb toggle, session and per-block notes.
+- **Last-session reference** — tap the history button while logging an exercise to see your recent sessions of it (every set, volume, notes) as a baseline.
 - **Routines** — save reusable workout templates and start a session from one in a tap.
 - **Strava sync** — connect your Strava account and runs/rides import automatically via webhooks. HR, pace, and distance charts included.
 - **AI screenshot parsing** — take a screenshot of a workout from another app and it'll extract the data using Claude's vision API.
