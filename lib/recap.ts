@@ -63,9 +63,9 @@ export async function getRecap(userId: number, month: string): Promise<Recap> {
       args: [userId, start, end],
     }),
     db.execute({
-      sql: `SELECT p.exercise, p.kind, MAX(p.value) as value, p.reps FROM prs p JOIN sessions s ON p.session_id = s.id
+      sql: `SELECT p.exercise, p.kind, p.value, p.reps FROM prs p JOIN sessions s ON p.session_id = s.id
             WHERE p.user_id = ? AND s.date BETWEEN ? AND ?
-            GROUP BY p.exercise ORDER BY value DESC`,
+            ORDER BY p.id`,
       args: [userId, start, end],
     }),
     db.execute({
@@ -101,7 +101,7 @@ export async function getRecap(userId: number, month: string): Promise<Recap> {
     distanceKm: Math.round(distanceKm * 10) / 10,
     cardioMinutes: Math.round(cardioMinutes),
     longestStreak,
-    prs: prsRes.rows.map(r => ({ exercise: r.exercise as string, kind: r.kind as string, value: Number(r.value), reps: r.reps != null ? Number(r.reps) : null })),
+    prs: bestPrPerExercise(prsRes.rows.map(r => ({ exercise: r.exercise as string, kind: r.kind as string, value: Number(r.value), reps: r.reps != null ? Number(r.reps) : null }))),
     topExercises: topRes.rows.map(r => ({ exercise: r.exercise as string, sets: Number(r.sets) })),
     trainedDates,
     prevSessions: Number(prevRes.rows[0]?.n ?? 0),
@@ -110,14 +110,23 @@ export async function getRecap(userId: number, month: string): Promise<Recap> {
   }
 }
 
+type PrRow = Recap['prs'][number]
+
+/** One PR per exercise for the month — the best one (fastest for times, biggest otherwise) */
+export function bestPrPerExercise(rows: PrRow[]): PrRow[] {
+  const best = new Map<string, PrRow>()
+  for (const r of rows) {
+    const cur = best.get(r.exercise)
+    const lowerIsBetter = r.kind === 'segment'
+    if (!cur || (lowerIsBetter ? r.value < cur.value : r.value > cur.value)) best.set(r.exercise, r)
+  }
+  return [...best.values()]
+}
+
 export function fmtVolume(kg: number, isLbs: boolean): string {
   const v = isLbs ? kg * 2.20462 : kg
   if (v >= 1000) return `${(v / 1000).toFixed(1)}${isLbs ? 'k lbs' : 't'}`
   return `${Math.round(v)} ${isLbs ? 'lbs' : 'kg'}`
 }
 
-export function fmtPr(p: { kind: string; value: number; reps: number | null }, isLbs: boolean): string {
-  if (p.kind === 'duration') return `${Math.floor(p.value / 60)}:${String(Math.round(p.value % 60)).padStart(2, '0')}`
-  const w = isLbs ? `${Math.round(p.value * 2.20462)} lbs` : `${p.value} kg`
-  return p.reps ? `${w} × ${p.reps}` : w
-}
+export { fmtPrValue as fmtPr } from '@/lib/pr-format'

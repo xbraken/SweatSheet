@@ -173,6 +173,26 @@ export function longestZ2Window(
   }
 }
 
+/**
+ * Distance samples are only trusted when they roughly agree (±20%) with the recorded distance —
+ * a big mismatch means a corrupt import, and using it would produce fake PRs.
+ */
+export function plausibleSamples(samples: DistanceSample[], recordedKm: number): DistanceSample[] {
+  const sampleMaxKm = samples.length > 0 ? samples[samples.length - 1].distance_km : 0
+  const ok = recordedKm > 0 && sampleMaxKm > 0
+    ? Math.abs(sampleMaxKm - recordedKm) / recordedKm <= 0.20
+    : samples.length > 1
+  return ok ? samples : []
+}
+
+/**
+ * Riegel race-time prediction: T2 = T1 × (D2 / D1)^1.06.
+ * Most reliable when predicting up to ~4× the source distance.
+ */
+export function riegelPredict(sourceSec: number, sourceKm: number, targetKm: number): number {
+  return Math.round(sourceSec * Math.pow(targetKm / sourceKm, 1.06))
+}
+
 /** ISO week-start (Monday) date string YYYY-MM-DD for a given date string. */
 export function weekStart(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00Z')

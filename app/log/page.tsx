@@ -10,6 +10,7 @@ import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 import { localToday } from '@/lib/dates'
 import { FLUSHED_EVENT, sendOrQueue, type SendResult } from '@/lib/offline-queue'
 import { suggestNext } from '@/lib/progression'
+import { fmtPrValue } from '@/lib/pr-format'
 import { toast } from '@/components/Toast'
 import SwipeableCard from '@/components/log/SwipeableCard'
 import CardioPicker from '@/components/log/CardioPicker'
@@ -581,6 +582,11 @@ export default function LogPage() {
         }])
         queuedToast()
       } else {
+        const cardioPrs = (r.data.cardioPrs ?? []) as { exercise: string; kind: string; value: number }[]
+        if (cardioPrs.length > 0) {
+          const p = cardioPrs[0]
+          toast(`New PR! ${p.exercise} — ${fmtPrValue({ ...p, reps: null }, isLbs)}`, { tone: 'pr' })
+        }
         refreshCurrent()
       }
       localStorage.removeItem(DRAFT_KEY)
