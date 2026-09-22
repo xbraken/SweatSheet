@@ -1,35 +1,34 @@
 import { describe, it, expect } from 'vitest'
-import { aerobicTrend, paceToKmh, fmtPace, paceAtTypicalHr } from '@/lib/cardio-trends'
-import { riegelPredict } from '@/lib/run-analysis'
+import { smoothedTrend, paceToKmh, fmtPace } from '@/lib/cardio-trends'
+import { riegelPredict, warmupHr } from '@/lib/run-analysis'
 import { fmtPrValue } from '@/lib/pr-format'
 import { addDays } from '@/lib/dates'
 
-describe('aerobicTrend', () => {
-  it('reports getting faster at easy heart rate', () => {
-    // 20 runs over ~5 months, pace improving 360 → 322 s/km
-    const pts = Array.from({ length: 20 }, (_, i) => ({ date: addDays('2026-04-01', i * 8), paceSec: 360 - i * 2 }))
-    const t = aerobicTrend(pts)!
-    expect(t.deltaSec).toBeLessThan(0)
+describe('smoothedTrend', () => {
+  it('reports improvement vs 3 months ago', () => {
+    // 20 runs over ~5 months, value falling 176 → 138
+    const pts = Array.from({ length: 20 }, (_, i) => ({ date: addDays('2026-04-01', i * 8), value: 176 - i * 2 }))
+    const t = smoothedTrend(pts)!
+    expect(t.delta).toBeLessThan(0)
     expect(t.baselineLabel).toBe('3 months ago')
     expect(t.smoothed).toHaveLength(20)
   })
 
   it('smooths out a single bad run', () => {
-    const pts = [330, 331, 329, 420, 330, 332].map((p, i) => ({ date: addDays('2026-09-01', i), paceSec: p }))
-    const t = aerobicTrend(pts)!
-    expect(Math.max(...t.smoothed.map(s => s.paceSec))).toBeLessThan(340)
+    const pts = [160, 161, 159, 190, 160, 162].map((v, i) => ({ date: addDays('2026-09-01', i), value: v }))
+    expect(Math.max(...smoothedTrend(pts)!.smoothed.map(s => s.value))).toBeLessThan(165)
   })
 
   it('needs at least 3 runs in the last year', () => {
-    expect(aerobicTrend([])).toBeNull()
-    expect(aerobicTrend([{ date: '2026-09-01', paceSec: 330 }, { date: '2026-09-05', paceSec: 330 }])).toBeNull()
-    const old = [{ date: '2024-01-01', paceSec: 400 }, { date: '2024-01-05', paceSec: 400 }]
-    expect(aerobicTrend([...old, { date: '2026-09-01', paceSec: 330 }])).toBeNull()
+    expect(smoothedTrend([])).toBeNull()
+    expect(smoothedTrend([{ date: '2026-09-01', value: 150 }, { date: '2026-09-05', value: 150 }])).toBeNull()
+    const old = [{ date: '2024-01-01', value: 170 }, { date: '2024-01-05', value: 170 }]
+    expect(smoothedTrend([...old, { date: '2026-09-01', value: 150 }])).toBeNull()
   })
 
   it('falls back to earliest runs when there is no 3-month-old data', () => {
-    const pts = [340, 335, 330, 325].map((p, i) => ({ date: addDays('2026-09-01', i * 3), paceSec: p }))
-    expect(aerobicTrend(pts)!.baselineLabel).toBe('your earliest runs')
+    const pts = [170, 168, 166, 164].map((v, i) => ({ date: addDays('2026-09-01', i * 3), value: v }))
+    expect(smoothedTrend(pts)!.baselineLabel).toBe('your earliest runs')
   })
 })
 
@@ -60,25 +59,31 @@ describe('formatting', () => {
   })
 })
 
-describe('paceAtTypicalHr', () => {
-  it('a run at the typical HR keeps its own pace', () => {
-    // 5:00/km (3.333 m/s) at 150 bpm
-    const ef = (1000 / 300) / 150
-    const r = paceAtTypicalHr([
-      { date: '2026-09-01', ef, avgHr: 150 },
-      { date: '2026-09-03', ef, avgHr: 150 },
-    ])!
-    expect(r.refHr).toBe(150)
-    expect(Math.round(r.points[0].paceSec)).toBe(300)
+describe('warmupHr (minutes 5–9 of interval sessions)', () => {
+  // 10-min warm-up at 8 km/h, then 12 km/h intervals. HR 130 early, 140 in minutes 5–9, 175 in intervals.
+  const speedAt = (t: number) => (t < 600 ? 8 : 12)
+  const dist: { time_offset_sec: number; distance_km: number }[] = []
+  let km = 0
+  for (let t = 0; t <= 1500; t += 10) { dist.push({ time_offset_sec: t, distance_km: km }); km += (speedAt(t) / 3600) * 10 }
+  const hr = Array.from({ length: 301 }, (_, i) => ({ time_offset_sec: i * 5, hr_bpm: i * 5 < 300 ? 130 : i * 5 < 600 ? 140 : 175 }))
+
+  it('averages HR over minutes 5–9 of the warm-up', () => {
+    expect(warmupHr(hr, dist)).toBe(140)
   })
 
-  it('same pace at a lower heart rate reads as faster at the typical HR', () => {
-    const r = paceAtTypicalHr([
-      { date: '2026-09-01', ef: (1000 / 300) / 160, avgHr: 160 },
-      { date: '2026-09-02', ef: (1000 / 300) / 150, avgHr: 150 },
-      { date: '2026-09-03', ef: (1000 / 300) / 140, avgHr: 140 },
-    ])!
-    expect(r.refHr).toBe(150)
-    expect(r.points[2].paceSec).toBeLessThan(r.points[0].paceSec)
+  it('rejects sessions where the intervals start early', () => {
+    const early: typeof dist = []
+    let k = 0
+    for (let t = 0; t <= 1500; t += 10) { early.push({ time_offset_sec: t, distance_km: k }); k += ((t < 180 ? 8 : 12) / 3600) * 10 }
+    expect(warmupHr(hr, early)).toBeNull()
+  })
+
+  it('works with sparse HR (one reading every ~40s)', () => {
+    const sparse = hr.filter((_, i) => i % 8 === 0)
+    expect(warmupHr(sparse, dist)).toBe(140)
+  })
+
+  it('null without data', () => {
+    expect(warmupHr([], dist)).toBeNull()
   })
 })

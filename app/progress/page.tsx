@@ -6,7 +6,7 @@ import ExercisePicker, { type ExerciseHint } from '@/components/ExercisePicker'
 import BodyHeatmap from '@/components/BodyHeatmap'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 import { zoneSeconds, decouplingPct, negativeSplit, riegelPredict } from '@/lib/run-analysis'
-import { aerobicTrend, fmtPace, paceAtTypicalHr, paceToKmh, usesSpeed } from '@/lib/cardio-trends'
+import { smoothedTrend, fmtPace, paceToKmh, usesSpeed } from '@/lib/cardio-trends'
 
 function getExerciseType(name: string): ExerciseType {
   return EXERCISES.find(e => e.name === name)?.type ?? 'weights'
@@ -74,7 +74,7 @@ type CardioInsights = {
   weeklyVolume: { weekStart: string; activity: string; km: number; sessions: number }[]
   weeklyZones: { weekStart: string; activity: string; z1: number; z2: number; z3: number; z4: number; z5: number }[]
   z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[]
-  efficiency?: { date: string; cardio_id: number; ef: number; avgHr: number }[]
+  warmupSessions?: { date: string; cardio_id: number; avgHr: number }[]
 }
 type CalendarDay = {
   date: string
@@ -1893,21 +1893,20 @@ export default function ProgressPage() {
         )
       })()}
 
-      {/* Aerobic fitness — each steady run's pace, adjusted to the user's typical heart rate.
-          Faster at the same heart rate = fitter. */}
+      {/* Warm-up heart rate — HR over minutes 5–9 of each interval session's warm-up. Same effort every
+          session (e.g. a fixed treadmill speed), so it's a repeatable fitness check. Lower over time = fitter. */}
       {tab === 'cardio' && cardioInsights && cardioActivity === 'Run' && (() => {
-        const adj = paceAtTypicalHr(cardioInsights.efficiency ?? [])
-        const t = adj && aerobicTrend(adj.points)
-        if (!adj || !t) return null
-        const values = t.smoothed.map(p => p.paceSec)
-        const pts = buildSvgPoints(values, true)
-        const steady = Math.abs(t.deltaSec) < 3
-        const faster = t.deltaSec < 0
+        const t = smoothedTrend((cardioInsights.warmupSessions ?? []).map(w => ({ date: w.date, value: w.avgHr })))
+        if (!t) return null
+        const values = t.smoothed.map(p => p.value)
+        const pts = buildSvgPoints(values)   // natural orientation: the line falls as HR drops
+        const steady = Math.abs(t.delta) < 3
+        const better = t.delta < 0
         // Hover/drag to read a point, same as the Pace trend chart
         const n = values.length
         const hIdx = aeroHoverIdx != null && aeroHoverIdx < n ? aeroHoverIdx : null
         const hX = hIdx != null ? (hIdx / Math.max(n - 1, 1)) * 300 : 0
-        const hY = hIdx != null ? ptY(values, values[hIdx], true) : 0
+        const hY = hIdx != null ? ptY(values, values[hIdx], false) : 0
         const onPointer = (e: React.PointerEvent<SVGSVGElement>) => {
           if (n < 2) return
           const rect = e.currentTarget.getBoundingClientRect()
@@ -1918,20 +1917,20 @@ export default function ProgressPage() {
           <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Aerobic fitness</p>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Warm-up heart rate</p>
                 <p className="mt-1">
-                  <span className="text-3xl font-black font-headline text-tertiary">{fmtPace(hIdx != null ? values[hIdx] : t.currentSec)}</span>
-                  <span className="text-xs text-outline ml-1">/km at {adj.refHr} bpm</span>
+                  <span className="text-3xl font-black font-headline text-tertiary">{hIdx != null ? values[hIdx] : t.current}</span>
+                  <span className="text-xs text-outline ml-1">bpm in your interval warm-up</span>
                 </p>
                 <p className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
                   {hIdx != null ? formatDate(t.smoothed[hIdx].date) : 'now'}
                 </p>
               </div>
               <span className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
-                steady ? 'bg-surface-container-high text-outline' : faster ? 'bg-tertiary/20 text-tertiary' : 'bg-red-500/20 text-red-400'
+                steady ? 'bg-surface-container-high text-outline' : better ? 'bg-tertiary/20 text-tertiary' : 'bg-red-500/20 text-red-400'
               }`}>
-                <span className="material-symbols-outlined text-[12px]">{steady ? 'trending_flat' : faster ? 'trending_up' : 'trending_down'}</span>
-                {steady ? 'Steady' : `${Math.abs(t.deltaSec)}s/km ${faster ? 'faster' : 'slower'}`}
+                <span className="material-symbols-outlined text-[12px]">{steady ? 'trending_flat' : better ? 'south' : 'north'}</span>
+                {steady ? 'Steady' : `${Math.abs(t.delta)} bpm ${better ? 'lower' : 'higher'}`}
               </span>
             </div>
             <svg
@@ -1944,12 +1943,12 @@ export default function ProgressPage() {
               onPointerCancel={() => setAeroHoverIdx(null)}
             >
               <defs>
-                <linearGradient id="z2Grad" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="easyHrGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#4bdece" stopOpacity="0.18" />
                   <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
                 </linearGradient>
               </defs>
-              <polygon points={`0,100 ${pts} 300,100`} fill="url(#z2Grad)" />
+              <polygon points={`0,100 ${pts} 300,100`} fill="url(#easyHrGrad)" />
               <polyline points={pts} fill="none" stroke="#4bdece" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               {hIdx != null && <>
                 <line x1={hX} y1={0} x2={hX} y2={100} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
@@ -1958,12 +1957,13 @@ export default function ProgressPage() {
             </svg>
             <div className="flex justify-between text-[10px] text-outline-variant -mt-1">
               <span>{formatDate(t.smoothed[0].date)}</span>
-              <span>{t.runs} runs</span>
+              <span>{t.runs} sessions</span>
               <span>{formatDate(t.smoothed[t.smoothed.length - 1].date)}</span>
             </div>
             <p className="text-xs text-outline leading-relaxed">
-              Your steady runs, adjusted to your typical heart rate ({adj.refHr} bpm) so easy and hard days compare fairly —
-              vs {t.baselineLabel} ({fmtPace(t.baselineSec)}/km). Faster at the same heart rate means your aerobic fitness is improving.
+              Your heart rate in minutes 5–9 of each interval session&apos;s warm-up — the same effort every time — vs{' '}
+              {t.baselineLabel} ({t.baseline} bpm). Lower is better: the same warm-up costing fewer heartbeats means
+              your aerobic fitness is improving.
             </p>
           </section>
         )

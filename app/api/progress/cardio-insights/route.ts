@@ -3,7 +3,7 @@ import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import {
   type HrSample, type DistanceSample,
-  findBestSegment, zoneSeconds, longestZ2Window, weekStart, plausibleSamples,
+  findBestSegment, zoneSeconds, longestZ2Window, weekStart, plausibleSamples, warmupHr,
 } from '@/lib/run-analysis'
 
 await initDb()
@@ -106,10 +106,9 @@ export async function GET(_req: NextRequest) {
     const weeklyVolume = new Map<string, { weekStart: string; activity: string; km: number; sessions: number }>()
     const weeklyZones = new Map<string, { weekStart: string; activity: string; z1: number; z2: number; z3: number; z4: number; z5: number }>()
 
-    // Aerobic efficiency per steady run: average speed per heartbeat. Plotted as "pace at your
-    // typical heart rate" so it reads in familiar units. Uses whole-run averages, so it works for
-    // nearly every run (unlike the zone-2 window, which needs 10+ unbroken minutes in a narrow band).
-    const efficiency: { date: string; cardio_id: number; ef: number; avgHr: number }[] = []
+    // Warm-up HR per interval session, for the warm-up heart rate card
+    const warmupSessions: { date: string; cardio_id: number; avgHr: number }[] = []
+    const seenSessions = new Set<string>()
 
     // Z2 trend points (runs only — paceSecPerKm is meaningless for cycling)
     const z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[] = []
@@ -170,13 +169,15 @@ export async function GET(_req: NextRequest) {
         if (w) z2Trend.push({ date, cardio_id: cardioId, paceSec: w.paceSecPerKm, durationSec: w.durationSec })
       }
 
-      // Efficiency — steady runs only (intervals mix hard and easy, which skews averages)
-      const avgHr = r.heart_rate != null ? Number(r.heart_rate) : 0
+      // Warm-up heart rate: minutes 5–9 of each interval session's warm-up — a repeatable,
+      // same-effort check. The same session imported twice (e.g. Strava + Intervals) counts once.
       const isInterval = typeof r.activity === 'string' && r.activity.toLowerCase().includes('interval')
-      if (isRun && !isInterval && avgHr >= 90 && avgHr <= 220 && distKm >= 2 && distKm <= 100 && durSec > 0) {
-        const paceSec = durSec / distKm
-        if (paceSec >= 150 && paceSec <= 900) {
-          efficiency.push({ date, cardio_id: cardioId, ef: (1000 / paceSec) / avgHr, avgHr })
+      if (isRun && isInterval) {
+        const w = warmupHr(hr, dist)
+        const dupKey = `${date}|${w}`
+        if (w != null && w >= 80 && w <= 200 && !seenSessions.has(dupKey)) {
+          seenSessions.add(dupKey)
+          warmupSessions.push({ date, cardio_id: cardioId, avgHr: w })
         }
       }
     }
@@ -189,7 +190,7 @@ export async function GET(_req: NextRequest) {
       .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
 
     z2Trend.sort((a, b) => a.date.localeCompare(b.date))
-    efficiency.sort((a, b) => a.date.localeCompare(b.date))
+    warmupSessions.sort((a, b) => a.date.localeCompare(b.date))
 
     return NextResponse.json({
       userHrMax,
@@ -198,7 +199,7 @@ export async function GET(_req: NextRequest) {
       weeklyVolume: weeklyVolumeArr,
       weeklyZones: weeklyZonesArr,
       z2Trend,
-      efficiency,
+      warmupSessions,
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
