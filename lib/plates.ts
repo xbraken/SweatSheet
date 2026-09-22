@@ -13,19 +13,32 @@ export function platesPerSide(total: number, bar: number, plates: number[]): { p
 
 export const KG_PLATES = [25, 20, 15, 10, 5, 2.5, 1.25]
 export const LB_PLATES = [45, 35, 25, 10, 5, 2.5]
-export const KG_BARS = [20, 15, 10]
-export const LB_BARS = [45, 35, 15]
+// 0 = no bar, for plate-loaded machines (e.g. a dip or leg press machine)
+export const KG_BARS = [20, 15, 10, 0]
+export const LB_BARS = [45, 35, 15, 0]
 
-/** The user's bar choice, shared by the plate calculator and warm-up sheet */
-export function loadBar(isLbs: boolean): number {
+const barKey = (isLbs: boolean, exercise?: string) =>
+  `${isLbs ? 'ss_bar_lb' : 'ss_bar_kg'}${exercise ? `:${exercise}` : ''}`
+
+/**
+ * The bar for an exercise: remembered per exercise (so a 0 kg machine doesn't change Bench Press),
+ * falling back to the last bar picked anywhere, then a standard barbell.
+ */
+export function loadBar(isLbs: boolean, exercise?: string): number {
   const bars = isLbs ? LB_BARS : KG_BARS
   try {
-    const saved = Number(localStorage.getItem(isLbs ? 'ss_bar_lb' : 'ss_bar_kg'))
-    if (bars.includes(saved)) return saved
+    for (const key of exercise ? [barKey(isLbs, exercise), barKey(isLbs)] : [barKey(isLbs)]) {
+      const raw = localStorage.getItem(key)
+      // Explicit null check — Number(null) is 0, which is now a valid bar
+      if (raw !== null && bars.includes(Number(raw))) return Number(raw)
+    }
   } catch { /* storage blocked */ }
   return bars[0]
 }
 
-export function saveBar(isLbs: boolean, bar: number) {
-  try { localStorage.setItem(isLbs ? 'ss_bar_lb' : 'ss_bar_kg', String(bar)) } catch { /* storage blocked */ }
+export function saveBar(isLbs: boolean, bar: number, exercise?: string) {
+  try {
+    localStorage.setItem(barKey(isLbs), String(bar))
+    if (exercise) localStorage.setItem(barKey(isLbs, exercise), String(bar))
+  } catch { /* storage blocked */ }
 }
