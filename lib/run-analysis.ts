@@ -77,6 +77,33 @@ function distAt(samples: DistanceSample[], t: number): number {
   return a.distance_km + frac * (b.distance_km - a.distance_km)
 }
 
+/**
+ * Warm-up heart rate for interval sessions: average HR over minutes 5–9 of the warm-up.
+ * Structured interval sessions start with a steady warm-up (e.g. a fixed treadmill speed), which
+ * makes this a repeatable fitness check — same effort every time, so lower HR = fitter.
+ * Sessions that don't follow that shape (intervals starting before minute 9) are rejected, so
+ * their "warm-up" window isn't really interval work.
+ */
+export const WARMUP_WINDOW = { startSec: 300, endSec: 540 } as const
+
+export function warmupHr(hr: HrSample[], dist: DistanceSample[]): number | null {
+  const { startSec, endSec } = WARMUP_WINDOW
+  if (hr.length < 2 || dist.length < 2) return null
+  if (dist[dist.length - 1].time_offset_sec < endSec + 60) return null
+  // Intervals (> 10.5 km/h) must not have started before minute 9
+  for (let m = 3; m < 9; m++) {
+    const kmh = (distAt(dist, (m + 1) * 60) - distAt(dist, m * 60)) * 60
+    if (kmh > 10.5) return null
+  }
+  // The window itself should be a steady warm-up jog (watch speed is noisy on a treadmill, so be lenient)
+  const windowKmh = ((distAt(dist, endSec) - distAt(dist, startSec)) / (endSec - startSec)) * 3600
+  if (windowKmh < 6.5 || windowKmh > 10.5) return null
+  // Some imports only store ~1 HR reading every few seconds, others far fewer
+  const inWin = hr.filter(h => h.time_offset_sec >= startSec && h.time_offset_sec <= endSec)
+  if (inWin.length < 5) return null
+  return Math.round(inWin.reduce((a, h) => a + h.hr_bpm, 0) / inWin.length)
+}
+
 /** Aerobic decoupling % over the run: (EF1 - EF2) / EF1 * 100, where EF = speed/HR.
  *  Positive = pace drifted slower for same HR (or HR drifted up for same pace) — durability cost.
  *  Returns null unless duration ≥ minDurSec and both HR + distance samples exist. */
