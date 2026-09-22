@@ -70,6 +70,15 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  if ('weekly_goal' in body) {
+    const g = body.weekly_goal
+    if (g !== null && !(Number.isInteger(g) && g >= 1 && g <= 7)) {
+      return NextResponse.json({ error: 'weekly_goal must be 1–7 or null' }, { status: 400 })
+    }
+    await db.execute({ sql: `UPDATE users SET weekly_goal = ? WHERE id = ?`, args: [g, session.userId] })
+    return NextResponse.json({ ok: true })
+  }
+
   const { unit_pref } = body
   if (unit_pref && !['metric', 'imperial'].includes(unit_pref)) {
     return NextResponse.json({ error: 'unit_pref must be metric or imperial' }, { status: 400 })

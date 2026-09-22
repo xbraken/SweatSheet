@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import Avatar from '@/components/Avatar'
+import { toast } from '@/components/Toast'
 
 interface CardioRow { activity: string; distance: number | null; duration: string | null; pace: string | null; heart_rate: number | null }
 interface SetRow { weight: number; reps: number }
@@ -21,6 +22,7 @@ interface ProfileData {
   isOwnProfile: boolean
   sessions: SessionItem[]
   avatar?: string | null
+  routines?: { id: number; name: string; exercises: string[] }[]
 }
 interface DayGroup {
   date: string
@@ -76,23 +78,23 @@ function dayTitle(g: DayGroup): string {
 
 function dayBadges(g: DayGroup): Array<{ label: string; className: string }> {
   const badges: Array<{ label: string; className: string }> = []
-  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
-  if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
+  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-tertiary/20 text-tertiary' })
+  if (g.lift) badges.push({ label: 'Lift', className: 'bg-primary-container/20 text-primary-container' })
   return badges
 }
 
 function dayKeyStat(g: DayGroup): { value: string; className: string } {
   if (g.lift) {
     const v = g.lift.volume
-    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`, className: 'text-[#4bdece]' }
+    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`, className: 'text-tertiary' }
   }
   if (g.cardio) {
     const totalDist = g.cardio.reduce((sum, c) => sum + (Number(c.distance) || 0), 0)
-    if (totalDist > 0) return { value: `${totalDist.toFixed(1)} km`, className: 'text-[#ff9066]' }
+    if (totalDist > 0) return { value: `${totalDist.toFixed(1)} km`, className: 'text-primary-container' }
     const c = g.cardio[0]
-    if (c?.duration) return { value: c.duration, className: 'text-[#ff9066]' }
+    if (c?.duration) return { value: c.duration, className: 'text-primary-container' }
   }
-  return { value: '—', className: 'text-[#a48b83]' }
+  return { value: '—', className: 'text-outline' }
 }
 
 export default function FriendProfilePage({ params }: { params: Promise<{ username: string }> }) {
@@ -104,6 +106,19 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
   const [following, setFollowing] = useState(false)
   const [copiedDate, setCopiedDate] = useState<string | null>(null)
+  const [copiedRoutines, setCopiedRoutines] = useState<Set<number>>(new Set())
+
+  async function copyRoutine(id: number) {
+    const res = await fetch('/api/routines/copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ routineId: id }),
+    }).catch(() => null)
+    if (!res?.ok) { toast('Could not copy routine', { tone: 'error' }); return }
+    const data = await res.json()
+    setCopiedRoutines(prev => new Set(prev).add(id))
+    toast(`Added "${data.name}" to your routines`, { tone: 'success' })
+  }
 
   async function shareDay(g: DayGroup) {
     if (!profile) return
@@ -178,19 +193,19 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
 
   return (
     <>
-      <header className="bg-[#0e0e0e]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-6 py-4 w-full max-w-[390px] mx-auto">
+      <header className="bg-surface-container-lowest/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-6 py-4 w-full max-w-[390px] mx-auto">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="text-[#ffb9a0] hover:opacity-80 active:scale-95 transition-all">
+          <button onClick={() => router.back()} className="text-primary hover:opacity-80 active:scale-95 transition-all">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="font-headline text-xl font-bold tracking-tight text-[#ffb9a0]">{username}</h1>
+          <h1 className="font-headline text-xl font-bold tracking-tight text-primary">{username}</h1>
         </div>
         {profile && !profile.isOwnProfile && (
           <button
             onClick={toggleFollow}
             disabled={!profile}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
-              following ? 'bg-[#201f1f] text-[#a48b83]' : 'bg-[#ff9066] text-[#0e0e0e]'
+              following ? 'bg-surface-container text-outline' : 'bg-primary-container text-surface-container-lowest'
             }`}
           >
             <span className="material-symbols-outlined text-base">{following ? 'person_check' : 'person_add'}</span>
@@ -202,22 +217,46 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
       <main className="max-w-[390px] mx-auto px-4 pb-32">
         {loading ? (
           <div key="loading" className="flex justify-center pt-20">
-            <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-primary-container/30 border-t-primary-container rounded-full animate-spin" />
           </div>
         ) : !profile ? (
-          <p key="not-found" className="text-center text-[#a48b83] pt-20 animate-fade-in">User not found</p>
+          <p key="not-found" className="text-center text-outline pt-20 animate-fade-in">User not found</p>
         ) : (
           <>
             <section className="flex flex-col items-center pt-8 pb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
               <Avatar username={profile.username} avatar={profile.avatar} size="lg" className="mb-4" />
-              <h2 className="font-headline text-2xl font-extrabold text-[#e5e2e1] mb-1">{profile.username}</h2>
-              <p className="text-[#a48b83] text-sm font-medium">{profile.totalWorkouts} Workouts</p>
+              <h2 className="font-headline text-2xl font-extrabold text-on-surface mb-1">{profile.username}</h2>
+              <p className="text-outline text-sm font-medium">{profile.totalWorkouts} Workouts</p>
             </section>
 
-            <h3 className="font-headline text-base font-bold text-[#e5e2e1] mb-4 animate-fade-in" style={{ animationDelay: '60ms' }}>Recent Workouts</h3>
+            {!profile.isOwnProfile && (profile.routines?.length ?? 0) > 0 && (
+              <section className="mb-8 animate-fade-in" style={{ animationDelay: '40ms' }}>
+                <h3 className="font-headline text-base font-bold text-on-surface mb-3">Routines</h3>
+                <div className="space-y-2">
+                  {profile.routines!.map(r => (
+                    <div key={r.id} className="flex items-center gap-3 bg-surface-container rounded-xl px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-headline font-bold text-sm text-on-surface truncate">{r.name}</p>
+                        <p className="text-xs text-outline line-clamp-1">{r.exercises.join(', ')}</p>
+                      </div>
+                      <button
+                        disabled={copiedRoutines.has(r.id)}
+                        onClick={() => copyRoutine(r.id)}
+                        className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-container/15 text-primary-container text-xs font-bold font-label disabled:bg-surface-container-high disabled:text-outline active:scale-95 transition-transform"
+                      >
+                        <span className="material-symbols-outlined text-sm">{copiedRoutines.has(r.id) ? 'check' : 'content_copy'}</span>
+                        {copiedRoutines.has(r.id) ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <h3 className="font-headline text-base font-bold text-on-surface mb-4 animate-fade-in" style={{ animationDelay: '60ms' }}>Recent Workouts</h3>
 
             {dayGroups.length === 0 ? (
-              <p className="text-center text-[#a48b83] text-sm py-10 animate-fade-in" style={{ animationDelay: '100ms' }}>No workouts yet</p>
+              <p className="text-center text-outline text-sm py-10 animate-fade-in" style={{ animationDelay: '100ms' }}>No workouts yet</p>
             ) : (
               <div className="space-y-3">
                 {dayGroups.map((g, i) => {
@@ -225,17 +264,17 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                   const keyStat = dayKeyStat(g)
                   const expanded = expandedDate === g.date
                   return (
-                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 55 + 80}ms` }}>
+                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-surface border-surface-container animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 55 + 80}ms` }}>
                       <button
                         className="w-full p-4 flex items-center gap-3 text-left"
                         onClick={() => setExpandedDate(expanded ? null : g.date)}
                       >
                         <div className="flex flex-col flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
-                            {g.startTime && <span className="text-[#a48b83] text-[10px] font-mono">{g.startTime}</span>}
+                            <span className="text-outline text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                            {g.startTime && <span className="text-outline text-[10px] font-mono">{g.startTime}</span>}
                           </div>
-                          <span className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{dayTitle(g)}</span>
+                          <span className="text-on-surface font-headline font-bold text-sm mt-0.5 leading-tight truncate">{dayTitle(g)}</span>
                         </div>
                         <div className="flex gap-1 shrink-0">
                           {badges.map((b, i) => (
@@ -248,39 +287,39 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                       </button>
 
                       {expanded && (
-                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">
+                        <div className="border-t border-surface-container bg-surface-container-low/50 px-4 py-4 space-y-4 animate-fade-in">
                           {g.cardio && g.cardio.map((c, i) => (
                             <div key={i}>
                               {g.cardio!.length > 1 && (
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-2">{c.activity}</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-2">{c.activity}</p>
                               )}
                               <div className="grid grid-cols-3 gap-3">
                                 {c.distance && Number(c.distance) > 0 && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Dist</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{Number(c.distance).toFixed(1)} km</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">Dist</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{Number(c.distance).toFixed(1)} km</p>
                                   </div>
                                 )}
                                 {c.pace && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Pace</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.pace}/km</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">Pace</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{c.pace}/km</p>
                                   </div>
                                 )}
                                 {c.duration && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Time</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.duration}</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">Time</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{c.duration}</p>
                                   </div>
                                 )}
                                 {c.heart_rate && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">HR Avg</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.heart_rate} bpm</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">HR Avg</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{c.heart_rate} bpm</p>
                                   </div>
                                 )}
                                 {!c.pace && !c.duration && !c.distance && !c.heart_rate && (
-                                  <p className="col-span-3 text-[#a48b83] text-sm">No stats recorded</p>
+                                  <p className="col-span-3 text-outline text-sm">No stats recorded</p>
                                 )}
                               </div>
                             </div>
@@ -289,22 +328,22 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                           <div className="flex justify-end">
                             <button
                               onClick={() => shareDay(g)}
-                              className="flex items-center gap-1.5 text-[#a48b83] hover:text-[#e5e2e1] active:scale-95 transition-all text-xs font-bold font-label"
+                              className="flex items-center gap-1.5 text-outline hover:text-on-surface active:scale-95 transition-all text-xs font-bold font-label"
                             >
                               <span className="material-symbols-outlined text-base">{copiedDate === g.date ? 'check' : 'share'}</span>
                               {copiedDate === g.date ? 'Copied!' : 'Share'}
                             </button>
                           </div>
 
-                          {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
+                          {g.cardio && g.lift && <div className="border-t border-surface-container/50" />}
 
                           {g.lift && (
                             <div className="space-y-3">
                               {g.lift.exercises.length > 0 ? g.lift.exercises.map((e, i) => (
                                 <div key={i}>
                                   <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-[#e5e2e1] text-sm font-semibold">{e.name}</span>
-                                    <span className="text-[#ff9066] text-xs font-bold">
+                                    <span className="text-on-surface text-sm font-semibold">{e.name}</span>
+                                    <span className="text-primary-container text-xs font-bold">
                                       {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}t` : `${e.volume} kg`}
                                     </span>
                                   </div>
@@ -317,14 +356,14 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                                     return (
                                       <div className="flex flex-wrap gap-1.5">
                                         {visible.map((r, j) => (
-                                          <span key={j} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
-                                            {r.weight}kg <span className="text-[#e5e2e1]">× {r.reps}</span>
+                                          <span key={j} className="bg-surface-container text-outline text-xs px-2.5 py-1 rounded-lg">
+                                            {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
                                           </span>
                                         ))}
                                         {!isExpanded && hidden > 0 && (
                                           <button
                                             onClick={() => setExpandedSets(prev => new Set(prev).add(key))}
-                                            className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg hover:text-[#e5e2e1] transition-colors"
+                                            className="bg-surface-container text-outline text-xs px-2.5 py-1 rounded-lg hover:text-on-surface transition-colors"
                                           >
                                             +{hidden} more
                                           </button>
@@ -332,7 +371,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                                         {isExpanded && hidden > 0 && (
                                           <button
                                             onClick={() => setExpandedSets(prev => { const n = new Set(prev); n.delete(key); return n })}
-                                            className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg hover:text-[#e5e2e1] transition-colors"
+                                            className="bg-surface-container text-outline text-xs px-2.5 py-1 rounded-lg hover:text-on-surface transition-colors"
                                           >
                                             show less
                                           </button>
@@ -342,11 +381,11 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                                   })()}
                                 </div>
                               )) : (
-                                <p className="text-[#a48b83] text-sm">No exercises recorded</p>
+                                <p className="text-outline text-sm">No exercises recorded</p>
                               )}
-                              <div className="flex justify-between pt-2 border-t border-[#201f1f]/50">
-                                <span className="text-[#a48b83] text-xs">{g.lift.sets} sets total</span>
-                                <span className="text-[#a48b83] text-xs font-bold">
+                              <div className="flex justify-between pt-2 border-t border-surface-container/50">
+                                <span className="text-outline text-xs">{g.lift.sets} sets total</span>
+                                <span className="text-outline text-xs font-bold">
                                   {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}t` : `${g.lift.volume} kg`} total
                                 </span>
                               </div>

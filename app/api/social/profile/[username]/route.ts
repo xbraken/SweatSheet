@@ -28,8 +28,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   const isFollowing = followRes.rows.length > 0
   const totalWorkouts = countRes.rows[0].count as number
 
+  // Routines are visible to followers so friends can copy them
+  let routines: { id: number; name: string; exercises: string[] }[] = []
+  if (isFollowing || isOwnProfile) {
+    const rtn = await db.execute({
+      sql: `SELECT r.id, r.name, re.exercise FROM routines r
+            LEFT JOIN routine_exercises re ON re.routine_id = r.id
+            WHERE r.user_id = ? ORDER BY r.created_at DESC, re.position`,
+      args: [targetId],
+    })
+    const byId = new Map<number, { id: number; name: string; exercises: string[] }>()
+    for (const row of rtn.rows) {
+      const id = row.id as number
+      if (!byId.has(id)) byId.set(id, { id, name: row.name as string, exercises: [] })
+      if (row.exercise) byId.get(id)!.exercises.push(row.exercise as string)
+    }
+    routines = [...byId.values()]
+  }
+
   if (sessionsRes.rows.length === 0) {
-    return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions: [] })
+    return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions: [], routines })
   }
 
   const sessionIds = sessionsRes.rows.map(r => r.id as number)
@@ -46,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   let setsRows: Record<string, unknown>[] = []
   if (liftBlockIds.length > 0) {
     const ph = liftBlockIds.map(() => '?').join(',')
-    const r = await db.execute({ sql: `SELECT block_id, exercise, weight, reps FROM sets WHERE block_id IN (${ph})`, args: liftBlockIds })
+    const r = await db.execute({ sql: `SELECT block_id, exercise, weight, reps FROM sets WHERE block_id IN (${ph}) AND COALESCE(is_warmup, 0) = 0`, args: liftBlockIds })
     setsRows = r.rows as Record<string, unknown>[]
   }
 
@@ -109,5 +127,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
     }
   })
 
-  return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions })
+  return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions, routines })
 }

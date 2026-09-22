@@ -35,7 +35,7 @@ export default function BottomNav() {
         <img
           src={avatar}
           alt="Profile"
-          className={`rounded-full object-cover shrink-0 transition-all ${active ? 'ring-2 ring-[#ff9066]' : 'opacity-60'}`}
+          className={`rounded-full object-cover shrink-0 transition-all ${active ? 'ring-2 ring-primary-container' : 'opacity-60'}`}
           style={{ width: sizePx, height: sizePx }}
         />
       )
@@ -52,7 +52,7 @@ export default function BottomNav() {
   return (
     <>
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 bg-[#131313]/60 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
+      <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 bg-surface/60 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
         <div className="flex justify-around items-center px-2 pb-8 pt-4">
           {tabs.map(tab => {
             const active = path === tab.href || (tab.href !== '/' && path.startsWith(tab.href))
@@ -60,7 +60,7 @@ export default function BottomNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`flex flex-col items-center justify-center transition-all active:scale-90 ${active ? 'text-[#ff9066] scale-110' : 'text-[#e5e2e1]/40'}`}
+                className={`flex flex-col items-center justify-center transition-all active:scale-90 ${active ? 'text-primary-container scale-110' : 'text-on-surface/40'}`}
               >
                 <div className="mb-1">{renderIcon(tab, active, 22)}</div>
                 <span className="text-[9px] font-bold font-label uppercase tracking-widest">{tab.label}</span>
@@ -71,9 +71,9 @@ export default function BottomNav() {
       </nav>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-screen w-56 bg-[#131313] border-r border-[#201f1f] flex-col pt-8 pb-6 px-4 z-30">
+      <aside className="hidden md:flex fixed left-0 top-0 h-screen w-56 bg-surface border-r border-surface-container flex-col pt-8 pb-6 px-4 z-30">
         <div className="mb-10 px-3">
-          <h1 className="font-headline text-xl font-black text-[#ff9066] tracking-tight">SweatSheet</h1>
+          <h1 className="font-headline text-xl font-black text-primary-container tracking-tight">SweatSheet</h1>
         </div>
         <nav className="flex flex-col gap-1 flex-1">
           {tabs.map(tab => {
@@ -84,8 +84,8 @@ export default function BottomNav() {
                 href={tab.href}
                 className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
                   active
-                    ? 'bg-[#ff9066]/10 text-[#ff9066]'
-                    : 'text-[#e5e2e1]/50 hover:text-[#e5e2e1]/80 hover:bg-[#201f1f]'
+                    ? 'bg-primary-container/10 text-primary-container'
+                    : 'text-on-surface/50 hover:text-on-surface/80 hover:bg-surface-container'
                 }`}
               >
                 {renderIcon(tab, active, 22)}
@@ -97,7 +97,7 @@ export default function BottomNav() {
         <Link
           href="/settings"
           className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
-            path === '/settings' ? 'bg-[#ff9066]/10 text-[#ff9066]' : 'text-[#e5e2e1]/50 hover:text-[#e5e2e1]/80 hover:bg-[#201f1f]'
+            path === '/settings' ? 'bg-primary-container/10 text-primary-container' : 'text-on-surface/50 hover:text-on-surface/80 hover:bg-surface-container'
           }`}
         >
           <span className="material-symbols-outlined text-[22px]" style={{ fontVariationSettings: path === '/settings' ? "'FILL' 1" : "'FILL' 0" }}>settings</span>

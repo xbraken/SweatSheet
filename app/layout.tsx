@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import NavigationProgress from '@/components/NavigationProgress'
+import TimezoneCookie from '@/components/TimezoneCookie'
+import Toaster from '@/components/Toast'
+import SyncStatus from '@/components/SyncStatus'
+import ServiceWorker from '@/components/ServiceWorker'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -30,8 +34,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
       </head>
-      <body className="bg-[#0e0e0e] text-[#e5e2e1] font-body">
+      <body className="bg-surface-container-lowest text-on-surface font-body">
         <NavigationProgress />
+        <TimezoneCookie />
+        <ServiceWorker />
+        <SyncStatus />
+        <Toaster />
         <div className="mx-auto max-w-[390px] md:max-w-none md:ml-56 min-h-screen relative">
           {children}
         </div>

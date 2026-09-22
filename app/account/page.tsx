@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { localToday } from '@/lib/dates'
 import Link from 'next/link'
 import BottomNav from '@/components/BottomNav'
 import Avatar from '@/components/Avatar'
@@ -40,15 +41,15 @@ function dayTitle(g: DayGroup): string {
 function dayKeyStat(g: DayGroup): { value: string; className: string } {
   if (g.lift) {
     const v = g.lift.volume
-    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`, className: 'text-[#4bdece]' }
+    return { value: v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`, className: 'text-tertiary' }
   }
   if (g.cardio) {
     const totalDist = g.cardio.reduce((sum, c) => sum + (Number(c.distance) || 0), 0)
-    if (totalDist > 0) return { value: `${totalDist.toFixed(1)} km`, className: 'text-[#ff9066]' }
+    if (totalDist > 0) return { value: `${totalDist.toFixed(1)} km`, className: 'text-primary-container' }
     const c = g.cardio[0]
-    if (c?.duration) return { value: c.duration, className: 'text-[#ff9066]' }
+    if (c?.duration) return { value: c.duration, className: 'text-primary-container' }
   }
-  return { value: '—', className: 'text-[#a48b83]' }
+  return { value: '—', className: 'text-outline' }
 }
 
 function buildShareText(username: string, g: DayGroup): string {
@@ -114,21 +115,21 @@ function WorkoutCalendar({ workoutDates, today }: { workoutDates: Set<string>; t
   const isCurrentMonth = year === new Date(today).getFullYear() && m === new Date(today).getMonth()
 
   return (
-    <div className="bg-[#1c1b1b] rounded-2xl px-3 py-3 mb-3">
+    <div className="bg-surface-container-low rounded-2xl px-3 py-3 mb-3">
       <div className="flex items-center justify-between mb-2">
-        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-6 h-6 flex items-center justify-center text-[#a48b83] active:opacity-60">
+        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-6 h-6 flex items-center justify-center text-outline active:opacity-60">
           <span className="material-symbols-outlined text-base">chevron_left</span>
         </button>
-        <p className="font-headline font-bold text-xs text-[#e5e2e1]">
+        <p className="font-headline font-bold text-xs text-on-surface">
           {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
         </p>
-        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} disabled={isCurrentMonth} className="w-6 h-6 flex items-center justify-center text-[#a48b83] disabled:opacity-20 active:opacity-60">
+        <button onClick={() => setMonth((d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} disabled={isCurrentMonth} className="w-6 h-6 flex items-center justify-center text-outline disabled:opacity-20 active:opacity-60">
           <span className="material-symbols-outlined text-base">chevron_right</span>
         </button>
       </div>
       <div className="grid grid-cols-7 mb-0.5">
         {['M','T','W','T','F','S','S'].map((d, i) => (
-          <div key={i} className="text-center text-[9px] font-bold font-label text-[#56423c]">{d}</div>
+          <div key={i} className="text-center text-[9px] font-bold font-label text-outline-variant">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7">
@@ -141,7 +142,7 @@ function WorkoutCalendar({ workoutDates, today }: { workoutDates: Set<string>; t
           return (
             <div key={date} className="flex items-center justify-center py-0.5">
               <div className={`w-6 h-6 flex items-center justify-center rounded-full text-[10px] font-bold
-                ${isToday ? 'bg-[#ff9066]/20 text-[#ff9066]' : hasWorkout ? 'bg-[#ff9066] text-[#5b1b00]' : 'text-[#353534]'}`}>
+                ${isToday ? 'bg-primary-container/20 text-primary-container' : hasWorkout ? 'bg-primary-container text-on-primary' : 'text-surface-container-highest'}`}>
                 {day}
               </div>
             </div>
@@ -168,13 +169,13 @@ function BwSparkline({ data }: { data: { date: string; weight_kg: number }[] }) 
   const prev = pts[0]
   const delta = latest.weight_kg - prev.weight_kg
   return (
-    <div className="bg-[#201f1f] rounded-2xl px-4 py-3 mb-4">
+    <div className="bg-surface-container rounded-2xl px-4 py-3 mb-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Body weight</span>
+        <span className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Body weight</span>
         <div className="flex items-baseline gap-1.5">
-          <span className="font-headline font-black text-[#e5e2e1] text-lg">{latest.weight_kg} kg</span>
+          <span className="font-headline font-black text-on-surface text-lg">{latest.weight_kg} kg</span>
           {pts.length > 1 && (
-            <span className={`text-xs font-bold ${delta > 0 ? 'text-[#ff9066]' : delta < 0 ? 'text-[#4bdece]' : 'text-[#a48b83]'}`}>
+            <span className={`text-xs font-bold ${delta > 0 ? 'text-primary-container' : delta < 0 ? 'text-tertiary' : 'text-outline'}`}>
               {delta > 0 ? '+' : ''}{delta.toFixed(1)} kg
             </span>
           )}
@@ -192,8 +193,8 @@ function BwSparkline({ data }: { data: { date: string; weight_kg: number }[] }) 
         <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="3" fill="#ff9066" />
       </svg>
       <div className="flex justify-between mt-1">
-        <span className="text-[10px] text-[#56423c]">{new Date(prev.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-        <span className="text-[10px] text-[#56423c]">{new Date(latest.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+        <span className="text-[10px] text-outline-variant">{new Date(prev.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+        <span className="text-[10px] text-outline-variant">{new Date(latest.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
       </div>
     </div>
   )
@@ -295,7 +296,7 @@ export default function ProfilePage() {
     return allDayGroups.filter(g => new Date(g.date + 'T12:00:00') >= cutoff)
   }, [allDayGroups, filter])
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = localToday()
   const workoutDates = useMemo(() => new Set(sessions.map(s => s.date)), [sessions])
 
   async function shareDay(g: DayGroup) {
@@ -335,9 +336,9 @@ export default function ProfilePage() {
 
   return (
     <>
-      <header className="bg-[#0e0e0e]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-6 py-4 w-full max-w-[390px] mx-auto">
-        <h1 className="font-headline text-xl font-bold tracking-tight text-[#ffb9a0]">Profile</h1>
-        <Link href="/settings" className="text-[#a48b83] hover:text-[#e5e2e1] active:scale-95 transition-all">
+      <header className="bg-surface-container-lowest/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-6 py-4 w-full max-w-[390px] mx-auto">
+        <h1 className="font-headline text-xl font-bold tracking-tight text-primary">Profile</h1>
+        <Link href="/settings" className="text-outline hover:text-on-surface active:scale-95 transition-all">
           <span className="material-symbols-outlined">settings</span>
         </Link>
       </header>
@@ -345,7 +346,7 @@ export default function ProfilePage() {
       <main className="max-w-[390px] mx-auto px-4 pb-32">
         {loading ? (
           <div className="flex justify-center pt-20">
-            <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-primary-container/30 border-t-primary-container rounded-full animate-spin" />
           </div>
         ) : (
           <>
@@ -356,11 +357,11 @@ export default function ProfilePage() {
                 <button
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={avatarUploading}
-                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#ff9066] flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary-container flex items-center justify-center shadow-lg active:scale-95 transition-transform"
                 >
                   {avatarUploading
                     ? <span className="w-3.5 h-3.5 border border-white/40 border-t-white rounded-full animate-spin" />
-                    : <span className="material-symbols-outlined text-[#752805] text-sm">photo_camera</span>}
+                    : <span className="material-symbols-outlined text-on-primary-container text-sm">photo_camera</span>}
                 </button>
                 <input
                   ref={avatarInputRef}
@@ -370,8 +371,8 @@ export default function ProfilePage() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarFile(f); e.target.value = '' }}
                 />
               </div>
-              <h2 className="font-headline text-2xl font-extrabold text-[#e5e2e1] mb-1">{username}</h2>
-              <p className="text-[#a48b83] text-sm">{totalWorkouts} workouts</p>
+              <h2 className="font-headline text-2xl font-extrabold text-on-surface mb-1">{username}</h2>
+              <p className="text-outline text-sm">{totalWorkouts} workouts</p>
             </section>
 
             {/* Date filter */}
@@ -381,7 +382,7 @@ export default function ProfilePage() {
                   key={f.value}
                   onClick={() => setFilter(f.value)}
                   className={`flex-1 py-2 rounded-xl text-xs font-bold font-label transition-colors ${
-                    filter === f.value ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'
+                    filter === f.value ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-outline'
                   }`}
                 >
                   {f.label}
@@ -397,20 +398,20 @@ export default function ProfilePage() {
 
             {/* Workout history */}
             {dayGroups.length === 0 ? (
-              <p className="text-center text-[#a48b83] text-sm py-10">No workouts in this period</p>
+              <p className="text-center text-outline text-sm py-10">No workouts in this period</p>
             ) : (
               <div className="space-y-3">
                 {dayGroups.map((g, i) => {
                   const keyStat = dayKeyStat(g)
                   const expanded = expandedDate === g.date
                   const badges: { label: string; className: string }[] = []
-                  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-[#4bdece]/20 text-[#4bdece]' })
-                  if (g.lift) badges.push({ label: 'Lift', className: 'bg-[#ff9066]/20 text-[#ff9066]' })
+                  if (g.cardio) badges.push({ label: 'Cardio', className: 'bg-tertiary/20 text-tertiary' })
+                  if (g.lift) badges.push({ label: 'Lift', className: 'bg-primary-container/20 text-primary-container' })
 
                   const isEmpty = !g.cardio && !g.lift
 
                   return (
-                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-[#131313] border-[#201f1f] animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
+                    <div key={g.date} className="rounded-2xl border overflow-hidden bg-surface border-surface-container animate-fade-in" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
                       <div
                         role={isEmpty ? undefined : 'button'}
                         tabIndex={isEmpty ? undefined : 0}
@@ -421,8 +422,8 @@ export default function ProfilePage() {
                           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedDate(expanded ? null : g.date) }
                         }}
                       >
-                        <span className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
-                        <p className="text-[#e5e2e1] font-headline font-bold text-sm mt-0.5 leading-tight truncate">{isEmpty ? 'Empty session' : dayTitle(g)}</p>
+                        <span className="text-outline text-[10px] font-bold uppercase tracking-widest font-label">{formatDate(g.date)}</span>
+                        <p className="text-on-surface font-headline font-bold text-sm mt-0.5 leading-tight truncate">{isEmpty ? 'Empty session' : dayTitle(g)}</p>
                         <div className="flex items-center gap-1.5 mt-1.5">
                           {badges.map((b, j) => (
                             <span key={j} className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${b.className}`}>{b.label}</span>
@@ -432,11 +433,11 @@ export default function ProfilePage() {
                               key={sid}
                               onClick={(e) => { e.stopPropagation(); deleteSession(sid, g.date) }}
                               disabled={deletingSession === sid}
-                              className="p-1.5 rounded-lg text-[#a48b83] hover:text-red-400 hover:bg-red-400/10 active:scale-95 transition-all"
+                              className="p-1.5 rounded-lg text-outline hover:text-red-400 hover:bg-red-400/10 active:scale-95 transition-all"
                               title="Delete empty session"
                             >
                               {deletingSession === sid
-                                ? <span className="w-4 h-4 border border-[#a48b83]/40 border-t-[#a48b83] rounded-full animate-spin inline-block" />
+                                ? <span className="w-4 h-4 border border-outline/40 border-t-outline rounded-full animate-spin inline-block" />
                                 : <span className="material-symbols-outlined text-base">delete</span>}
                             </button>
                           ))}
@@ -445,13 +446,13 @@ export default function ProfilePage() {
                       </div>
 
                       {expanded && (
-                        <div className="border-t border-[#201f1f] bg-[#1c1b1b]/50 px-4 py-4 space-y-4 animate-fade-in">
+                        <div className="border-t border-surface-container bg-surface-container-low/50 px-4 py-4 space-y-4 animate-fade-in">
 
                           {/* Share button */}
                           <div className="flex justify-end">
                             <button
                               onClick={() => shareDay(g)}
-                              className="flex items-center gap-1.5 text-[#a48b83] hover:text-[#e5e2e1] active:scale-95 transition-all text-xs font-bold font-label"
+                              className="flex items-center gap-1.5 text-outline hover:text-on-surface active:scale-95 transition-all text-xs font-bold font-label"
                             >
                               <span className="material-symbols-outlined text-base">{copiedDate === g.date ? 'check' : 'share'}</span>
                               {copiedDate === g.date ? 'Copied!' : 'Share'}
@@ -461,38 +462,38 @@ export default function ProfilePage() {
                           {g.cardio && g.cardio.map((c, j) => (
                             <div key={j}>
                               {g.cardio!.length > 1 && (
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-2">{c.activity}</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-2">{c.activity}</p>
                               )}
                               <div className="grid grid-cols-3 gap-3">
                                 {c.distance && Number(c.distance) > 0 && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Dist</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{Number(c.distance).toFixed(1)} km</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">Dist</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{Number(c.distance).toFixed(1)} km</p>
                                   </div>
                                 )}
                                 {c.pace && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Pace</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.pace}/km</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">Pace</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{c.pace}/km</p>
                                   </div>
                                 )}
                                 {c.duration && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">Time</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.duration}</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">Time</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{c.duration}</p>
                                   </div>
                                 )}
                                 {c.heart_rate && (
                                   <div>
-                                    <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest font-label mb-1">HR Avg</p>
-                                    <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.heart_rate} bpm</p>
+                                    <p className="text-outline text-[10px] font-bold uppercase tracking-widest font-label mb-1">HR Avg</p>
+                                    <p className="font-headline font-bold text-lg text-on-surface">{c.heart_rate} bpm</p>
                                   </div>
                                 )}
                               </div>
                             </div>
                           ))}
 
-                          {g.cardio && g.lift && <div className="border-t border-[#201f1f]/50" />}
+                          {g.cardio && g.lift && <div className="border-t border-surface-container/50" />}
 
                           {g.lift && (
                             <div className="space-y-3">
@@ -505,24 +506,24 @@ export default function ProfilePage() {
                                 return (
                                   <div key={j}>
                                     <div className="flex items-center justify-between mb-1.5">
-                                      <span className="text-[#e5e2e1] text-sm font-semibold">{e.name}</span>
-                                      <span className="text-[#ff9066] text-xs font-bold">
+                                      <span className="text-on-surface text-sm font-semibold">{e.name}</span>
+                                      <span className="text-primary-container text-xs font-bold">
                                         {e.volume >= 1000 ? `${(e.volume / 1000).toFixed(1)}t` : `${e.volume} kg`}
                                       </span>
                                     </div>
                                     <div className="flex flex-wrap gap-1.5">
                                       {visible.map((r, k) => (
-                                        <span key={k} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
-                                          {r.weight}kg <span className="text-[#e5e2e1]">× {r.reps}</span>
+                                        <span key={k} className="bg-surface-container text-outline text-xs px-2.5 py-1 rounded-lg">
+                                          {r.weight}kg <span className="text-on-surface">× {r.reps}</span>
                                         </span>
                                       ))}
                                       {!isExpanded && hidden > 0 && (
-                                        <button onClick={() => setExpandedSets(prev => new Set(prev).add(key))} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                        <button onClick={() => setExpandedSets(prev => new Set(prev).add(key))} className="bg-surface-container text-outline text-xs px-2.5 py-1 rounded-lg">
                                           +{hidden} more
                                         </button>
                                       )}
                                       {isExpanded && hidden > 0 && (
-                                        <button onClick={() => setExpandedSets(prev => { const n = new Set(prev); n.delete(key); return n })} className="bg-[#201f1f] text-[#a48b83] text-xs px-2.5 py-1 rounded-lg">
+                                        <button onClick={() => setExpandedSets(prev => { const n = new Set(prev); n.delete(key); return n })} className="bg-surface-container text-outline text-xs px-2.5 py-1 rounded-lg">
                                           show less
                                         </button>
                                       )}
@@ -530,9 +531,9 @@ export default function ProfilePage() {
                                   </div>
                                 )
                               })}
-                              <div className="flex justify-between pt-2 border-t border-[#201f1f]/50">
-                                <span className="text-[#a48b83] text-xs">{g.lift.sets} sets total</span>
-                                <span className="text-[#a48b83] text-xs font-bold">
+                              <div className="flex justify-between pt-2 border-t border-surface-container/50">
+                                <span className="text-outline text-xs">{g.lift.sets} sets total</span>
+                                <span className="text-outline text-xs font-bold">
                                   {g.lift.volume >= 1000 ? `${(g.lift.volume / 1000).toFixed(1)}t` : `${g.lift.volume} kg`} total
                                 </span>
                               </div>

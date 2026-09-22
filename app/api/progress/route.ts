@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     // liftOnly mode: only fetch lift history for the given exercise (skip the 3 shared queries)
     if (liftOnly && exercise) {
       const liftRes = await db.execute({
-        sql: `SELECT s.date, st.id, st.weight, st.reps, st.duration_secs, st.logged_at
+        sql: `SELECT s.date, st.id, st.weight, st.reps, st.duration_secs, st.logged_at, st.is_warmup
               FROM sets st
               JOIN blocks b ON st.block_id = b.id
               JOIN sessions s ON b.session_id = s.id
@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
         const reps = Number(r.reps)
         const duration_secs = r.duration_secs != null ? Number(r.duration_secs) : null
         const logged_at = (r.logged_at as string | null) ?? null
+        // Warm-ups are hidden from progress charts entirely
+        if (Number(r.is_warmup ?? 0) === 1) continue
         const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, max_duration: 0, total_duration: 0, rows: [], first_logged_at: null }
         cur.max_weight = Math.max(cur.max_weight, weight)
         cur.volume += weight * reps
@@ -71,7 +73,7 @@ export async function GET(req: NextRequest) {
       }),
       db.execute({
         sql: `SELECT s.date,
-                MAX(CASE WHEN b.type = 'lift' THEN st.weight END) as max_weight,
+                MAX(CASE WHEN b.type = 'lift' AND COALESCE(st.is_warmup, 0) = 0 THEN st.weight END) as max_weight,
                 MAX(CASE WHEN b.type = 'lift' THEN st.duration_secs END) as max_duration,
                 COUNT(DISTINCT CASE WHEN b.type = 'lift' THEN st.id END) as lift_count,
                 SUM(c.distance) as total_distance,
@@ -86,7 +88,7 @@ export async function GET(req: NextRequest) {
       }),
       exercise
         ? db.execute({
-            sql: `SELECT s.date, st.id, st.weight, st.reps, st.duration_secs, st.logged_at
+            sql: `SELECT s.date, st.id, st.weight, st.reps, st.duration_secs, st.logged_at, st.is_warmup
                   FROM sets st
                   JOIN blocks b ON st.block_id = b.id
                   JOIN sessions s ON b.session_id = s.id
@@ -109,6 +111,8 @@ export async function GET(req: NextRequest) {
         const reps = Number(r.reps)
         const duration_secs = r.duration_secs != null ? Number(r.duration_secs) : null
         const logged_at = (r.logged_at as string | null) ?? null
+        // Warm-ups are hidden from progress charts entirely
+        if (Number(r.is_warmup ?? 0) === 1) continue
         const cur = dateMap.get(date) ?? { max_weight: 0, volume: 0, max_duration: 0, total_duration: 0, rows: [], first_logged_at: null }
         cur.max_weight = Math.max(cur.max_weight, weight)
         cur.volume += weight * reps

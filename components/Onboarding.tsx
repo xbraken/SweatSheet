@@ -58,7 +58,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100]" />
-      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[101] bg-[#181818] rounded-t-3xl px-6 pt-8 pb-[calc(env(safe-area-inset-bottom,0px)+32px)] animate-slide-up">
+      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[101] bg-surface-sheet rounded-t-3xl px-6 pt-8 pb-[calc(env(safe-area-inset-bottom,0px)+32px)] animate-slide-up">
         {/* Step dots */}
         <div className="flex justify-center gap-1.5 mb-8">
           {steps.map((_, i) => (
@@ -78,8 +78,8 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         </div>
 
         {/* Text */}
-        <h2 className="font-headline text-2xl font-black text-[#e5e2e1] text-center mb-3">{current.title}</h2>
-        <p className="text-[#a48b83] text-sm text-center leading-relaxed mb-10">{current.body}</p>
+        <h2 className="font-headline text-2xl font-black text-on-surface text-center mb-3">{current.title}</h2>
+        <p className="text-outline text-sm text-center leading-relaxed mb-10">{current.body}</p>
 
         {/* Actions */}
         <button
@@ -90,7 +90,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           {isLast ? "Let's go!" : 'Next'}
         </button>
         {!isLast && (
-          <button onClick={finish} className="w-full py-3 text-[#56423c] text-sm font-bold text-center mt-1">
+          <button onClick={finish} className="w-full py-3 text-outline-variant text-sm font-bold text-center mt-1">
             Skip
           </button>
         )}

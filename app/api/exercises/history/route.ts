@@ -7,7 +7,7 @@ await initDb()
 const DEFAULT_LIMIT = 5
 const MAX_LIMIT = 15
 
-type HistorySet = { weight: number; reps: number; duration_secs: number | null }
+type HistorySet = { weight: number; reps: number; duration_secs: number | null; is_warmup: boolean; rpe: number | null }
 type HistoryEntry = { date: string; block_id: number; notes: string | null; sets: HistorySet[] }
 
 /**
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     : DEFAULT_LIMIT
 
   const res = await db.execute({
-    sql: `SELECT s.date, b.id as block_id, b.notes, st.weight, st.reps, st.duration_secs
+    sql: `SELECT s.date, b.id as block_id, b.notes, st.weight, st.reps, st.duration_secs, st.is_warmup, st.rpe
           FROM sets st
           JOIN blocks b ON st.block_id = b.id
           JOIN sessions s ON b.session_id = s.id
@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
       weight: Number(r.weight),
       reps: Number(r.reps),
       duration_secs: r.duration_secs != null ? Number(r.duration_secs) : null,
+      is_warmup: Number(r.is_warmup ?? 0) === 1,
+      rpe: r.rpe != null ? Number(r.rpe) : null,
     })
   }
 

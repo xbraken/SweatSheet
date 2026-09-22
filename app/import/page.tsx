@@ -696,8 +696,8 @@ export default function ImportPage() {
           {/* Option A — Shortcut (recommended for ongoing syncs) */}
           <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#4bdece]">Recommended · Quick Sync</span>
-              <span className="text-[9px] bg-[#4bdece]/10 text-[#4bdece] px-2 py-0.5 rounded-full font-bold font-label uppercase tracking-wide">~1 MB</span>
+              <span className="text-[10px] font-bold font-label uppercase tracking-widest text-tertiary">Recommended · Quick Sync</span>
+              <span className="text-[9px] bg-tertiary/10 text-tertiary px-2 py-0.5 rounded-full font-bold font-label uppercase tracking-wide">~1 MB</span>
             </div>
             <p className="text-sm text-on-surface-variant leading-snug">Use the <span className="text-on-surface font-semibold">SweatSheet Shortcut</span> on your iPhone to export only recent workouts — no giant downloads needed for day-to-day syncing.</p>
             <div className="mt-1 flex flex-col gap-2">
@@ -707,8 +707,8 @@ export default function ImportPage() {
                 { icon: 'upload', text: 'Share the .json file here and import instantly' },
               ].map(({ icon, text }, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-[#4bdece]/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="material-symbols-outlined text-[#4bdece] text-sm">{icon}</span>
+                  <div className="w-6 h-6 rounded-full bg-tertiary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="material-symbols-outlined text-tertiary text-sm">{icon}</span>
                   </div>
                   <p className="text-xs text-on-surface-variant leading-snug">{text}</p>
                 </div>
@@ -800,7 +800,7 @@ export default function ImportPage() {
                   onClick={() => toggleSource(src)}
                   className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label tracking-wide transition-colors ${
                     activeSources.has(src)
-                      ? 'bg-[#4bdece] text-[#003732]'
+                      ? 'bg-tertiary text-on-tertiary'
                       : 'bg-surface-container text-on-surface-variant/50 line-through'
                   }`}
                 >
@@ -830,12 +830,12 @@ export default function ImportPage() {
                   w.alreadyImported ? 'border-on-surface/20' : w.selected ? 'bg-primary-container border-primary-container' : 'border-on-surface/30'
                 }`}>
                   {w.selected && !w.alreadyImported && (
-                    <span className="material-symbols-outlined text-[#752805] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+                    <span className="material-symbols-outlined text-on-primary-container text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
                   )}
                 </div>
 
-                <div className="w-8 h-8 rounded-full bg-[#4bdece]/10 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[#4bdece] text-base">
+                <div className="w-8 h-8 rounded-full bg-tertiary/10 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-tertiary text-base">
                     {w.activity === 'Cycling' ? 'directions_bike' : w.activity === 'Walking' ? 'directions_walk' : 'directions_run'}
                   </span>
                 </div>
@@ -863,7 +863,7 @@ export default function ImportPage() {
             <button
               onClick={confirmImport}
               disabled={selectedCount === 0}
-              className="w-full py-4 rounded-2xl font-headline font-bold text-base bg-gradient-to-br from-primary to-primary-container text-[#752805] shadow-xl active:scale-95 transition-all disabled:opacity-30"
+              className="w-full py-4 rounded-2xl font-headline font-bold text-base bg-gradient-to-br from-primary to-primary-container text-on-primary-container shadow-xl active:scale-95 transition-all disabled:opacity-30"
             >
               Import {selectedCount > 0 ? `${selectedCount} workout${selectedCount > 1 ? 's' : ''}` : 'workouts'}
             </button>
@@ -905,7 +905,7 @@ export default function ImportPage() {
           <div className="flex flex-col gap-3 w-full mt-4">
             <Link
               href="/progress"
-              className="w-full py-4 rounded-2xl font-headline font-bold text-base bg-gradient-to-br from-primary to-primary-container text-[#752805] text-center shadow-xl"
+              className="w-full py-4 rounded-2xl font-headline font-bold text-base bg-gradient-to-br from-primary to-primary-container text-on-primary-container text-center shadow-xl"
             >
               View in Progress
             </Link>

@@ -130,23 +130,23 @@ export default function BodyHeatmap() {
                       {sets > 0 ? `${sets} set${sets === 1 ? '' : 's'}` : 'untrained'}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1.5 bg-[#201f1f] rounded-full overflow-hidden">
+                  <div className="mt-1.5 h-1.5 bg-surface-container rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${pct}%`, background: colorFor(region) }}
                     />
                   </div>
-                  <div className="text-[10px] text-[#56423c] mt-1">last: {relTime(last)}</div>
+                  <div className="text-[10px] text-outline-variant mt-1">last: {relTime(last)}</div>
                 </div>
                 {canExpand && (
                   <span
-                    className="material-symbols-outlined text-[#56423c] text-base shrink-0 transition-transform"
+                    className="material-symbols-outlined text-outline-variant text-base shrink-0 transition-transform"
                     style={{ transform: isExpanded ? 'rotate(180deg)' : 'none' }}
                   >expand_more</span>
                 )}
               </button>
               {isExpanded && s && (
-                <div className="px-4 pb-4 pt-1 flex flex-col gap-1.5 border-t border-[#201f1f]">
+                <div className="px-4 pb-4 pt-1 flex flex-col gap-1.5 border-t border-surface-container">
                   {s.exercises.map(ex => {
                     const isPrimary = ex.weight === 1
                     return (
@@ -154,7 +154,7 @@ export default function BodyHeatmap() {
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-sm text-on-surface truncate">{ex.exercise}</span>
                           {!isPrimary && (
-                            <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#56423c] shrink-0">secondary</span>
+                            <span className="text-[9px] font-bold font-label uppercase tracking-widest text-outline-variant shrink-0">secondary</span>
                           )}
                         </div>
                         <span className="text-[11px] text-on-surface-variant shrink-0 ml-2">

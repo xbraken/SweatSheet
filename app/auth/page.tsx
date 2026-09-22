@@ -106,7 +106,7 @@ export default function AuthPage() {
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 bg-gradient-to-br from-[#ffb9a0] to-[#ff9066] text-[#752805] py-4 rounded-2xl font-headline font-bold text-base shadow-xl active:scale-95 transition-transform disabled:opacity-60"
+          className="mt-2 bg-gradient-to-br from-primary to-primary-container text-on-primary-container py-4 rounded-2xl font-headline font-bold text-base shadow-xl active:scale-95 transition-transform disabled:opacity-60"
         >
           {loading ? '...' : mode === 'login' ? 'Log in' : 'Create account'}
         </button>

@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 11
+const SCHEMA_VERSION = 12
 
 let _initPromise: Promise<void> | null = null
 
@@ -191,6 +191,42 @@ async function _runInit() {
     UNIQUE(user_id, date)
   )`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_share_links_user ON share_links(user_id)`)
+
+  // v12 — all additive (new columns/tables only; no table rebuilds, see v10 note above)
+  // Warm-up sets are excluded from volume/PRs; RPE is optional per set
+  try { await db.execute(`ALTER TABLE sets ADD COLUMN is_warmup INTEGER NOT NULL DEFAULT 0`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE sets ADD COLUMN rpe REAL`) } catch { /* exists */ }
+  // Client-generated id so offline-queue retries don't create duplicate blocks
+  try { await db.execute(`ALTER TABLE blocks ADD COLUMN client_id TEXT`) } catch { /* exists */ }
+  await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_blocks_client_id ON blocks(client_id) WHERE client_id IS NOT NULL`)
+  // Target sessions per week, shown as a ring on the Today screen
+  try { await db.execute(`ALTER TABLE users ADD COLUMN weekly_goal INTEGER`) } catch { /* exists */ }
+
+  // Kudos on friends' sessions
+  await db.execute(`CREATE TABLE IF NOT EXISTS session_reactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(session_id, user_id, emoji)
+  )`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_reactions_session ON session_reactions(session_id)`)
+
+  // PRs recorded at save time, so the feed can show them
+  await db.execute(`CREATE TABLE IF NOT EXISTS prs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+    exercise TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    value REAL NOT NULL,
+    reps INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_prs_session ON prs(session_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_prs_user ON prs(user_id, created_at)`)
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)

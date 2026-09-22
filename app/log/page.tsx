@@ -7,135 +7,30 @@ import { useIntervalsSyncTrigger } from '@/components/IntervalsSyncTrigger'
 import Onboarding, { shouldShowOnboarding } from '@/components/Onboarding'
 import ExercisePicker, { type ExerciseHint, type ExercisePR } from '@/components/ExercisePicker'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
+import { localToday } from '@/lib/dates'
+import { FLUSHED_EVENT, sendOrQueue, type SendResult } from '@/lib/offline-queue'
+import { suggestNext } from '@/lib/progression'
+import { toast } from '@/components/Toast'
+import SwipeableCard from '@/components/log/SwipeableCard'
+import CardioPicker from '@/components/log/CardioPicker'
+import WorkoutTypePicker from '@/components/log/WorkoutTypePicker'
+import CalendarSheet from '@/components/log/CalendarSheet'
+import ExerciseShell from '@/components/log/ExerciseShell'
+import PlateCalculator from '@/components/log/PlateCalculator'
+import NextSuggestion from '@/components/log/NextSuggestion'
+import { RestButton, playChime, unlockChime } from '@/components/log/RestTimer'
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
-type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]; notes: string | null }
+type LoggedSet = { id: number; weight: number; reps: number; duration_secs: number | null }
+type LoggedLift = { block_id: number; exercise: string; set_count: number; max_weight: number; max_duration: number | null; sets: LoggedSet[]; notes: string | null }
+// Saved on this phone while offline, waiting for the queue to sync
+type PendingSave = { key: number; label: string; detail: string; cardio: boolean }
 type LoggedCardio = { block_id: number; cardio_id: number; activity: string; distance: string | null; duration: string | null; pace: string | null; notes: string | null }
 type Routine = { id: number; name: string; exercises: string[] }
 type PendingBlock = { exercise: string; exerciseType: 'weights' | 'bodyweight' | 'timed'; sets: SetRow[] }
 type ActiveRoutine = { id: number; name: string; exercises: string[]; currentIndex: number; pending: Record<number, PendingBlock> }
 type HistorySet = { weight: number; reps: number; duration_secs: number | null }
 type HistoryEntry = { date: string; block_id: number; notes: string | null; sets: HistorySet[] }
-
-// ── Swipeable card (swipe left to delete on mobile, X on desktop) ─────────────
-const ACTION_W = 72
-
-function SwipeableCard({ onDelete, className, children }: { onDelete: () => void; className?: string; children: React.ReactNode }) {
-  const cardRef = useRef<HTMLDivElement>(null)
-  const actionRef = useRef<HTMLDivElement>(null)
-  const startX = useRef(0)
-  const curX = useRef(0)   // current committed offset (0 or -ACTION_W when snapped open)
-  const isOpen = useRef(false)
-  const onDeleteRef = useRef(onDelete)
-  onDeleteRef.current = onDelete
-
-  // Direct DOM style — no React re-renders during drag
-  const setX = (x: number, animated: boolean) => {
-    const el = cardRef.current
-    const ac = actionRef.current
-    if (!el || !ac) return
-    el.style.transition = animated ? 'transform 0.28s cubic-bezier(0.25,1,0.5,1)' : 'none'
-    el.style.transform = `translateX(${x}px)`
-    ac.style.opacity = String(Math.min(1, Math.abs(x) / ACTION_W))
-  }
-
-  useEffect(() => {
-    const el = cardRef.current
-    if (!el) return
-
-    let startY = 0
-    let locked: 'none' | 'h' | 'v' = 'none'
-
-    const onStart = (e: TouchEvent) => {
-      // Clear any lingering animation so inline transform takes effect
-      el.style.animation = 'none'
-      startX.current = e.touches[0].clientX
-      startY = e.touches[0].clientY
-      curX.current = isOpen.current ? -ACTION_W : 0
-      locked = 'none'
-      el.style.transition = 'none'
-    }
-
-    const onMove = (e: TouchEvent) => {
-      const dx = e.touches[0].clientX - startX.current
-      const dy = e.touches[0].clientY - startY
-
-      // Determine gesture direction on first meaningful movement
-      if (locked === 'none') {
-        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
-        locked = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
-      }
-
-      if (locked === 'v') return  // let the browser scroll
-
-      // Horizontal — claim the gesture
-      e.preventDefault()
-      const total = dx + curX.current
-      if (total >= 4) { setX(0, false); return }
-      const abs = Math.abs(Math.min(0, total))
-      const x = abs <= ACTION_W ? -abs : -(ACTION_W + (abs - ACTION_W) * 0.2)
-      setX(x, false)
-    }
-
-    const onEnd = () => {
-      if (locked !== 'h') return
-      const matrix = new DOMMatrixReadOnly(cardRef.current?.style.transform || '')
-      const abs = Math.abs(matrix.m41)
-
-      if (abs >= ACTION_W + 44) {
-        setX(-500, true)
-        setTimeout(() => onDeleteRef.current(), 260)
-      } else if (abs >= ACTION_W * 0.38) {
-        isOpen.current = true
-        setX(-ACTION_W, true)
-      } else {
-        isOpen.current = false
-        setX(0, true)
-      }
-    }
-
-    el.addEventListener('touchstart', onStart, { passive: true })
-    el.addEventListener('touchmove', onMove, { passive: false })  // needs preventDefault
-    el.addEventListener('touchend', onEnd, { passive: true })
-    return () => {
-      el.removeEventListener('touchstart', onStart)
-      el.removeEventListener('touchmove', onMove)
-      el.removeEventListener('touchend', onEnd)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Split className: animation classes go on wrapper (so they don't override card transform),
-  // visual classes (bg, rounded, padding) go on the card div that slides
-  const animClasses = (className ?? '').split(' ').filter(c => c.startsWith('animate-'))
-  const cardClasses = (className ?? '').split(' ').filter(c => !c.startsWith('animate-'))
-
-  return (
-    <div className={`relative rounded-2xl overflow-hidden ${animClasses.join(' ')}`}>
-      <div ref={actionRef}
-        className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-500 rounded-2xl"
-        style={{ width: ACTION_W, opacity: 0 }}
-      >
-        <button onClick={() => { setX(-500, true); setTimeout(() => onDeleteRef.current(), 260) }}
-          className="w-full h-full flex items-center justify-center">
-          <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
-        </button>
-      </div>
-      <div ref={cardRef} className={cardClasses.join(' ')} style={{ willChange: 'transform', touchAction: 'pan-y' }}>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const REST_OPTIONS = [
-  { label: 'Off', value: 0 },
-  { label: '30s', value: 30 },
-  { label: '1m', value: 60 },
-  { label: '90s', value: 90 },
-  { label: '2m', value: 120 },
-  { label: '3m', value: 180 },
-]
 
 function calcPace(distStr: string, timeStr: string): string {
   const dist = parseFloat(distStr)
@@ -161,331 +56,6 @@ function relDay(dateStr: string): string {
   if (days < 30) return `${Math.floor(days / 7)}w ago`
   if (days < 365) return `${Math.floor(days / 30)}mo ago`
   return `${Math.floor(days / 365)}y ago`
-}
-
-// ── Rest Timer Button ─────────────────────────────────────────────────────────
-function RestButton({ seconds, total, onSkip }: { seconds: number; total: number; onSkip: () => void }) {
-  const elapsed = ((total - seconds) / total) * 100
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return (
-    <button
-      onClick={onSkip}
-      className="relative w-full py-3.5 rounded-xl font-headline font-bold text-sm overflow-hidden flex items-center justify-center gap-2 text-[#a48b83] border border-[#353534] animate-fade-in"
-    >
-      <span
-        className="absolute inset-0 bg-[#ff9066]/20"
-        style={{ transform: `scaleX(${elapsed / 100})`, transformOrigin: 'left', transition: 'transform 1s linear' }}
-      />
-      <span className="material-symbols-outlined text-base text-[#ff9066] relative">timer</span>
-      <span className="relative">Resting {m}:{String(s).padStart(2, '0')} — tap to skip</span>
-    </button>
-  )
-}
-
-// ── PR Toast ──────────────────────────────────────────────────────────────────
-function PrToast({ exercise, weight, onDone }: { exercise: string; weight: number; onDone: () => void }) {
-  const [fading, setFading] = useState(false)
-  const onDoneRef = useRef(onDone)
-  onDoneRef.current = onDone
-  useEffect(() => {
-    const fadeTimer = setTimeout(() => setFading(true), 4600)
-    const doneTimer = setTimeout(() => onDoneRef.current(), 5000)
-    return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer) }
-  }, [])
-  return (
-    <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50" style={{ opacity: fading ? 0 : 1, transition: fading ? 'opacity 0.4s ease-out' : undefined }}>
-      <div className="bg-[#ff9066] text-[#752805] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 font-headline font-bold text-sm animate-slide-up">
-        <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
-        New PR! {exercise} — {weight} kg
-      </div>
-    </div>
-  )
-}
-
-
-// ── Cardio type picker sheet ──────────────────────────────────────────────────
-function CardioPicker({ onSelect, onClose }: {
-  onSelect: (activity: string) => void
-  onClose: () => void
-}) {
-  const options = [
-    { label: 'Run', icon: 'directions_run' },
-    { label: 'Walking', icon: 'directions_walk' },
-    { label: 'Cycling', icon: 'directions_bike' },
-    { label: 'Interval run', icon: 'directions_run' },
-  ]
-  const [customMode, setCustomMode] = useState(false)
-  const [customName, setCustomName] = useState('')
-  const dragY = useRef(0)
-  const dragDelta = useRef(0)
-  const sheetRef = useRef<HTMLDivElement>(null)
-  const handleRef = useRef<HTMLDivElement>(null)
-
-  function setSheetY(y: number, animated: boolean) {
-    const el = sheetRef.current
-    if (!el) return
-    el.style.animation = 'none'
-    el.style.transition = animated ? 'transform 0.3s ease' : 'none'
-    el.style.transform = `translateY(${y}px)`
-  }
-
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
-
-  useEffect(() => {
-    const handle = handleRef.current
-    if (!handle) return
-
-    const onTouchStart = (e: TouchEvent) => {
-      dragY.current = e.touches[0].clientY
-      dragDelta.current = 0
-    }
-    const onTouchMove = (e: TouchEvent) => {
-      const delta = e.touches[0].clientY - dragY.current
-      if (delta > 0) {
-        e.preventDefault()
-        dragDelta.current = delta
-        setSheetY(delta, false)
-      }
-    }
-    const onTouchEnd = () => {
-      if (dragDelta.current > 80) {
-        setSheetY(window.innerHeight, true)
-        setTimeout(onClose, 300)
-      } else {
-        setSheetY(0, true)
-      }
-      dragDelta.current = 0
-    }
-
-    handle.addEventListener('touchstart', onTouchStart)
-    handle.addEventListener('touchmove', onTouchMove, { passive: false })
-    handle.addEventListener('touchend', onTouchEnd)
-    return () => {
-      handle.removeEventListener('touchstart', onTouchStart)
-      handle.removeEventListener('touchmove', onTouchMove)
-      handle.removeEventListener('touchend', onTouchEnd)
-    }
-  }, [onClose])
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div
-        ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-2xl overflow-y-auto max-h-[85vh] animate-slide-up"
-      >
-        <div ref={handleRef} className="w-full flex justify-center py-5 mb-2 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
-          <div className="w-10 h-1 bg-[#353534] rounded-full" />
-        </div>
-        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">Select activity</p>
-        <div className="flex flex-col gap-3">
-          {options.map(o => (
-            <button
-              key={o.label}
-              onClick={() => { onSelect(o.label); onClose() }}
-              className="flex items-center gap-4 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-[#4bdece]/10 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[#4bdece]">{o.icon}</span>
-              </div>
-              <span className="font-headline font-bold text-[#e5e2e1]">{o.label}</span>
-            </button>
-          ))}
-          {customMode ? (
-            <div className="flex items-center gap-2 p-4 bg-[#201f1f] rounded-2xl">
-              <div className="w-10 h-10 rounded-xl bg-[#4bdece]/10 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[#4bdece]">sports</span>
-              </div>
-              <input
-                autoFocus
-                type="text"
-                placeholder="e.g. SkiErg, Rowing…"
-                value={customName}
-                onChange={e => setCustomName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && customName.trim()) { onSelect(customName.trim()); onClose() } }}
-                className="flex-1 bg-transparent font-headline font-bold text-[#e5e2e1] outline-none placeholder:text-[#56423c]"
-              />
-              {customName.trim() && (
-                <button
-                  onClick={() => { onSelect(customName.trim()); onClose() }}
-                  className="text-[#4bdece] active:opacity-60"
-                >
-                  <span className="material-symbols-outlined">arrow_forward</span>
-                </button>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setCustomMode(true)}
-              className="flex items-center gap-4 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-[#4bdece]/10 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[#4bdece]">add</span>
-              </div>
-              <span className="font-headline font-bold text-[#e5e2e1]">Custom</span>
-            </button>
-          )}
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ── Workout Type Picker Sheet ────────────────────────────────────────────────
-function WorkoutTypePicker({ onSelect, onRoutine, onPlanToday, onClose }: {
-  onSelect: (type: 'weights' | 'bodyweight' | 'timed' | 'cardio') => void
-  onRoutine: () => void
-  onPlanToday: () => void
-  onClose: () => void
-}) {
-  const options: { label: string; value: 'weights' | 'bodyweight' | 'timed' | 'cardio'; icon: string; color: string; bgColor: string }[] = [
-    { label: 'Weights', value: 'weights', icon: 'fitness_center', color: '#ff9066', bgColor: 'rgba(255,144,102,0.1)' },
-    { label: 'Bodyweight', value: 'bodyweight', icon: 'accessibility_new', color: '#ff9066', bgColor: 'rgba(255,144,102,0.1)' },
-    { label: 'Timed', value: 'timed', icon: 'timer', color: '#ff9066', bgColor: 'rgba(255,144,102,0.1)' },
-    { label: 'Cardio', value: 'cardio', icon: 'directions_run', color: '#4bdece', bgColor: 'rgba(75,222,206,0.1)' },
-  ]
-  const dragY = useRef(0)
-  const dragDelta = useRef(0)
-  const sheetRef = useRef<HTMLDivElement>(null)
-  const handleRef = useRef<HTMLDivElement>(null)
-
-  function setSheetY(y: number, animated: boolean) {
-    const el = sheetRef.current
-    if (!el) return
-    el.style.animation = 'none'
-    el.style.transition = animated ? 'transform 0.3s ease' : 'none'
-    el.style.transform = `translateY(${y}px)`
-  }
-
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
-
-  useEffect(() => {
-    const handle = handleRef.current
-    if (!handle) return
-    const onTouchStart = (e: TouchEvent) => { dragY.current = e.touches[0].clientY; dragDelta.current = 0 }
-    const onTouchMove = (e: TouchEvent) => {
-      const delta = e.touches[0].clientY - dragY.current
-      if (delta > 0) { e.preventDefault(); dragDelta.current = delta; setSheetY(delta, false) }
-    }
-    const onTouchEnd = () => {
-      if (dragDelta.current > 80) { setSheetY(window.innerHeight, true); setTimeout(onClose, 300) }
-      else { setSheetY(0, true) }
-      dragDelta.current = 0
-    }
-    handle.addEventListener('touchstart', onTouchStart)
-    handle.addEventListener('touchmove', onTouchMove, { passive: false })
-    handle.addEventListener('touchend', onTouchEnd)
-    return () => { handle.removeEventListener('touchstart', onTouchStart); handle.removeEventListener('touchmove', onTouchMove); handle.removeEventListener('touchend', onTouchEnd) }
-  }, [onClose])
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div
-        ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-2xl animate-slide-up"
-      >
-        <div ref={handleRef} className="w-full flex justify-center py-5 mb-2 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
-          <div className="w-10 h-1 bg-[#353534] rounded-full" />
-        </div>
-        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-4">What are you logging?</p>
-        <div className="grid grid-cols-2 gap-3">
-          {options.map(o => (
-            <button
-              key={o.value}
-              onClick={() => { onSelect(o.value); onClose() }}
-              className="flex flex-col items-center gap-3 p-5 bg-[#201f1f] rounded-2xl active:scale-95 transition-all"
-            >
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: o.bgColor }}>
-                <span className="material-symbols-outlined text-2xl" style={{ color: o.color }}>{o.icon}</span>
-              </div>
-              <span className="font-headline font-bold text-sm text-[#e5e2e1]">{o.label}</span>
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => { onRoutine(); onClose() }}
-          className="mt-3 w-full flex items-center justify-center gap-2 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534]"
-        >
-          <span className="material-symbols-outlined text-xl text-[#ff9066]">assignment</span>
-          <span className="font-headline font-bold text-sm text-[#dcc1b8]">Use a routine</span>
-        </button>
-        <button
-          onClick={() => { onPlanToday(); onClose() }}
-          className="mt-2 w-full flex items-center justify-center gap-2 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534]"
-        >
-          <span className="material-symbols-outlined text-xl text-[#ff9066]">edit_note</span>
-          <span className="font-headline font-bold text-sm text-[#dcc1b8]">Plan today&apos;s session</span>
-        </button>
-      </div>
-    </>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── Calendar Sheet ────────────────────────────────────────────────────────────
-function CalendarSheet({ month, workoutDates, today, onSelectDate, onPrev, onNext, onClose }: {
-  month: Date; workoutDates: Set<string>; today: string
-  onSelectDate: (date: string) => void; onPrev: () => void; onNext: () => void; onClose: () => void
-}) {
-  const year = month.getFullYear()
-  const m = month.getMonth()
-  const firstDay = new Date(year, m, 1).getDay()
-  const daysInMonth = new Date(year, m + 1, 0).getDate()
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[92vh] overflow-y-auto animate-slide-up">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={onPrev} className="w-8 h-8 flex items-center justify-center">
-            <span className="material-symbols-outlined text-[#a48b83]">chevron_left</span>
-          </button>
-          <p className="font-headline font-bold text-[#e5e2e1]">
-            {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-          </p>
-          <button onClick={onNext} disabled={month >= new Date(new Date().getFullYear(), new Date().getMonth(), 1)} className="w-8 h-8 flex items-center justify-center disabled:opacity-30">
-            <span className="material-symbols-outlined text-[#a48b83]">chevron_right</span>
-          </button>
-        </div>
-        <div className="grid grid-cols-7 mb-1">
-          {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
-            <div key={d} className="text-center text-[10px] font-bold font-label text-[#56423c] py-1">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-y-0.5">
-          {Array.from({ length: firstDay }).map((_, i) => <div key={`p${i}`} />)}
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const day = i + 1
-            const date = `${year}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-            const hasWorkout = workoutDates.has(date)
-            const isToday = date === today
-            const isFuture = date > today
-            return (
-              <button
-                key={date}
-                disabled={isFuture}
-                onClick={() => { onSelectDate(date); onClose() }}
-                className={`flex flex-col items-center justify-center py-1.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-20 active:scale-95
-                  ${isToday ? 'bg-[#ff9066]/20 text-[#ff9066]' : hasWorkout ? 'text-[#e5e2e1] hover:bg-[#2a2a2a]' : 'text-[#353534]'}`}
-              >
-                {day}
-                {hasWorkout && <div className="w-1 h-1 rounded-full bg-[#4bdece] mt-0.5" />}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-    </>
-  )
 }
 
 type View =
@@ -528,8 +98,19 @@ export default function LogPage() {
   // Lift logging state
   const [sets, setSets] = useState<SetRow[]>([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
   const [restingId, setRestingId] = useState<number | null>(null)
-  const [restRemaining, setRestRemaining] = useState(0)
+  // Rest is tracked as an end timestamp, not a ticking counter — iOS freezes JS timers
+  // while the app is in the background, so a counter would pause; a timestamp doesn't.
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null)
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  const restRemaining = restEndsAt ? Math.max(0, Math.ceil((restEndsAt - nowTs) / 1000)) : 0
   const [restDuration, setRestDuration] = useState(90)
+  const startRest = (setId: number, secs: number) => { setRestingId(setId); setRestEndsAt(Date.now() + secs * 1000); setNowTs(Date.now()) }
+  const stopRest = () => { setRestingId(null); setRestEndsAt(null) }
+
+  // Plate calculator + next-weight suggestion
+  const [plateCalcKg, setPlateCalcKg] = useState<number | null>(null)
+  const [suggestApplied, setSuggestApplied] = useState(false)
+  const [pendingSaves, setPendingSaves] = useState<PendingSave[]>([])
 
   // Cardio logging state
   const [cardioDistance, setCardioDistance] = useState('')
@@ -588,7 +169,8 @@ export default function LogPage() {
   const saveSessionNotes = (notes: string) => {
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
     notesTimerRef.current = setTimeout(() => {
-      fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionNotes: notes }) })
+      fetch('/api/log', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionNotes: notes, date: localToday() }) })
+        .catch(() => toast('Note not saved — no signal', { tone: 'error' }))
     }, 800)
   }
 
@@ -623,7 +205,6 @@ export default function LogPage() {
 
   // Saving
   const [saving, setSaving] = useState(false)
-  const [pr, setPr] = useState<{ exercise: string; weight: number } | null>(null)
 
   // Edit sheets
   const [editLift, setEditLift] = useState<{blockId: number; exercise: string; sets: {id: number; weight: number; reps: number; duration_secs: number | null}[]; notes: string} | null>(null)
@@ -657,13 +238,10 @@ export default function LogPage() {
         if (typeof d.cardioDistance === 'string') setCardioDistance(d.cardioDistance)
         if (typeof d.cardioTime === 'string') setCardioTime(d.cardioTime)
         if (d.activeRoutine) setActiveRoutine(d.activeRoutine)
-        if (d.restSetId != null && d.restEndsAt != null) {
-          const remaining = Math.max(0, Math.round((d.restEndsAt - Date.now()) / 1000))
-          if (remaining > 0) {
-            setRestingId(d.restSetId)
-            setRestRemaining(remaining)
-            if (d.restDuration) setRestDuration(d.restDuration)
-          }
+        if (d.restSetId != null && d.restEndsAt != null && d.restEndsAt > Date.now()) {
+          setRestingId(d.restSetId)
+          setRestEndsAt(d.restEndsAt)
+          if (d.restDuration) setRestDuration(d.restDuration)
         }
       } catch { /* corrupt draft — ignore */ }
     }
@@ -677,10 +255,10 @@ export default function LogPage() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
       view, sets, cardioDistance, cardioTime, activeRoutine,
       restSetId: restingId ?? undefined,
-      restEndsAt: restingId != null ? Date.now() + restRemaining * 1000 : undefined,
+      restEndsAt: restEndsAt ?? undefined,
       restDuration: restingId != null ? restDuration : undefined,
     }))
-  }, [draftRestored, view, sets, cardioDistance, cardioTime, activeRoutine, restingId, restRemaining, restDuration])
+  }, [draftRestored, view, sets, cardioDistance, cardioTime, activeRoutine, restingId, restEndsAt, restDuration])
 
   // Load rest duration from localStorage
   useEffect(() => {
@@ -701,7 +279,7 @@ export default function LogPage() {
   // Fetch log for current browsed date (or today)
   const refreshCurrent = useCallback(() => {
     const date = browsedDateRef.current
-    const url = date ? `/api/log?date=${date}` : '/api/log'
+    const url = `/api/log?date=${date ?? localToday()}`
     setLoadingToday(true)
     fetch(url).then(r => r.json()).then(data => {
       setLoggedLifts(data.lifts ?? [])
@@ -716,7 +294,7 @@ export default function LogPage() {
   useEffect(() => {
     setLoadingToday(true)
     Promise.all([
-      fetch('/api/log?include=all').then(r => r.json()),
+      fetch(`/api/log?include=all&date=${localToday()}`).then(r => r.json()),
       fetch('/api/routines').then(r => r.json()).catch(() => ({ routines: [] })),
     ]).then(([data, tplData]) => {
       setLoggedLifts(data.lifts ?? [])
@@ -740,13 +318,31 @@ export default function LogPage() {
     refreshCurrent()
   }, [browsedDate, refreshCurrent])
 
-  // Rest countdown
+  // Rest countdown — recomputed from the end timestamp, so time spent outside the app counts
   useEffect(() => {
-    if (restingId === null) return
-    if (restRemaining <= 0) { setRestingId(null); return }
-    const t = setTimeout(() => setRestRemaining(r => r - 1), 1000)
-    return () => clearTimeout(t)
-  }, [restingId, restRemaining])
+    if (restingId === null || restEndsAt === null) return
+    const tick = () => {
+      const t = Date.now()
+      setNowTs(t)
+      if (t >= restEndsAt) {
+        setRestingId(null)
+        setRestEndsAt(null)
+        if (document.visibilityState === 'visible') playChime()
+      }
+    }
+    tick()
+    const iv = setInterval(tick, 250)
+    const onVisible = () => { if (document.visibilityState === 'visible') tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible) }
+  }, [restingId, restEndsAt])
+
+  // Offline saves just synced — clear the placeholders and show the real data
+  useEffect(() => {
+    const onFlushed = () => { setPendingSaves([]); refreshCurrent() }
+    window.addEventListener(FLUSHED_EVENT, onFlushed)
+    return () => window.removeEventListener(FLUSHED_EVENT, onFlushed)
+  }, [refreshCurrent])
 
   const toggleStar = useCallback((exercise: string) => {
     setStarred(prev => {
@@ -766,7 +362,8 @@ export default function LogPage() {
   // Start logging an exercise — route to correct view based on type
   const startExercise = (name: string, hint?: ExerciseHint) => {
     const exType = EXERCISES.find(e => e.name === name)?.type ?? 'weights'
-    setRestingId(null)
+    stopRest()
+    setSuggestApplied(false)
     setShowExPicker(false)
     setBlockNotes('')
     if (exType === 'bodyweight') {
@@ -822,7 +419,8 @@ export default function LogPage() {
       const updated = prev.map(s => s.id === setId ? { ...s, done: !s.done } : s)
       const justDone = updated.find(s => s.id === setId)?.done
       if (justDone) {
-        if (restDuration > 0) { setRestingId(setId); setRestRemaining(restDuration) }
+        unlockChime()
+        if (restDuration > 0) startRest(setId, restDuration)
         const loggedSet = updated.find(s => s.id === setId)!
         if (!updated.some(s => !s.done)) {
           updated.push({ id: Date.now(), weight: loggedSet.weight, reps: loggedSet.reps, duration_secs: loggedSet.duration_secs, done: false })
@@ -840,19 +438,52 @@ export default function LogPage() {
     setSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: Math.max(0, +value.toFixed(1)) } : s))
   }
 
-  // Save all pending routine blocks to DB then go to list
+  const fmtDurShort = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+
+  const showPrToast = (exercise: string, value: number, exerciseType: string) => {
+    const v = exerciseType === 'timed' ? fmtDurShort(value) : `${kgToDisplay(value)} ${weightLabel}`
+    toast(`New PR! ${exercise} — ${v}`, { tone: 'pr' })
+  }
+
+  const queuedToast = () => toast('No signal — saved on this phone, will sync automatically', { icon: 'cloud_off' })
+
+  const pendingFromSets = (exercise: string, doneSets: SetRow[]): PendingSave => ({
+    key: Date.now() + Math.random(),
+    label: exercise,
+    detail: `${doneSets.length} set${doneSets.length === 1 ? '' : 's'}`,
+    cardio: false,
+  })
+
+  // Save all pending routine blocks to DB then go to list.
+  // Sequential so blocks keep their order; anything the server rejects stays pending for a retry.
   const finishRoutine = async (pending: Record<number, PendingBlock>) => {
-    const blocks = Object.values(pending)
-    if (blocks.length === 0) { setActiveRoutine(null); setView({ type: 'list' }); return }
+    const entries = Object.entries(pending)
+    if (entries.length === 0) { setActiveRoutine(null); setView({ type: 'list' }); return }
     setSaving(true)
     try {
-      await Promise.all(blocks.map(b =>
-        fetch('/api/log', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'lift', exercise: b.exercise, sets: b.sets, exerciseType: b.exerciseType }),
+      const failed: Record<number, PendingBlock> = {}
+      const queued: PendingSave[] = []
+      const prsHit: { exercise: string; weight: number; exerciseType: string }[] = []
+      let firstError: string | null = null
+      for (const [idx, b] of entries) {
+        const r: SendResult = await sendOrQueue('/api/log', 'POST', {
+          type: 'lift', exercise: b.exercise, sets: b.sets, exerciseType: b.exerciseType, date: localToday(),
         })
-      ))
+        if (r.status === 'error') { failed[Number(idx)] = b; firstError ??= r.error }
+        else if (r.status === 'queued') queued.push(pendingFromSets(b.exercise, b.sets))
+        else if (r.data.isPr) prsHit.push({ exercise: b.exercise, weight: Number(r.data.weight), exerciseType: b.exerciseType })
+      }
+      if (queued.length > 0) { setPendingSaves(prev => [...prev, ...queued]); queuedToast() }
+      if (prsHit.length > 0) {
+        showPrToast(prsHit[0].exercise, prsHit[0].weight, prsHit[0].exerciseType)
+        if (prsHit.length > 1) toast(`+${prsHit.length - 1} more PR${prsHit.length > 2 ? 's' : ''} this session`, { tone: 'pr' })
+      }
+      if (Object.keys(failed).length > 0) {
+        setActiveRoutine(prev => prev ? { ...prev, pending: failed } : prev)
+        toast(`Couldn't save ${Object.keys(failed).length} exercise(s): ${firstError}. Tap ✕ to retry.`, { tone: 'error' })
+        refreshCurrent()
+        return
+      }
       localStorage.removeItem(DRAFT_KEY)
       setActiveRoutine(null)
       setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
@@ -868,10 +499,10 @@ export default function LogPage() {
     if (view.type !== 'lift' && view.type !== 'bodyweight' && view.type !== 'timed') return
     const doneSets = sets.filter(s => s.done)
     if (doneSets.length === 0) { setView({ type: 'list' }); return }
+    const exerciseType = (view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights') as 'weights' | 'bodyweight' | 'timed'
 
     // In a routine — accumulate locally, save all at the end
     if (activeRoutine) {
-      const exerciseType = (view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights') as 'weights' | 'bodyweight' | 'timed'
       const updatedPending = { ...activeRoutine.pending, [activeRoutine.currentIndex]: { exercise: view.exercise, exerciseType, sets: doneSets } }
       if (activeRoutine.currentIndex < activeRoutine.exercises.length - 1) {
         // More exercises to go — advance
@@ -887,24 +518,26 @@ export default function LogPage() {
       return
     }
 
-    // Not in a routine — save immediately as before
+    // Not in a routine — save immediately
     setSaving(true)
     try {
-      const res = await fetch('/api/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'lift', exercise: view.exercise, sets, exerciseType: view.type === 'timed' ? 'timed' : view.type === 'bodyweight' ? 'bodyweight' : 'weights', notes: blockNotes || null }),
+      const r = await sendOrQueue('/api/log', 'POST', {
+        type: 'lift', exercise: view.exercise, sets, exerciseType, notes: blockNotes || null, date: localToday(),
       })
-      const data = await res.json()
-      if (data.isPr) {
-        setPr({ exercise: data.exercise, weight: data.weight })
+      if (r.status === 'error') { toast(`Save failed: ${r.error}`, { tone: 'error' }); return }
+      if (r.status === 'queued') {
+        setPendingSaves(prev => [...prev, pendingFromSets(view.exercise, doneSets)])
+        queuedToast()
+      } else if (r.data.isPr) {
+        showPrToast(view.exercise, Number(r.data.weight), exerciseType)
         // Update local PR map so comparison stays live for the rest of the session
-        const maxWeight = Math.max(...doneSets.map(s => s.weight))
-        const maxReps = Math.max(...doneSets.filter(s => s.weight === maxWeight).map(s => s.reps))
-        const maxDuration = Math.max(...doneSets.map(s => s.duration_secs ?? 0))
-        const newVol = doneSets.reduce((sum: number, s: SetRow) => sum + s.weight * s.reps, 0)
-        const newRepsTotal = doneSets.reduce((sum: number, s: SetRow) => sum + s.reps, 0)
-        const newDurTotal = doneSets.reduce((sum: number, s: SetRow) => sum + (s.duration_secs ?? 0), 0)
+        const work = doneSets
+        const maxWeight = Math.max(...work.map(s => s.weight))
+        const maxReps = Math.max(...work.filter(s => s.weight === maxWeight).map(s => s.reps))
+        const maxDuration = Math.max(...work.map(s => s.duration_secs ?? 0))
+        const newVol = work.reduce((sum: number, s: SetRow) => sum + s.weight * s.reps, 0)
+        const newRepsTotal = work.reduce((sum: number, s: SetRow) => sum + s.reps, 0)
+        const newDurTotal = work.reduce((sum: number, s: SetRow) => sum + (s.duration_secs ?? 0), 0)
         setPrs(prev => {
           const m = new Map(prev)
           const old = m.get(view.exercise)
@@ -923,7 +556,7 @@ export default function LogPage() {
       }
       localStorage.removeItem(DRAFT_KEY)
       setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
-      refreshCurrent()
+      if (r.status === 'ok') refreshCurrent()
       setView({ type: 'list' })
     } finally {
       setSaving(false)
@@ -935,22 +568,19 @@ export default function LogPage() {
     if (view.type !== 'cardio') return
     setSaving(true)
     try {
-      const res = await fetch('/api/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'cardio', activity: view.activity, distance: cardioDistance, time: cardioTime, pace: cardioPace, notes: blockNotes || null }),
+      const r = await sendOrQueue('/api/log', 'POST', {
+        type: 'cardio', activity: view.activity, distance: cardioDistance, time: cardioTime, pace: cardioPace, notes: blockNotes || null, date: localToday(),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        alert(`Save failed: ${data.error ?? res.status}`)
-        return
+      if (r.status === 'error') { toast(`Save failed: ${r.error}`, { tone: 'error' }); return }
+      if (r.status === 'queued') {
+        setPendingSaves(prev => [...prev, {
+          key: Date.now(), label: view.activity, cardio: true,
+          detail: [cardioDistance ? `${cardioDistance} km` : null, cardioTime || null].filter(Boolean).join(' · '),
+        }])
+        queuedToast()
+      } else {
+        refreshCurrent()
       }
-      await new Promise<void>(resolve => {
-        fetch('/api/log').then(r => r.json()).then(data => {
-          setLoggedLifts(data.lifts ?? [])
-          setLoggedCardio(data.cardio ?? [])
-        }).finally(resolve)
-      })
       localStorage.removeItem(DRAFT_KEY)
       setView({ type: 'list' })
     } finally {
@@ -1016,18 +646,35 @@ export default function LogPage() {
   // Opened from the logging header so the last few sessions are available as a
   // baseline mid-workout. Cached per exercise; re-fetched each open so a block
   // saved earlier today shows up.
-  const openHistory = (exercise: string) => {
-    setHistoryFor(exercise)
-    setHistoryError(null)
-    setHistoryLoading(historyCache[exercise] === undefined)
+  const fetchHistory = useCallback((exercise: string) =>
     fetch(`/api/exercises/history?exercise=${encodeURIComponent(exercise)}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
         setHistoryCache(prev => ({ ...prev, [exercise]: (data.entries ?? []) as HistoryEntry[] }))
-      })
+      }), [])
+
+  const openHistory = (exercise: string) => {
+    setHistoryFor(exercise)
+    setHistoryError(null)
+    setHistoryLoading(historyCache[exercise] === undefined)
+    fetchHistory(exercise)
       .catch(() => setHistoryError('Could not load recent sessions'))
       .finally(() => setHistoryLoading(false))
+  }
+
+  // Load recent sessions as soon as an exercise opens — feeds the "Try …" suggestion
+  const viewExercise = view.type === 'lift' || view.type === 'bodyweight' || view.type === 'timed' ? view.exercise : null
+  useEffect(() => {
+    if (viewExercise) fetchHistory(viewExercise).catch(() => { /* suggestion is optional */ })
+  }, [viewExercise, fetchHistory])
+
+  // Suggestion for the open exercise, from the most recent previous session
+  const suggestionFor = (exercise: string, kind: 'weights' | 'bodyweight' | 'timed') => {
+    const last = historyCache[exercise]?.[0]
+    if (!last) return null
+    const suggestion = suggestNext(last.sets, kind, isLbs)
+    return suggestion ? { last, suggestion } : null
   }
 
   // Header button — sits where the back-button spacer used to be
@@ -1037,9 +684,9 @@ export default function LogPage() {
         onClick={() => openHistory(exercise)}
         aria-label={`Recent ${exercise} sessions`}
         title="Recent sessions"
-        className="w-9 h-9 rounded-lg bg-[#201f1f] flex items-center justify-center active:scale-90 transition-transform hover:bg-[#2a2a2a]"
+        className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center active:scale-90 transition-transform hover:bg-surface-container-high"
       >
-        <span className="material-symbols-outlined text-[#a48b83] text-lg">history</span>
+        <span className="material-symbols-outlined text-outline text-lg">history</span>
       </button>
     </div>
   )
@@ -1050,11 +697,11 @@ export default function LogPage() {
   const notesEditorPortal = notesTarget && mounted ? createPortal(
     <>
       <div className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm" onClick={() => setNotesTarget(null)} />
-      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[71] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] animate-slide-up">
+      <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[71] bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-headline text-base font-bold">{notesTarget === 'session' ? 'Note for today' : 'Note for this exercise'}</h3>
           <button onClick={() => setNotesTarget(null)}>
-            <span className="material-symbols-outlined text-[#a48b83]">close</span>
+            <span className="material-symbols-outlined text-outline">close</span>
           </button>
         </div>
         <textarea
@@ -1063,12 +710,12 @@ export default function LogPage() {
           placeholder={notesTarget === 'session' ? 'How did the session feel? Anything to remember…' : 'Form cues, RPE, anything to remember…'}
           rows={6}
           autoFocus
-          className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-sm text-[#e5e2e1] placeholder:text-[#56423c] resize-none outline-none focus:ring-1 focus:ring-[#ff9066]/30"
+          className="w-full bg-surface-container rounded-xl px-4 py-3 text-sm text-on-surface placeholder:text-outline-variant resize-none outline-none focus:ring-1 focus:ring-primary-container/30"
         />
         <div className="flex gap-2 mt-4">
           <button
             onClick={() => setNotesTarget(null)}
-            className="flex-1 py-3 rounded-xl bg-[#201f1f] text-sm font-headline font-bold text-[#a48b83]"
+            className="flex-1 py-3 rounded-xl bg-surface-container text-sm font-headline font-bold text-outline"
           >Cancel</button>
           <button
             onClick={() => {
@@ -1076,7 +723,7 @@ export default function LogPage() {
               else { setBlockNotes(notesDraft) }
               setNotesTarget(null)
             }}
-            className="flex-1 py-3 rounded-xl bg-[#ff9066] text-[#752805] text-sm font-headline font-bold"
+            className="flex-1 py-3 rounded-xl bg-primary-container text-on-primary-container text-sm font-headline font-bold"
           >Save</button>
         </div>
       </div>
@@ -1110,20 +757,20 @@ export default function LogPage() {
     return createPortal(
       <>
         <div className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm" onClick={() => setHistoryFor(null)} />
-        <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[71] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] animate-slide-up flex flex-col max-h-[78vh]">
+        <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[71] bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] animate-slide-up flex flex-col max-h-[78vh]">
           <div className="flex items-start justify-between mb-3 shrink-0">
             <div>
               <h3 className="font-headline text-base font-bold">{exercise}</h3>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#56423c] mt-0.5">Recent sessions</p>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline-variant mt-0.5">Recent sessions</p>
             </div>
             <button onClick={() => setHistoryFor(null)}>
-              <span className="material-symbols-outlined text-[#a48b83]">close</span>
+              <span className="material-symbols-outlined text-outline">close</span>
             </button>
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
             {!entries && historyLoading && (
               <div className="flex justify-center py-10">
-                <div className="w-5 h-5 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
               </div>
             )}
             {!entries && historyError && (
@@ -1131,26 +778,26 @@ export default function LogPage() {
             )}
             {entries?.length === 0 && (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <span className="material-symbols-outlined text-3xl text-[#353534] mb-2">history</span>
-                <p className="text-sm text-[#a48b83]">No previous sessions yet</p>
-                <p className="text-xs text-[#56423c] mt-1">Log this exercise once and it&rsquo;ll show up here as a baseline.</p>
+                <span className="material-symbols-outlined text-3xl text-surface-container-highest mb-2">history</span>
+                <p className="text-sm text-outline">No previous sessions yet</p>
+                <p className="text-xs text-outline-variant mt-1">Log this exercise once and it&rsquo;ll show up here as a baseline.</p>
               </div>
             )}
             {entries?.map(entry => (
-              <div key={entry.block_id} className="bg-[#201f1f] rounded-xl px-4 py-3">
+              <div key={entry.block_id} className="bg-surface-container rounded-xl px-4 py-3">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="font-headline text-sm font-bold text-[#e5e2e1]">
+                  <p className="font-headline text-sm font-bold text-on-surface">
                     {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                   </p>
-                  <span className="text-[10px] font-bold font-label text-[#56423c] shrink-0">{relDay(entry.date)}</span>
+                  <span className="text-[10px] font-bold font-label text-outline-variant shrink-0">{relDay(entry.date)}</span>
                 </div>
-                <p className="text-[10px] font-bold font-label text-[#a48b83] mt-0.5">{summary(entry.sets)}</p>
+                <p className="text-[10px] font-bold font-label text-outline mt-0.5">{summary(entry.sets)}</p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {entry.sets.map((s, i) => (
-                    <span key={i} className="px-2 py-1 rounded-lg bg-[#2a2a2a] text-[11px] font-headline font-bold text-[#dcc1b8]">{fmtSet(s)}</span>
+                    <span key={i} className="px-2 py-1 rounded-lg bg-surface-container-high text-[11px] font-headline font-bold text-on-surface-variant">{fmtSet(s)}</span>
                   ))}
                 </div>
-                {entry.notes && <p className="text-xs text-[#a48b83] italic mt-2 whitespace-pre-wrap">{entry.notes}</p>}
+                {entry.notes && <p className="text-xs text-outline italic mt-2 whitespace-pre-wrap">{entry.notes}</p>}
               </div>
             ))}
           </div>
@@ -1175,12 +822,11 @@ export default function LogPage() {
         {/* Pull to refresh indicator */}
         {pullY > 0 && (
           <div className="flex justify-center items-center overflow-hidden transition-all" style={{ height: pullY * 0.6 }}>
-            <span className={`material-symbols-outlined text-[#ff9066] transition-transform ${pullY >= PULL_THRESHOLD ? 'text-[#ff9066]' : 'text-[#56423c]'}`}
+            <span className={`material-symbols-outlined text-primary-container transition-transform ${pullY >= PULL_THRESHOLD ? 'text-primary-container' : 'text-outline-variant'}`}
               style={{ transform: `rotate(${(pullY / PULL_THRESHOLD) * 180}deg)` }}>refresh</span>
           </div>
         )}
         {showOnboarding && <Onboarding onDone={() => setShowOnboarding(false)} />}
-        {pr && <PrToast exercise={pr.exercise} weight={pr.weight} onDone={() => setPr(null)} />}
         {showTypePicker && (
           <WorkoutTypePicker
             onSelect={(t) => {
@@ -1210,15 +856,15 @@ export default function LogPage() {
         {showRoutinePicker && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowRoutinePicker(false)} />
-            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[80vh] overflow-y-auto animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[80vh] overflow-y-auto animate-slide-up">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Your routines</p>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Your routines</p>
                 <button onClick={() => setShowRoutinePicker(false)}>
-                  <span className="material-symbols-outlined text-[#a48b83]">close</span>
+                  <span className="material-symbols-outlined text-outline">close</span>
                 </button>
               </div>
               {routines.length === 0 ? (
-                <p className="text-sm text-[#a48b83] text-center py-6">No routines yet. Create one to get started.</p>
+                <p className="text-sm text-outline text-center py-6">No routines yet. Create one to get started.</p>
               ) : (
                 <div className="flex flex-col gap-2 mb-4">
                   {routines.map(t => (
@@ -1231,10 +877,10 @@ export default function LogPage() {
                           const hint = hints.find((h: ExerciseHint) => h.exercise === firstEx)
                           startExercise(firstEx, hint)
                         }}
-                        className="flex-1 p-4 bg-[#201f1f] rounded-xl text-left active:scale-[0.98] transition-transform"
+                        className="flex-1 p-4 bg-surface-container rounded-xl text-left active:scale-[0.98] transition-transform"
                       >
-                        <p className="font-headline font-bold text-[#e5e2e1] mb-1">{t.name}</p>
-                        <p className="text-xs text-[#a48b83] line-clamp-1">
+                        <p className="font-headline font-bold text-on-surface mb-1">{t.name}</p>
+                        <p className="text-xs text-outline line-clamp-1">
                           {t.exercises.length <= 3
                             ? t.exercises.join(', ')
                             : `${t.exercises.slice(0, 2).join(', ')} +${t.exercises.length - 2} more`}
@@ -1246,9 +892,9 @@ export default function LogPage() {
                           setShowRoutinePicker(false)
                           setShowRoutineEditor(true)
                         }}
-                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-[#201f1f] shrink-0"
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container shrink-0"
                       >
-                        <span className="material-symbols-outlined text-lg text-[#a48b83]">edit</span>
+                        <span className="material-symbols-outlined text-lg text-outline">edit</span>
                       </button>
                     </div>
                   ))}
@@ -1260,10 +906,10 @@ export default function LogPage() {
                   setShowRoutinePicker(false)
                   setShowRoutineEditor(true)
                 }}
-                className="w-full flex items-center justify-center gap-2 p-4 bg-[#ff9066] rounded-xl active:scale-95 transition-transform"
+                className="w-full flex items-center justify-center gap-2 p-4 bg-primary-container rounded-xl active:scale-95 transition-transform"
               >
-                <span className="material-symbols-outlined text-lg text-[#752805]">add</span>
-                <span className="font-headline font-bold text-sm text-[#752805]">Create new routine</span>
+                <span className="material-symbols-outlined text-lg text-on-primary-container">add</span>
+                <span className="font-headline font-bold text-sm text-on-primary-container">Create new routine</span>
               </button>
             </div>
           </>
@@ -1273,13 +919,13 @@ export default function LogPage() {
         {showRoutineEditor && editingRoutine && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setShowRoutineEditor(false)} />
-            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[85vh] overflow-y-auto animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[85vh] overflow-y-auto animate-slide-up">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">
                   {editingRoutine.id ? 'Edit routine' : 'New routine'}
                 </p>
                 <button onClick={() => setShowRoutineEditor(false)}>
-                  <span className="material-symbols-outlined text-[#a48b83]">close</span>
+                  <span className="material-symbols-outlined text-outline">close</span>
                 </button>
               </div>
               <input
@@ -1287,14 +933,14 @@ export default function LogPage() {
                 placeholder="Routine name"
                 value={editingRoutine.name}
                 onChange={e => setEditingRoutine(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-[#e5e2e1] font-headline font-bold placeholder-[#a48b83]/50 mb-4 outline-none focus:ring-1 focus:ring-[#ff9066]/40"
+                className="w-full bg-surface-container rounded-xl px-4 py-3 text-on-surface font-headline font-bold placeholder-outline/50 mb-4 outline-none focus:ring-1 focus:ring-primary-container/40"
               />
               {editingRoutine.exercises.length > 0 && (
                 <div className="flex flex-col gap-2 mb-4">
                   {editingRoutine.exercises.map((ex, i) => (
-                    <div key={`${ex}-${i}`} className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-4 py-3">
-                      <span className="text-xs font-bold text-[#a48b83] w-5">{i + 1}</span>
-                      <span className="flex-1 text-sm text-[#e5e2e1]">{ex}</span>
+                    <div key={`${ex}-${i}`} className="flex items-center gap-2 bg-surface-container rounded-xl px-4 py-3">
+                      <span className="text-xs font-bold text-outline w-5">{i + 1}</span>
+                      <span className="flex-1 text-sm text-on-surface">{ex}</span>
                       <button
                         onClick={() => setEditingRoutine(prev => {
                           if (!prev) return prev
@@ -1302,10 +948,10 @@ export default function LogPage() {
                           if (i > 0) { [exercises[i - 1], exercises[i]] = [exercises[i], exercises[i - 1]] }
                           return { ...prev, exercises }
                         })}
-                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i > 0 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i > 0 ? 'bg-surface-container-highest' : 'opacity-20'}`}
                         disabled={i === 0}
                       >
-                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_less</span>
+                        <span className="material-symbols-outlined text-sm text-outline">expand_less</span>
                       </button>
                       <button
                         onClick={() => setEditingRoutine(prev => {
@@ -1314,14 +960,14 @@ export default function LogPage() {
                           if (i < exercises.length - 1) { [exercises[i], exercises[i + 1]] = [exercises[i + 1], exercises[i]] }
                           return { ...prev, exercises }
                         })}
-                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i < editingRoutine.exercises.length - 1 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i < editingRoutine.exercises.length - 1 ? 'bg-surface-container-highest' : 'opacity-20'}`}
                         disabled={i === editingRoutine.exercises.length - 1}
                       >
-                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_more</span>
+                        <span className="material-symbols-outlined text-sm text-outline">expand_more</span>
                       </button>
                       <button
                         onClick={() => setEditingRoutine(prev => prev ? { ...prev, exercises: prev.exercises.filter((_, j) => j !== i) } : prev)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534]"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-surface-container-highest"
                       >
                         <span className="material-symbols-outlined text-sm text-red-400">close</span>
                       </button>
@@ -1331,10 +977,10 @@ export default function LogPage() {
               )}
               <button
                 onClick={() => { setShowRoutineEditor(false); setRoutineExPickerOpen(true) }}
-                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-[#353534] rounded-xl mb-4 active:scale-95 transition-transform"
+                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-surface-container-highest rounded-xl mb-4 active:scale-95 transition-transform"
               >
-                <span className="material-symbols-outlined text-lg text-[#ff9066]">add</span>
-                <span className="text-sm font-bold text-[#dcc1b8]">Add exercise</span>
+                <span className="material-symbols-outlined text-lg text-primary-container">add</span>
+                <span className="text-sm font-bold text-on-surface-variant">Add exercise</span>
               </button>
               <div className="flex gap-2">
                 {editingRoutine.id && (
@@ -1365,7 +1011,7 @@ export default function LogPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(body),
                     })
-                    if (!res.ok) { alert(`Failed to save routine: ${res.status}`); return }
+                    if (!res.ok) { toast(`Failed to save routine (${res.status})`, { tone: 'error' }); return }
                     const data = await res.json()
                     if (editingRoutine.id) {
                       setRoutines(prev => prev.map(t => t.id === editingRoutine.id ? { ...t, name: editingRoutine.name, exercises: editingRoutine.exercises } : t))
@@ -1375,7 +1021,7 @@ export default function LogPage() {
                     setShowRoutineEditor(false)
                     setEditingRoutine(null)
                   }}
-                  className="flex-1 py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-40"
+                  className="flex-1 py-3.5 bg-primary-container text-on-primary-container rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-40"
                 >
                   {editingRoutine.id ? 'Save changes' : 'Create routine'}
                 </button>
@@ -1403,36 +1049,36 @@ export default function LogPage() {
         {showPlanToday && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setShowPlanToday(false)} />
-            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[85vh] overflow-y-auto animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-[60] bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] max-h-[85vh] overflow-y-auto animate-slide-up">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Plan today&apos;s session</p>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Plan today&apos;s session</p>
                 <button onClick={() => setShowPlanToday(false)}>
-                  <span className="material-symbols-outlined text-[#a48b83]">close</span>
+                  <span className="material-symbols-outlined text-outline">close</span>
                 </button>
               </div>
               {planTodayExercises.length > 0 && (
                 <div className="flex flex-col gap-2 mb-4">
                   {planTodayExercises.map((ex, i) => (
-                    <div key={`${ex}-${i}`} className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-4 py-3">
-                      <span className="text-xs font-bold text-[#a48b83] w-5">{i + 1}</span>
-                      <span className="flex-1 text-sm text-[#e5e2e1]">{ex}</span>
+                    <div key={`${ex}-${i}`} className="flex items-center gap-2 bg-surface-container rounded-xl px-4 py-3">
+                      <span className="text-xs font-bold text-outline w-5">{i + 1}</span>
+                      <span className="flex-1 text-sm text-on-surface">{ex}</span>
                       <button
                         onClick={() => setPlanTodayExercises(prev => { const a = [...prev]; if (i > 0) { [a[i-1], a[i]] = [a[i], a[i-1]] } return a })}
-                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i > 0 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i > 0 ? 'bg-surface-container-highest' : 'opacity-20'}`}
                         disabled={i === 0}
                       >
-                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_less</span>
+                        <span className="material-symbols-outlined text-sm text-outline">expand_less</span>
                       </button>
                       <button
                         onClick={() => setPlanTodayExercises(prev => { const a = [...prev]; if (i < a.length - 1) { [a[i], a[i+1]] = [a[i+1], a[i]] } return a })}
-                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i < planTodayExercises.length - 1 ? 'bg-[#353534]' : 'opacity-20'}`}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg ${i < planTodayExercises.length - 1 ? 'bg-surface-container-highest' : 'opacity-20'}`}
                         disabled={i === planTodayExercises.length - 1}
                       >
-                        <span className="material-symbols-outlined text-sm text-[#a48b83]">expand_more</span>
+                        <span className="material-symbols-outlined text-sm text-outline">expand_more</span>
                       </button>
                       <button
                         onClick={() => setPlanTodayExercises(prev => prev.filter((_, j) => j !== i))}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534]"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-surface-container-highest"
                       >
                         <span className="material-symbols-outlined text-sm text-red-400">close</span>
                       </button>
@@ -1442,10 +1088,10 @@ export default function LogPage() {
               )}
               <button
                 onClick={() => { setShowPlanToday(false); setPlanTodayExPickerOpen(true) }}
-                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-[#353534] rounded-xl mb-4 active:scale-95 transition-transform"
+                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-surface-container-highest rounded-xl mb-4 active:scale-95 transition-transform"
               >
-                <span className="material-symbols-outlined text-lg text-[#ff9066]">add</span>
-                <span className="text-sm font-bold text-[#dcc1b8]">Add exercise</span>
+                <span className="material-symbols-outlined text-lg text-primary-container">add</span>
+                <span className="text-sm font-bold text-on-surface-variant">Add exercise</span>
               </button>
               <button
                 disabled={planTodayExercises.length === 0}
@@ -1456,7 +1102,7 @@ export default function LogPage() {
                   setActiveRoutine({ id: -1, name: "Today's session", exercises: planTodayExercises, currentIndex: 0, pending: {} })
                   startExercise(firstEx, hint)
                 }}
-                className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-40"
+                className="w-full py-3.5 bg-primary-container text-on-primary-container rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform disabled:opacity-40"
               >
                 Start session
               </button>
@@ -1479,32 +1125,32 @@ export default function LogPage() {
 
         <header className="mb-6 flex items-start justify-between">
           <div>
-            <p className="font-label text-[#a48b83] text-xs uppercase tracking-widest mb-1">
+            <p className="font-label text-outline text-xs uppercase tracking-widest mb-1">
               {browsedDate
                 ? new Date(browsedDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
                 : 'Today'}
             </p>
-            <h1 className="font-headline text-2xl font-black text-[#e5e2e1]">Log</h1>
+            <h1 className="font-headline text-2xl font-black text-on-surface">Log</h1>
           </div>
           <div className="flex items-center gap-2 pt-1">
             {browsedDate && (
-              <button onClick={() => { setBrowsedDate(null) }} className="text-xs text-[#a48b83] font-bold font-label flex items-center gap-1 px-2.5 py-1.5 bg-[#201f1f] rounded-lg">
+              <button onClick={() => { setBrowsedDate(null) }} className="text-xs text-outline font-bold font-label flex items-center gap-1 px-2.5 py-1.5 bg-surface-container rounded-lg">
                 <span className="material-symbols-outlined text-sm">today</span>
                 Back to today
               </button>
             )}
             {!browsedDate && (
-              <button onClick={repeatLastSession} disabled={repeatLoading} title="Repeat last session" className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f] disabled:opacity-50">
+              <button onClick={repeatLastSession} disabled={repeatLoading} title="Repeat last session" className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container disabled:opacity-50">
                 {repeatLoading
-                  ? <span className="w-4 h-4 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
-                  : <span className="material-symbols-outlined text-[#a48b83] text-[18px]">replay</span>}
+                  ? <span className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+                  : <span className="material-symbols-outlined text-outline text-[18px]">replay</span>}
               </button>
             )}
-            <button onClick={toggleUnit} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f] text-[10px] font-bold font-label text-[#a48b83]">
+            <button onClick={toggleUnit} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container text-[10px] font-bold font-label text-outline">
               {isLbs ? 'lbs' : 'kg'}
             </button>
-            <button onClick={() => setCalOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#201f1f]">
-              <span className="material-symbols-outlined text-[#a48b83]">calendar_month</span>
+            <button onClick={() => setCalOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container">
+              <span className="material-symbols-outlined text-outline">calendar_month</span>
             </button>
           </div>
         </header>
@@ -1513,31 +1159,31 @@ export default function LogPage() {
         {!browsedDate && (
           <button
             onClick={() => { setNotesDraft(sessionNotes); setNotesTarget('session') }}
-            className="w-full mb-4 bg-[#201f1f] rounded-xl px-4 py-3 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+            className="w-full mb-4 bg-surface-container rounded-xl px-4 py-3 text-left flex items-start gap-3 hover:bg-surface-container-high transition-colors"
           >
-            <span className="material-symbols-outlined text-[#a48b83] text-lg shrink-0">{sessionNotes ? 'sticky_note_2' : 'add_notes'}</span>
+            <span className="material-symbols-outlined text-outline text-lg shrink-0">{sessionNotes ? 'sticky_note_2' : 'add_notes'}</span>
             {sessionNotes ? (
-              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{sessionNotes}</p>
+              <p className="text-sm text-on-surface-variant italic flex-1 line-clamp-2 whitespace-pre-wrap">{sessionNotes}</p>
             ) : (
-              <span className="text-sm text-[#56423c] flex-1">Add a note for today…</span>
+              <span className="text-sm text-outline-variant flex-1">Add a note for today…</span>
             )}
-            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0">edit</span>
+            <span className="material-symbols-outlined text-outline-variant text-base shrink-0">edit</span>
           </button>
         )}
         {browsedDate && sessionNotes && (
-          <div className="mb-4 bg-[#201f1f] rounded-xl px-4 py-3">
-            <p className="text-sm text-[#a48b83] italic">{sessionNotes}</p>
+          <div className="mb-4 bg-surface-container rounded-xl px-4 py-3">
+            <p className="text-sm text-outline italic">{sessionNotes}</p>
           </div>
         )}
 
         {/* Active routine progress on list view */}
         {activeRoutine && !browsedDate && (
-          <div className="flex items-center gap-3 bg-[#201f1f] rounded-2xl px-4 py-3 mb-4 border border-[#ff9066]/20">
-            <span className="material-symbols-outlined text-[#ff9066] text-lg">assignment</span>
+          <div className="flex items-center gap-3 bg-surface-container rounded-2xl px-4 py-3 mb-4 border border-primary-container/20">
+            <span className="material-symbols-outlined text-primary-container text-lg">assignment</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-bold font-headline text-[#dcc1b8] truncate">{activeRoutine.name}</span>
-                <span className="text-[10px] font-bold text-[#a48b83] ml-2 shrink-0">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
+                <span className="text-sm font-bold font-headline text-on-surface-variant truncate">{activeRoutine.name}</span>
+                <span className="text-[10px] font-bold text-outline ml-2 shrink-0">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
               </div>
               <div className="flex gap-1">
                 {activeRoutine.exercises.map((ex, i) => (
@@ -1549,7 +1195,7 @@ export default function LogPage() {
                   />
                 ))}
               </div>
-              <p className="text-xs text-[#a48b83] mt-1.5 truncate">Up next: {activeRoutine.exercises[activeRoutine.currentIndex]}</p>
+              <p className="text-xs text-outline mt-1.5 truncate">Up next: {activeRoutine.exercises[activeRoutine.currentIndex]}</p>
             </div>
             <button
               onClick={() => {
@@ -1557,9 +1203,9 @@ export default function LogPage() {
                 const hint = hints.find(h => h.exercise === ex)
                 startExercise(ex, hint)
               }}
-              className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#ff9066] shrink-0 active:scale-90 transition-transform"
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-primary-container shrink-0 active:scale-90 transition-transform"
             >
-              <span className="material-symbols-outlined text-[#752805] text-lg">play_arrow</span>
+              <span className="material-symbols-outlined text-on-primary-container text-lg">play_arrow</span>
             </button>
           </div>
         )}
@@ -1567,37 +1213,49 @@ export default function LogPage() {
         {/* Today's logged exercises */}
         {loadingToday ? (
           <div className="flex justify-center py-12">
-            <div className="w-5 h-5 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : (loggedLifts.length === 0 && loggedCardio.length === 0) ? (
+        ) : (loggedLifts.length === 0 && loggedCardio.length === 0 && (browsedDate || pendingSaves.length === 0)) ? (
           <div className="flex flex-col items-center justify-center py-16 text-center flex-1">
-            <span className="material-symbols-outlined text-5xl text-[#353534] mb-4">fitness_center</span>
-            <p className="font-headline font-bold text-lg text-[#dcc1b8]">{browsedDate ? 'Rest day' : 'Nothing logged yet'}</p>
-            <p className="text-sm text-[#a48b83] mt-1">{browsedDate ? 'No workout recorded for this day' : 'Add a lift or cardio below'}</p>
+            <span className="material-symbols-outlined text-5xl text-surface-container-highest mb-4">fitness_center</span>
+            <p className="font-headline font-bold text-lg text-on-surface-variant">{browsedDate ? 'Rest day' : 'Nothing logged yet'}</p>
+            <p className="text-sm text-outline mt-1">{browsedDate ? 'No workout recorded for this day' : 'Add a lift or cardio below'}</p>
             {!browsedDate && (
               <button
                 onClick={repeatLastSession}
                 disabled={repeatLoading}
-                className="mt-5 flex items-center gap-2 px-4 py-2.5 bg-[#201f1f] rounded-xl text-sm font-bold text-[#dcc1b8] active:scale-95 transition-all disabled:opacity-50"
+                className="mt-5 flex items-center gap-2 px-4 py-2.5 bg-surface-container rounded-xl text-sm font-bold text-on-surface-variant active:scale-95 transition-all disabled:opacity-50"
               >
                 {repeatLoading
-                  ? <span className="w-4 h-4 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
-                  : <span className="material-symbols-outlined text-base text-[#ff9066]">replay</span>}
+                  ? <span className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+                  : <span className="material-symbols-outlined text-base text-primary-container">replay</span>}
                 Repeat last session
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-3 mb-6">
+            {!browsedDate && pendingSaves.map(p => (
+              <div key={p.key} className="bg-surface-container rounded-2xl px-4 py-3.5 flex items-center gap-3 border border-dashed border-surface-container-highest animate-fade-in">
+                <span className={`material-symbols-outlined ${p.cardio ? 'text-tertiary' : 'text-primary-container'}`}>{p.cardio ? 'directions_run' : 'fitness_center'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-headline font-bold text-on-surface truncate">{p.label}</p>
+                  <p className="text-xs text-outline">{p.detail}</p>
+                </div>
+                <span className="flex items-center gap-1 text-[10px] font-bold font-label text-outline">
+                  <span className="material-symbols-outlined text-sm">cloud_off</span>Waiting to sync
+                </span>
+              </div>
+            ))}
             {loggedLifts.map(l => (
               <SwipeableCard key={l.block_id} onDelete={() => deleteBlock(l.block_id)}
-                className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 ${fadingBlocks.has(l.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
+                className={`bg-surface-container rounded-2xl px-4 py-3.5 ${fadingBlocks.has(l.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[#ff9066]">fitness_center</span>
+                    <span className="material-symbols-outlined text-primary-container">fitness_center</span>
                     <div>
-                      <p className="font-headline font-bold text-[#e5e2e1]">{l.exercise}</p>
-                      <p className="text-xs text-[#a48b83]">{l.set_count} sets{(() => {
+                      <p className="font-headline font-bold text-on-surface">{l.exercise}</p>
+                      <p className="text-xs text-outline">{l.set_count} sets{(() => {
                         const ex = EXERCISES.find(e => e.name === l.exercise)
                         if (ex?.type === 'timed') { const d = l.max_duration ?? 0; return ` · best ${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}` }
                         if (ex?.type === 'bodyweight') return l.max_weight > 0 ? ` · ${kgToDisplay(l.max_weight)} ${weightLabel}` : ' · bodyweight'
@@ -1607,17 +1265,17 @@ export default function LogPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setEditLift({ blockId: l.block_id, exercise: l.exercise, sets: [...l.sets], notes: l.notes ?? '' })}>
-                      <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
+                      <span className="material-symbols-outlined text-outline text-lg">edit</span>
                     </button>
                     <button onClick={() => deleteBlock(l.block_id)} className="hidden md:block">
-                      <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                      <span className="material-symbols-outlined text-outline-variant text-lg">close</span>
                     </button>
                   </div>
                 </div>
                 {l.sets.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2.5 ml-9">
                     {l.sets.map((s, i) => (
-                      <span key={s.id} className="text-[11px] bg-[#131313] text-[#a48b83] px-2 py-1 rounded-lg font-label">
+                      <span key={s.id} className="text-[11px] bg-surface text-outline px-2 py-1 rounded-lg font-label">
                         {i + 1}. {(() => {
                           const ex = EXERCISES.find(e => e.name === l.exercise)
                           if (ex?.type === 'timed') { const ds = s.duration_secs ?? 0; return `${Math.floor(ds / 60)}:${String(ds % 60).padStart(2, '0')}` }
@@ -1629,21 +1287,21 @@ export default function LogPage() {
                   </div>
                 )}
                 {l.notes && (
-                  <p className="text-xs text-[#56423c] mt-1.5 ml-9 italic">{l.notes}</p>
+                  <p className="text-xs text-outline-variant mt-1.5 ml-9 italic">{l.notes}</p>
                 )}
               </SwipeableCard>
             ))}
             {loggedCardio.map(c => (
               <SwipeableCard key={c.block_id} onDelete={() => deleteBlock(c.block_id)}
-                className={`bg-[#201f1f] rounded-2xl px-4 py-3.5 ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
+                className={`bg-surface-container rounded-2xl px-4 py-3.5 ${fadingBlocks.has(c.block_id) ? 'animate-fade-out' : 'animate-fade-in'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[#4bdece]">
+                    <span className="material-symbols-outlined text-tertiary">
                       {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
                     </span>
                     <div>
-                      <p className="font-headline font-bold text-[#e5e2e1]">{c.activity}</p>
-                      <p className="text-xs text-[#a48b83]">
+                      <p className="font-headline font-bold text-on-surface">{c.activity}</p>
+                      <p className="text-xs text-outline">
                         {c.distance ? `${c.distance} km` : ''}{c.distance && c.duration ? ' · ' : ''}{c.duration ?? ''}
                         {c.pace ? ` · ${c.pace}/km` : ''}
                       </p>
@@ -1651,15 +1309,15 @@ export default function LogPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setEditCardio({ blockId: c.block_id, cardioId: c.cardio_id, activity: c.activity, distance: c.distance ?? '', duration: c.duration ?? '', notes: c.notes ?? '' })}>
-                      <span className="material-symbols-outlined text-[#a48b83] text-lg">edit</span>
+                      <span className="material-symbols-outlined text-outline text-lg">edit</span>
                     </button>
                     <button onClick={() => deleteBlock(c.block_id)} className="hidden md:block">
-                      <span className="material-symbols-outlined text-[#56423c] text-lg">close</span>
+                      <span className="material-symbols-outlined text-outline-variant text-lg">close</span>
                     </button>
                   </div>
                 </div>
                 {c.notes && (
-                  <p className="text-xs text-[#56423c] mt-1.5 ml-9 italic">{c.notes}</p>
+                  <p className="text-xs text-outline-variant mt-1.5 ml-9 italic">{c.notes}</p>
                 )}
               </SwipeableCard>
             ))}
@@ -1671,10 +1329,10 @@ export default function LogPage() {
           <div className="mt-auto">
             <button
               onClick={() => setShowTypePicker(true)}
-              className="w-full flex items-center justify-center gap-3 p-4 bg-[#201f1f] rounded-2xl active:scale-95 transition-all border border-dashed border-[#353534] hover:border-[#ff9066]/40"
+              className="w-full flex items-center justify-center gap-3 p-4 bg-surface-container rounded-2xl active:scale-95 transition-all border border-dashed border-surface-container-highest hover:border-primary-container/40"
             >
-              <span className="material-symbols-outlined text-[#ff9066]">add</span>
-              <span className="font-headline font-bold text-[#dcc1b8]">Log workout</span>
+              <span className="material-symbols-outlined text-primary-container">add</span>
+              <span className="font-headline font-bold text-on-surface-variant">Log workout</span>
             </button>
           </div>
         )}
@@ -1683,30 +1341,30 @@ export default function LogPage() {
         {editLift && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setEditLift(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] animate-slide-up">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] animate-slide-up">
               <div className="flex items-center justify-between mb-5">
-                <h3 className="font-headline font-bold text-[#e5e2e1]">{editLift.exercise}</h3>
-                <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+                <h3 className="font-headline font-bold text-on-surface">{editLift.exercise}</h3>
+                <button onClick={() => setEditLift(null)}><span className="material-symbols-outlined text-outline">close</span></button>
               </div>
               <div className="space-y-3 mb-4">
                 {editLift.sets.map((s, i) => (
                   <div key={s.id} className="flex items-center gap-2">
-                    <span className="text-xs text-[#a48b83] w-10 shrink-0">Set {i + 1}</span>
+                    <span className="text-xs text-outline w-10 shrink-0">Set {i + 1}</span>
                     <div className="flex items-center gap-1.5 flex-1">
-                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', -1)} className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
                       <input
                         {...weightInputProps(s.weight, kg => setEditLiftField(s.id, 'weight', kg))}
-                        className="font-headline font-bold text-sm w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                        className="font-headline font-bold text-sm w-16 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
                       />
-                      <span className="text-[10px] text-[#a48b83]">{weightLabel}</span>
-                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <span className="text-[10px] text-outline">{weightLabel}</span>
+                      <button onClick={() => adjustEditLiftSet(s.id, 'weight', 1)} className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button onClick={() => adjustEditLiftSet(s.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => adjustEditLiftSet(s.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
                       <input
@@ -1715,9 +1373,9 @@ export default function LogPage() {
                         value={s.reps}
                         onChange={e => setEditLiftField(s.id, 'reps', parseInt(e.target.value) || 0)}
                         onFocus={e => e.target.select()}
-                        className="font-headline font-bold text-sm w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                        className="font-headline font-bold text-sm w-10 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
                       />
-                      <button onClick={() => adjustEditLiftSet(s.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => adjustEditLiftSet(s.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
                     </div>
@@ -1729,9 +1387,9 @@ export default function LogPage() {
                 onChange={e => setEditLift(prev => prev ? { ...prev, notes: e.target.value } : prev)}
                 placeholder="Add a note about this workout…"
                 rows={2}
-                className="w-full bg-[#131313] rounded-xl px-4 py-3 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-4"
+                className="w-full bg-surface rounded-xl px-4 py-3 text-sm text-on-surface-variant placeholder:text-surface-container-highest resize-none outline-none mb-4"
               />
-              <button onClick={saveEditLift} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
+              <button onClick={saveEditLift} className="w-full py-3.5 bg-primary-container text-on-primary-container rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
                 Save changes
               </button>
             </div>
@@ -1742,27 +1400,27 @@ export default function LogPage() {
         {editCardio && (
           <>
             <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setEditCardio(null)} />
-            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-[#181818] rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] animate-slide-up">
+            <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-[60] bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] animate-slide-up">
               <div className="flex items-center justify-between mb-5">
-                <h3 className="font-headline font-bold text-[#e5e2e1]">{editCardio.activity}</h3>
-                <button onClick={() => setEditCardio(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+                <h3 className="font-headline font-bold text-on-surface">{editCardio.activity}</h3>
+                <button onClick={() => setEditCardio(null)}><span className="material-symbols-outlined text-outline">close</span></button>
               </div>
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
-                  <input type="number" value={editCardio.distance} onChange={e => setEditCardio(prev => prev ? { ...prev, distance: e.target.value } : prev)} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]" />
-                  <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
+                <div className="bg-surface-container rounded-2xl p-4 text-center">
+                  <input type="number" value={editCardio.distance} onChange={e => setEditCardio(prev => prev ? { ...prev, distance: e.target.value } : prev)} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-surface-container-highest" />
+                  <span className="block font-label text-[10px] uppercase tracking-widest text-outline mt-1">Distance km</span>
                 </div>
-                <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
-                  <input type="text" value={editCardio.duration} onChange={e => setEditCardio(prev => prev ? { ...prev, duration: e.target.value } : prev)} placeholder="00:00" className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]" />
-                  <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
+                <div className="bg-surface-container rounded-2xl p-4 text-center">
+                  <input type="text" value={editCardio.duration} onChange={e => setEditCardio(prev => prev ? { ...prev, duration: e.target.value } : prev)} placeholder="00:00" className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-surface-container-highest" />
+                  <span className="block font-label text-[10px] uppercase tracking-widest text-outline mt-1">Duration</span>
                 </div>
               </div>
               {(() => {
                 const pace = calcPace(editCardio.distance, editCardio.duration)
                 return pace ? (
-                  <div className="bg-[#201f1f] rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Avg Pace</span>
-                    <span className="font-headline font-bold text-[#4bdece]">{pace} /km</span>
+                  <div className="bg-surface-container rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Avg Pace</span>
+                    <span className="font-headline font-bold text-tertiary">{pace} /km</span>
                   </div>
                 ) : null
               })()}
@@ -1771,9 +1429,9 @@ export default function LogPage() {
                 onChange={e => setEditCardio(prev => prev ? { ...prev, notes: e.target.value } : prev)}
                 placeholder="Add a note about this workout…"
                 rows={2}
-                className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-sm text-[#dcc1b8] placeholder:text-[#353534] resize-none outline-none mb-3"
+                className="w-full bg-surface-container rounded-xl px-4 py-3 text-sm text-on-surface-variant placeholder:text-surface-container-highest resize-none outline-none mb-3"
               />
-              <button onClick={saveEditCardio} className="w-full py-3.5 bg-[#4bdece] text-[#003732] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
+              <button onClick={saveEditCardio} className="w-full py-3.5 bg-tertiary text-on-tertiary rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
                 Save changes
               </button>
             </div>
@@ -1785,9 +1443,9 @@ export default function LogPage() {
           <CalendarSheet
             month={calMonth}
             workoutDates={workoutDates}
-            today={new Date().toISOString().split('T')[0]}
+            today={localToday()}
             onSelectDate={(date) => {
-              const todayStr = new Date().toISOString().split('T')[0]
+              const todayStr = localToday()
               setBrowsedDate(date === todayStr ? null : date)
             }}
             onPrev={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
@@ -1832,8 +1490,8 @@ export default function LogPage() {
     <div className="flex items-center gap-3 px-1 py-2">
       <div className="flex-1 flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold font-label text-[#dcc1b8]">{activeRoutine.exercises[activeRoutine.currentIndex]}</span>
-          <span className="text-[10px] font-bold text-[#a48b83]">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
+          <span className="text-xs font-bold font-label text-on-surface-variant">{activeRoutine.exercises[activeRoutine.currentIndex]}</span>
+          <span className="text-[10px] font-bold text-outline">{activeRoutine.currentIndex + 1}/{activeRoutine.exercises.length}</span>
         </div>
         <div className="flex gap-1">
           {activeRoutine.exercises.map((ex, i) => (
@@ -1849,9 +1507,9 @@ export default function LogPage() {
       </div>
       <button
         onClick={() => finishRoutine(activeRoutine.pending)}
-        className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#353534] shrink-0"
+        className="w-7 h-7 flex items-center justify-center rounded-lg bg-surface-container-highest shrink-0"
       >
-        <span className="material-symbols-outlined text-sm text-[#a48b83]">close</span>
+        <span className="material-symbols-outlined text-sm text-outline">close</span>
       </button>
     </div>
   )
@@ -1871,145 +1529,173 @@ export default function LogPage() {
     }
   }
 
+  // ── Shared pieces for the lift / bodyweight / timed views ──────────────────
+  const exitExercise = () => {
+    if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
+    const hasSets = sets.some(s => s.done)
+    if (hasSets && !confirm('Discard this exercise?')) return
+    localStorage.removeItem(DRAFT_KEY)
+    stopRest()
+    setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
+    setView({ type: 'list' })
+  }
+
+  const doneCount = sets.filter(s => s.done).length
+  const shellProps = {
+    onBack: exitExercise,
+    routineBar: routineProgressBar,
+    restValue: restDuration,
+    onRestChange: setAndSaveRestDuration,
+    blockNotes,
+    onEditNotes: () => { setNotesDraft(blockNotes); setNotesTarget('block') },
+    onSkip: activeRoutine ? skipRoutineExercise : undefined,
+    onSave: saveSets,
+    saveDisabled: saving || doneCount === 0,
+    saveLabel: saving ? 'Saving…' : `Save — ${doneCount} set${doneCount !== 1 ? 's' : ''}`,
+    after: <><BottomNav />{notesEditorPortal}{historySheetPortal}</>,
+  }
+
+  const doneTick = (setId: number) => (
+    <button onClick={() => toggleSet(setId)} className="w-6 h-6 rounded-full bg-tertiary flex items-center justify-center flex-shrink-0">
+      <span className="material-symbols-outlined text-on-tertiary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+    </button>
+  )
+
+  const stepBtn = (onClick: () => void, icon: 'add' | 'remove') => (
+    <button onClick={onClick} className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
+      <span className="material-symbols-outlined text-sm">{icon}</span>
+    </button>
+  )
+
+  const logSetBtn = (setId: number) => (
+    <button
+      onClick={() => toggleSet(setId)}
+      className="w-full py-3.5 bg-primary-container text-on-primary-container rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+    >
+      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+      Log set
+    </button>
+  )
+
+  const prBadge = (active: boolean, icon: string, text: string) => (
+    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${active ? 'text-primary-container' : 'text-outline-variant'}`}>
+      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${active ? 1 : 0}` }}>{icon}</span>
+      {text}
+    </div>
+  )
+  const badgeSep = <div className="w-px h-3 bg-surface-container-highest" />
+
+  // "Last time … → Try …" before the first set
+  const suggestionCard = (exercise: string, kind: 'weights' | 'bodyweight' | 'timed', activeSet: SetRow | null) => {
+    if (doneCount > 0 || !activeSet || restingId !== null) return null
+    const s = suggestionFor(exercise, kind)
+    if (!s) return null
+    return (
+      <NextSuggestion
+        lastDate={relDay(s.last.date)}
+        lastSets={s.last.sets}
+        suggestion={s.suggestion}
+        fmtWeight={kg => `${kgToDisplay(kg)}${weightLabel}`}
+        fmtDur={fmtDurShort}
+        applied={suggestApplied}
+        onUse={() => {
+          setSets(prev => prev.map(x => x.id === activeSet.id
+            ? { ...x, weight: kind === 'weights' ? s.suggestion.weight : x.weight, reps: s.suggestion.reps || x.reps, duration_secs: s.suggestion.duration_secs || x.duration_secs }
+            : x))
+          setSuggestApplied(true)
+        }}
+      />
+    )
+  }
+
   // ── Lift logging view ───────────────────────────────────────────────────────
   if (view.type === 'lift') {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
     const pr = prs.get(view.exercise) ?? null
-    const currentVol = sets.filter(s => s.done).reduce((sum, s) => sum + s.weight * s.reps, 0)
-    const isVolPR = pr != null && currentVol > 0 && currentVol > pr.pr_volume
     const doneSets = sets.filter(s => s.done)
+    const currentVol = doneSets.reduce((sum, s) => sum + s.weight * s.reps, 0)
+    const isVolPR = pr != null && currentVol > 0 && currentVol > pr.pr_volume
     const isWeightPR = pr != null && doneSets.some(s =>
       s.weight > pr.pr_weight || (s.weight === pr.pr_weight && s.reps > pr.pr_reps))
-    const fmtVol = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v} kg`
+    const fmtVol = (kg: number) => {
+      const v = kgToDisplay(kg)
+      return v >= 1000 ? `${(v / 1000).toFixed(1)}${isLbs ? 'k lbs' : 't'}` : `${Math.round(v)} ${weightLabel}`
+    }
 
     return (
-      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
-        {/* Header */}
-        <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
-          <div className="flex items-center justify-between">
-            <button onClick={() => {
-              if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
-              const hasSets = sets.some(s => s.done)
-              if (hasSets && !confirm('Discard this exercise?')) return
-              localStorage.removeItem(DRAFT_KEY)
-              setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
-              setView({ type: 'list' })
-            }} className="flex items-center gap-1 text-[#a48b83]">
-              <span className="material-symbols-outlined text-lg">arrow_back</span>
-              <span className="text-sm font-bold">Back</span>
-            </button>
-            <div className="flex flex-col items-center gap-1">
-              <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && (pr.pr_volume > 0 || pr.pr_weight > 0 || pr.pr_e1rm) && (
-                <div className="flex items-center gap-2">
-                  {/* Estimated 1RM from best historical set */}
-                  {pr.pr_e1rm && (
-                    <div className="text-[10px] font-bold font-label text-[#56423c]">
-                      {kgToDisplay(pr.pr_e1rm)} {weightLabel} 1RM
-                    </div>
-                  )}
-                  {pr.pr_e1rm && (pr.pr_volume > 0 || pr.pr_weight > 0) && <div className="w-px h-3 bg-[#353534]" />}
-                  {/* Volume PR */}
-                  {pr.pr_volume > 0 && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isVolPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isVolPR ? 1 : 0}` }}>monitoring</span>
-                      {isVolPR ? `Vol PR! ${fmtVol(currentVol)}` : currentVol > 0 ? `${fmtVol(currentVol)} / ${fmtVol(pr.pr_volume)}` : fmtVol(pr.pr_volume)}
-                    </div>
-                  )}
-                  {pr.pr_volume > 0 && pr.pr_weight > 0 && <div className="w-px h-3 bg-[#353534]" />}
-                  {/* Weight / rep PR */}
-                  {pr.pr_weight > 0 && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isWeightPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isWeightPR ? 1 : 0}` }}>emoji_events</span>
-                      {isWeightPR ? 'Weight PR!' : `${kgToDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps}`}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {historyButton(view.exercise)}
-          </div>
-          {routineProgressBar}
-          {/* Rest timer config + unit toggle */}
-          <div className="flex items-center justify-between gap-2">
+      <>
+        <ExerciseShell
+          {...shellProps}
+          title={view.exercise}
+          headerRight={historyButton(view.exercise)}
+          unitLabel={weightLabel}
+          onToggleUnit={toggleUnit}
+          badges={pr && (pr.pr_volume > 0 || pr.pr_weight > 0 || pr.pr_e1rm) ? (
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
-              <div className="flex gap-1">
-                {REST_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setAndSaveRestDuration(opt.value)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
-                      restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
-                    }`}
-                  >{opt.label}</button>
-                ))}
-              </div>
+              {pr.pr_e1rm && <div className="text-[10px] font-bold font-label text-outline-variant">{kgToDisplay(pr.pr_e1rm)} {weightLabel} 1RM</div>}
+              {pr.pr_e1rm && (pr.pr_volume > 0 || pr.pr_weight > 0) && badgeSep}
+              {pr.pr_volume > 0 && prBadge(isVolPR, 'monitoring',
+                isVolPR ? `Vol PR! ${fmtVol(currentVol)}` : currentVol > 0 ? `${fmtVol(currentVol)} / ${fmtVol(pr.pr_volume)}` : fmtVol(pr.pr_volume))}
+              {pr.pr_volume > 0 && pr.pr_weight > 0 && badgeSep}
+              {pr.pr_weight > 0 && prBadge(isWeightPR, 'emoji_events', isWeightPR ? 'Weight PR!' : `${kgToDisplay(pr.pr_weight)} ${weightLabel} × ${pr.pr_reps}`)}
             </div>
-            <button onClick={toggleUnit} className="px-3 py-1 rounded-lg bg-[#201f1f] text-[10px] font-bold font-label text-[#a48b83]">
-              {weightLabel}
-            </button>
-          </div>
-        </div>
+          ) : null}
+        >
+          {suggestionCard(view.exercise, 'weights', activeSet)}
 
-        <div className="flex-grow px-4 pt-6 space-y-2">
           {/* Done sets */}
-          {sets.filter(s => s.done).map((set, i) => (
+          {doneSets.map((set, i) => (
             <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
-              <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
+              <span className="w-5 font-headline text-sm font-bold text-on-surface-variant">{i + 1}</span>
               <div className="flex-1 flex gap-6">
-                <span className="font-headline font-bold">{kgToDisplay(set.weight)} <span className="text-xs font-normal text-[#a48b83]">{weightLabel}</span></span>
-                <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
+                <span className="font-headline font-bold">{kgToDisplay(set.weight)} <span className="text-xs font-normal text-outline">{weightLabel}</span></span>
+                <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-outline">reps</span></span>
               </div>
-              <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-              </button>
+              {doneTick(set.id)}
             </div>
           ))}
 
           {/* Active set */}
           {activeSet && (
-            <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
+            <div key={activeSet.id} className="bg-surface-container rounded-2xl p-4 border border-primary-container/20 animate-fade-in">
               {restingId !== null ? (
-                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
+                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={stopRest} />
               ) : (
-                <div key={`controls-${sets.filter(s => s.done).length}`} className="animate-fade-in">
+                <div key={`controls-${doneCount}`} className="animate-fade-in">
                   <div className="flex items-center gap-1 mb-2">
-                    <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
+                    <span className="font-headline text-lg font-black text-primary-container w-6">{doneCount + 1}</span>
                     <div className="flex-1 flex gap-3">
                       <div className="flex-1">
-                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Weight {weightLabel}</p>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => updateSet(activeSet.id, 'weight', -weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                            <span className="material-symbols-outlined text-sm">remove</span>
+                        <div className="flex items-center gap-1 mb-2">
+                          <p className="text-[10px] text-outline uppercase tracking-widest">Weight {weightLabel}</p>
+                          <button onClick={() => setPlateCalcKg(activeSet.weight)} aria-label="Plate calculator" title="Plate calculator"
+                            className="ml-auto -my-1 w-6 h-6 rounded-md flex items-center justify-center text-outline hover:text-primary-container">
+                            <span className="material-symbols-outlined text-base">calculate</span>
                           </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {stepBtn(() => updateSet(activeSet.id, 'weight', -weightStep), 'remove')}
                           <input
                             {...weightInputProps(activeSet.weight, kg => setSetField(activeSet.id, 'weight', kg))}
-                            className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                            className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
                           />
-                          <button onClick={() => updateSet(activeSet.id, 'weight', weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                            <span className="material-symbols-outlined text-sm">add</span>
-                          </button>
+                          {stepBtn(() => updateSet(activeSet.id, 'weight', weightStep), 'add')}
                         </div>
                       </div>
                       <div className="flex-1">
-                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
+                        <p className="text-[10px] text-outline uppercase tracking-widest mb-2">Reps</p>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => updateSet(activeSet.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                            <span className="material-symbols-outlined text-sm">remove</span>
-                          </button>
+                          {stepBtn(() => updateSet(activeSet.id, 'reps', -1), 'remove')}
                           <input
                             type="number"
                             inputMode="numeric"
                             value={activeSet.reps}
                             onChange={e => setSetField(activeSet.id, 'reps', parseInt(e.target.value) || 0)}
                             onFocus={e => e.target.select()}
-                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
+                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
                           />
-                          <button onClick={() => updateSet(activeSet.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                            <span className="material-symbols-outlined text-sm">add</span>
-                          </button>
+                          {stepBtn(() => updateSet(activeSet.id, 'reps', 1), 'add')}
                         </div>
                       </div>
                     </div>
@@ -2027,61 +1713,18 @@ export default function LogPage() {
                       style={{ accentColor: '#ff9066' }}
                     />
                   </div>
-                  <button
-                    onClick={() => toggleSet(activeSet.id)}
-                    className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    Log set
-                  </button>
+                  {logSetBtn(activeSet.id)}
                 </div>
               )}
             </div>
           )}
-        </div>
-
-        {/* Block notes + Save */}
-        <div className="px-4 pb-8 pt-4">
-          <button
-            type="button"
-            onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
-            className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
-          >
-            <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
-            {blockNotes ? (
-              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
-            ) : (
-              <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
-            )}
-            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
-          </button>
-          <div className="flex gap-2">
-          {activeRoutine && (
-            <button
-              onClick={skipRoutineExercise}
-              className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]"
-            >
-              Skip
-            </button>
-          )}
-          <button
-            onClick={saveSets}
-            disabled={saving || sets.every(s => !s.done)}
-            className="flex-1 py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
-          >
-            {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
-          </button>
-          </div>
-        </div>
-
-        <BottomNav />
-        {notesEditorPortal}
-        {historySheetPortal}
-      </main>
+        </ExerciseShell>
+        {plateCalcKg !== null && <PlateCalculator weightKg={plateCalcKg} isLbs={isLbs} onClose={() => setPlateCalcKg(null)} />}
+      </>
     )
   }
 
-  // ── Bodyweight logging view ───────────���─────────────────────��──────────────
+  // ── Bodyweight logging view ─────────────────────────────────────────────────
   if (view.type === 'bodyweight') {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
@@ -2091,179 +1734,89 @@ export default function LogPage() {
     const isSetPR = pr != null && sets.filter(s => s.done).some(s => s.reps > pr.pr_reps)
 
     return (
-      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
-        <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
-          <div className="flex items-center justify-between">
-            <button onClick={() => {
-              if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
-              const hasSets = sets.some(s => s.done)
-              if (hasSets && !confirm('Discard this exercise?')) return
-              localStorage.removeItem(DRAFT_KEY)
-              setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
-              setView({ type: 'list' })
-            }} className="flex items-center gap-1 text-[#a48b83]">
-              <span className="material-symbols-outlined text-lg">arrow_back</span>
-              <span className="text-sm font-bold">Back</span>
-            </button>
-            <div className="flex flex-col items-center gap-1">
-              <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && (pr.pr_reps_total > 0 || pr.pr_reps > 0) && (
-                <div className="flex items-center gap-2">
-                  {/* Total reps this session vs PR */}
-                  {pr.pr_reps_total > 0 && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isRepTotalPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isRepTotalPR ? 1 : 0}` }}>monitoring</span>
-                      {isRepTotalPR ? `Rep PR! ${currentReps}` : currentReps > 0 ? `${currentReps} / ${pr.pr_reps_total} reps` : `${pr.pr_reps_total} reps`}
-                    </div>
-                  )}
-                  {pr.pr_reps_total > 0 && pr.pr_reps > 0 && <div className="w-px h-3 bg-[#353534]" />}
-                  {/* Best single set reps */}
-                  {pr.pr_reps > 0 && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isSetPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isSetPR ? 1 : 0}` }}>emoji_events</span>
-                      {isSetPR ? 'Set PR!' : `Best ${pr.pr_reps} reps`}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {historyButton(view.exercise)}
-          </div>
-          {routineProgressBar}
+      <ExerciseShell
+        {...shellProps}
+        title={view.exercise}
+        headerRight={historyButton(view.exercise)}
+        badges={pr && (pr.pr_reps_total > 0 || pr.pr_reps > 0) ? (
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
-            <div className="flex gap-1">
-              {REST_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setAndSaveRestDuration(opt.value)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
-                    restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
-                  }`}
-                >{opt.label}</button>
-              ))}
-            </div>
+            {pr.pr_reps_total > 0 && prBadge(isRepTotalPR, 'monitoring',
+              isRepTotalPR ? `Rep PR! ${currentReps}` : currentReps > 0 ? `${currentReps} / ${pr.pr_reps_total} reps` : `${pr.pr_reps_total} reps`)}
+            {pr.pr_reps_total > 0 && pr.pr_reps > 0 && badgeSep}
+            {pr.pr_reps > 0 && prBadge(isSetPR, 'emoji_events', isSetPR ? 'Set PR!' : `Best ${pr.pr_reps} reps`)}
           </div>
-        </div>
+        ) : null}
+      >
+        {suggestionCard(view.exercise, 'bodyweight', activeSet)}
 
-        <div className="flex-grow px-4 pt-6 space-y-2">
-          {/* Done sets */}
-          {sets.filter(s => s.done).map((set, i) => (
-            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
-              <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
-              <div className="flex-1 flex gap-6">
-                <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-[#a48b83]">reps</span></span>
-                {set.weight > 0 && <span className="font-headline font-bold">{kgToDisplay(set.weight)} <span className="text-xs font-normal text-[#a48b83]">{weightLabel}</span></span>}
-              </div>
-              <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-              </button>
+        {/* Done sets */}
+        {sets.filter(s => s.done).map((set, i) => (
+          <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
+            <span className="w-5 font-headline text-sm font-bold text-on-surface-variant">{i + 1}</span>
+            <div className="flex-1 flex gap-6">
+              <span className="font-headline font-bold">{set.reps} <span className="text-xs font-normal text-outline">reps</span></span>
+              {set.weight > 0 && <span className="font-headline font-bold">{kgToDisplay(set.weight)} <span className="text-xs font-normal text-outline">{weightLabel}</span></span>}
             </div>
-          ))}
+            {doneTick(set.id)}
+          </div>
+        ))}
 
-          {/* Active set */}
-          {activeSet && (
-            <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
-              {restingId !== null ? (
-                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
-              ) : (
-                <div key={`controls-${sets.filter(s => s.done).length}`} className="animate-fade-in">
-                  <div className="flex items-center gap-1 mb-2">
-                    <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
-                    <div className="flex-1">
-                      <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Reps</p>
-                      <div className="flex items-center gap-2 justify-center">
-                        <button onClick={() => updateSet(activeSet.id, 'reps', -1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-sm">remove</span>
-                        </button>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          value={activeSet.reps}
-                          onChange={e => setSetField(activeSet.id, 'reps', parseInt(e.target.value) || 0)}
-                          onFocus={e => e.target.select()}
-                          className="font-headline text-2xl font-black w-14 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
-                        />
-                        <button onClick={() => updateSet(activeSet.id, 'reps', 1)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-sm">add</span>
-                        </button>
-                      </div>
+        {/* Active set */}
+        {activeSet && (
+          <div key={activeSet.id} className="bg-surface-container rounded-2xl p-4 border border-primary-container/20 animate-fade-in">
+            {restingId !== null ? (
+              <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={stopRest} />
+            ) : (
+              <div key={`controls-${doneCount}`} className="animate-fade-in">
+                <div className="flex items-center gap-1 mb-2">
+                  <span className="font-headline text-lg font-black text-primary-container w-6">{doneCount + 1}</span>
+                  <div className="flex-1">
+                    <p className="text-[10px] text-outline uppercase tracking-widest mb-2">Reps</p>
+                    <div className="flex items-center gap-2 justify-center">
+                      {stepBtn(() => updateSet(activeSet.id, 'reps', -1), 'remove')}
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={activeSet.reps}
+                        onChange={e => setSetField(activeSet.id, 'reps', parseInt(e.target.value) || 0)}
+                        onFocus={e => e.target.select()}
+                        className="font-headline text-2xl font-black w-14 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
+                      />
+                      {stepBtn(() => updateSet(activeSet.id, 'reps', 1), 'add')}
                     </div>
                   </div>
-                  {/* Add weight toggle */}
-                  {!addWeightMode ? (
-                    <button
-                      onClick={() => setAddWeightMode(true)}
-                      className="flex items-center gap-1.5 text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3 px-1"
-                    >
-                      <span className="material-symbols-outlined text-sm">add</span>
-                      Add weight
-                    </button>
-                  ) : (
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-[10px] text-[#a48b83] uppercase tracking-widest">Weight {weightLabel}</p>
-                        <button onClick={() => { setAddWeightMode(false); setSetField(activeSet.id, 'weight', 0) }} className="text-[10px] font-bold text-[#a48b83]">Remove</button>
-                      </div>
-                      <div className="flex items-center gap-2 justify-center">
-                        <button onClick={() => updateSet(activeSet.id, 'weight', -weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-sm">remove</span>
-                        </button>
-                        <input
-                          {...weightInputProps(activeSet.weight, kg => setSetField(activeSet.id, 'weight', kg))}
-                          className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
-                        />
-                        <button onClick={() => updateSet(activeSet.id, 'weight', weightStep)} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-sm">add</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => toggleSet(activeSet.id)}
-                    className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    Log set
-                  </button>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="px-4 pb-8 pt-4">
-          <button
-            type="button"
-            onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
-            className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
-          >
-            <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
-            {blockNotes ? (
-              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
-            ) : (
-              <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+                {/* Add weight toggle */}
+                {!addWeightMode ? (
+                  <button
+                    onClick={() => setAddWeightMode(true)}
+                    className="flex items-center gap-1.5 text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-3 px-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    Add weight
+                  </button>
+                ) : (
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] text-outline uppercase tracking-widest">Weight {weightLabel}</p>
+                      <button onClick={() => { setAddWeightMode(false); setSetField(activeSet.id, 'weight', 0) }} className="text-[10px] font-bold text-outline">Remove</button>
+                    </div>
+                    <div className="flex items-center gap-2 justify-center">
+                      {stepBtn(() => updateSet(activeSet.id, 'weight', -weightStep), 'remove')}
+                      <input
+                        {...weightInputProps(activeSet.weight, kg => setSetField(activeSet.id, 'weight', kg))}
+                        className="font-headline text-2xl font-black w-16 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
+                      />
+                      {stepBtn(() => updateSet(activeSet.id, 'weight', weightStep), 'add')}
+                    </div>
+                  </div>
+                )}
+                {logSetBtn(activeSet.id)}
+              </div>
             )}
-            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
-          </button>
-          <div className="flex gap-2">
-          {activeRoutine && (
-            <button onClick={skipRoutineExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
-          )}
-          <button
-            onClick={saveSets}
-            disabled={saving || sets.every(s => !s.done)}
-            className="flex-1 py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
-          >
-            {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
-          </button>
           </div>
-        </div>
-
-        <BottomNav />
-        {notesEditorPortal}
-        {historySheetPortal}
-      </main>
+        )}
+      </ExerciseShell>
     )
   }
 
@@ -2271,184 +1824,99 @@ export default function LogPage() {
   if (view.type === 'timed') {
     const activeIdx = sets.findIndex(s => !s.done)
     const activeSet = activeIdx !== -1 ? sets[activeIdx] : null
-    const fmtDur = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     const pr = prs.get(view.exercise) ?? null
     const currentDur = sets.filter(s => s.done).reduce((sum, s) => sum + (s.duration_secs ?? 0), 0)
     const isDurTotalPR = pr?.pr_duration_total != null && currentDur > 0 && currentDur > pr.pr_duration_total
     const isSetDurPR = pr?.pr_duration != null && sets.filter(s => s.done).some(s => (s.duration_secs ?? 0) > pr.pr_duration!)
+    const setDuration = (setId: number, f: (secs: number) => number) =>
+      setSets(prev => prev.map(s => s.id === setId ? { ...s, duration_secs: Math.max(0, f(s.duration_secs)) } : s))
 
     return (
-      <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
-        <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
-          <div className="flex items-center justify-between">
-            <button onClick={() => {
-              if (activeRoutine) { finishRoutine(activeRoutine.pending); return }
-              const hasSets = sets.some(s => s.done)
-              if (hasSets && !confirm('Discard this exercise?')) return
-              localStorage.removeItem(DRAFT_KEY)
-              setSets([{ id: 1, weight: 60, reps: 8, duration_secs: 0, done: false }])
-              setView({ type: 'list' })
-            }} className="flex items-center gap-1 text-[#a48b83]">
-              <span className="material-symbols-outlined text-lg">arrow_back</span>
-              <span className="text-sm font-bold">Back</span>
-            </button>
-            <div className="flex flex-col items-center gap-1">
-              <h2 className="font-headline font-bold text-[#e5e2e1]">{view.exercise}</h2>
-              {pr && (pr.pr_duration_total != null || pr.pr_duration != null) && (
-                <div className="flex items-center gap-2">
-                  {/* Total duration this session vs PR */}
-                  {pr.pr_duration_total != null && pr.pr_duration_total > 0 && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isDurTotalPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isDurTotalPR ? 1 : 0}` }}>monitoring</span>
-                      {isDurTotalPR ? `Total PR! ${fmtDur(currentDur)}` : currentDur > 0 ? `${fmtDur(currentDur)} / ${fmtDur(pr.pr_duration_total)}` : fmtDur(pr.pr_duration_total)}
-                    </div>
-                  )}
-                  {pr.pr_duration_total != null && pr.pr_duration != null && <div className="w-px h-3 bg-[#353534]" />}
-                  {/* Best single set duration */}
-                  {pr.pr_duration != null && pr.pr_duration > 0 && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${isSetDurPR ? 'text-[#ff9066]' : 'text-[#56423c]'}`}>
-                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${isSetDurPR ? 1 : 0}` }}>emoji_events</span>
-                      {isSetDurPR ? 'Set PR!' : `Best ${fmtDur(pr.pr_duration)}`}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {historyButton(view.exercise)}
-          </div>
-          {routineProgressBar}
+      <ExerciseShell
+        {...shellProps}
+        title={view.exercise}
+        headerRight={historyButton(view.exercise)}
+        badges={pr && (pr.pr_duration_total != null || pr.pr_duration != null) ? (
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#a48b83] text-base">timer</span>
-            <div className="flex gap-1">
-              {REST_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setAndSaveRestDuration(opt.value)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-label transition-colors ${
-                    restDuration === opt.value ? 'bg-[#ff9066]/20 text-[#ff9066]' : 'text-[#a48b83]/60 hover:text-[#a48b83]'
-                  }`}
-                >{opt.label}</button>
-              ))}
-            </div>
+            {pr.pr_duration_total != null && pr.pr_duration_total > 0 && prBadge(isDurTotalPR, 'monitoring',
+              isDurTotalPR ? `Total PR! ${fmtDurShort(currentDur)}` : currentDur > 0 ? `${fmtDurShort(currentDur)} / ${fmtDurShort(pr.pr_duration_total)}` : fmtDurShort(pr.pr_duration_total))}
+            {pr.pr_duration_total != null && pr.pr_duration != null && badgeSep}
+            {pr.pr_duration != null && pr.pr_duration > 0 && prBadge(isSetDurPR, 'emoji_events', isSetDurPR ? 'Set PR!' : `Best ${fmtDurShort(pr.pr_duration)}`)}
           </div>
-        </div>
+        ) : null}
+      >
+        {suggestionCard(view.exercise, 'timed', activeSet)}
 
-        <div className="flex-grow px-4 pt-6 space-y-2">
-          {/* Done sets */}
-          {sets.filter(s => s.done).map((set, i) => (
-            <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
-              <span className="w-5 font-headline text-sm font-bold text-[#dcc1b8]">{i + 1}</span>
-              <span className="font-headline font-bold">{fmtDur(set.duration_secs)}</span>
-              <div className="flex-1" />
-              <button onClick={() => toggleSet(set.id)} className="w-6 h-6 rounded-full bg-[#4bdece] flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-[#003732] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-              </button>
-            </div>
-          ))}
+        {/* Done sets */}
+        {sets.filter(s => s.done).map((set, i) => (
+          <div key={set.id} className="flex items-center gap-3 opacity-40 px-1 animate-fade-in">
+            <span className="w-5 font-headline text-sm font-bold text-on-surface-variant">{i + 1}</span>
+            <span className="font-headline font-bold">{fmtDurShort(set.duration_secs)}</span>
+            <div className="flex-1" />
+            {doneTick(set.id)}
+          </div>
+        ))}
 
-          {/* Active set */}
-          {activeSet && (
-            <div key={activeSet.id} className="bg-[#201f1f] rounded-2xl p-4 border border-[#ff9066]/20 animate-fade-in">
-              {restingId !== null ? (
-                <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={() => setRestingId(null)} />
-              ) : (
-                <div key={`controls-${sets.filter(s => s.done).length}`} className="animate-fade-in">
-                  <div className="flex items-center gap-1 mb-2">
-                    <span className="font-headline text-lg font-black text-[#ff9066] w-6">{sets.filter(s => s.done).length + 1}</span>
-                    <div className="flex-1">
-                      <p className="text-[10px] text-[#a48b83] uppercase tracking-widest mb-2">Duration</p>
-                      <div className="flex items-center gap-2 justify-center">
-                        <button onClick={() => setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: Math.max(0, s.duration_secs - 15) } : s))} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-sm">remove</span>
-                        </button>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            value={Math.floor(activeSet.duration_secs / 60)}
-                            onChange={e => {
-                              const mins = Math.max(0, parseInt(e.target.value) || 0)
-                              setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: mins * 60 + (s.duration_secs % 60) } : s))
-                            }}
-                            onFocus={e => e.target.select()}
-                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
-                          />
-                          <span className="font-headline text-2xl font-black text-[#a48b83]">:</span>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            value={String(activeSet.duration_secs % 60).padStart(2, '0')}
-                            onChange={e => {
-                              const secs = Math.min(59, Math.max(0, parseInt(e.target.value) || 0))
-                              setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: Math.floor(s.duration_secs / 60) * 60 + secs } : s))
-                            }}
-                            onFocus={e => e.target.select()}
-                            className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-[#353534] focus:border-[#ff9066]"
-                          />
-                        </div>
-                        <button onClick={() => setSets(prev => prev.map(s => s.id === activeSet.id ? { ...s, duration_secs: s.duration_secs + 15 } : s))} className="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-sm">add</span>
-                        </button>
+        {/* Active set */}
+        {activeSet && (
+          <div key={activeSet.id} className="bg-surface-container rounded-2xl p-4 border border-primary-container/20 animate-fade-in">
+            {restingId !== null ? (
+              <RestButton key="rest" seconds={restRemaining} total={restDuration} onSkip={stopRest} />
+            ) : (
+              <div key={`controls-${doneCount}`} className="animate-fade-in">
+                <div className="flex items-center gap-1 mb-2">
+                  <span className="font-headline text-lg font-black text-primary-container w-6">{doneCount + 1}</span>
+                  <div className="flex-1">
+                    <p className="text-[10px] text-outline uppercase tracking-widest mb-2">Duration</p>
+                    <div className="flex items-center gap-2 justify-center">
+                      {stepBtn(() => setDuration(activeSet.id, d => d - 15), 'remove')}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={Math.floor(activeSet.duration_secs / 60)}
+                          onChange={e => {
+                            const mins = Math.max(0, parseInt(e.target.value) || 0)
+                            setDuration(activeSet.id, d => mins * 60 + (d % 60))
+                          }}
+                          onFocus={e => e.target.select()}
+                          className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
+                        />
+                        <span className="font-headline text-2xl font-black text-outline">:</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={String(activeSet.duration_secs % 60).padStart(2, '0')}
+                          onChange={e => {
+                            const secs = Math.min(59, Math.max(0, parseInt(e.target.value) || 0))
+                            setDuration(activeSet.id, d => Math.floor(d / 60) * 60 + secs)
+                          }}
+                          onFocus={e => e.target.select()}
+                          className="font-headline text-2xl font-black w-10 text-center bg-transparent outline-none border-b border-surface-container-highest focus:border-primary-container"
+                        />
                       </div>
-                      <div className="flex justify-center gap-1 mt-1">
-                        <span className="text-[10px] text-[#56423c] w-10 text-center">min</span>
-                        <span className="w-3" />
-                        <span className="text-[10px] text-[#56423c] w-10 text-center">sec</span>
-                      </div>
+                      {stepBtn(() => setDuration(activeSet.id, d => d + 15), 'add')}
+                    </div>
+                    <div className="flex justify-center gap-1 mt-1">
+                      <span className="text-[10px] text-outline-variant w-10 text-center">min</span>
+                      <span className="w-3" />
+                      <span className="text-[10px] text-outline-variant w-10 text-center">sec</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => toggleSet(activeSet.id)}
-                    className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform flex items-center justify-center gap-2 mt-2"
-                  >
-                    <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    Log set
-                  </button>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="px-4 pb-8 pt-4">
-          <button
-            type="button"
-            onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
-            className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
-          >
-            <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
-            {blockNotes ? (
-              <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
-            ) : (
-              <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+                <div className="mt-2">{logSetBtn(activeSet.id)}</div>
+              </div>
             )}
-            <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
-          </button>
-          <div className="flex gap-2">
-          {activeRoutine && (
-            <button onClick={skipRoutineExercise} className="px-5 py-4 bg-[#201f1f] text-[#a48b83] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all hover:bg-[#2a2a2a]">Skip</button>
-          )}
-          <button
-            onClick={saveSets}
-            disabled={saving || sets.every(s => !s.done)}
-            className="flex-1 py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
-          >
-            {saving ? 'Saving…' : `Save — ${sets.filter(s => s.done).length} set${sets.filter(s => s.done).length !== 1 ? 's' : ''}`}
-          </button>
           </div>
-        </div>
-
-        <BottomNav />
-        {notesEditorPortal}
-        {historySheetPortal}
-      </main>
+        )}
+      </ExerciseShell>
     )
   }
 
   // ── Cardio logging view ─────────────────────────────────────────────────────
   return (
     <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
-      <div className="sticky top-0 z-40 px-4 py-4 bg-[#0e0e0e]/90 backdrop-blur-md border-b border-[#201f1f]">
+      <div className="sticky top-0 z-40 px-4 py-4 bg-surface-container-lowest/90 backdrop-blur-md border-b border-surface-container">
         <div className="flex items-center justify-between">
           <button onClick={() => {
             const hasData = cardioDistance !== '' || cardioTime !== ''
@@ -2457,42 +1925,42 @@ export default function LogPage() {
             setCardioDistance('')
             setCardioTime('')
             setView({ type: 'list' })
-          }} className="flex items-center gap-1 text-[#a48b83]">
+          }} className="flex items-center gap-1 text-outline">
             <span className="material-symbols-outlined text-lg">arrow_back</span>
             <span className="text-sm font-bold">Back</span>
           </button>
-          <h2 className="font-headline font-bold text-[#e5e2e1]">{view.activity}</h2>
+          <h2 className="font-headline font-bold text-on-surface">{view.activity}</h2>
           <div className="w-16" />
         </div>
       </div>
 
       <div className="flex-grow px-4 pt-6">
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
+          <div className="bg-surface-container rounded-2xl p-4 text-center">
             <input
               type="number"
               value={cardioDistance}
               onChange={e => setCardioDistance(e.target.value)}
               placeholder="0.0"
-              className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]"
+              className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-surface-container-highest"
             />
-            <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
+            <span className="block font-label text-[10px] uppercase tracking-widest text-outline mt-1">Distance km</span>
           </div>
-          <div className="bg-[#201f1f] rounded-2xl p-4 text-center">
+          <div className="bg-surface-container rounded-2xl p-4 text-center">
             <input
               type="text"
               value={cardioTime}
               onChange={e => setCardioTime(e.target.value)}
               placeholder="00:00"
-              className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-[#353534]"
+              className="w-full bg-transparent text-center font-headline text-3xl font-black outline-none placeholder:text-surface-container-highest"
             />
-            <span className="block font-label text-[10px] uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
+            <span className="block font-label text-[10px] uppercase tracking-widest text-outline mt-1">Duration</span>
           </div>
         </div>
         {cardioPace && (
-          <div className="bg-[#201f1f] rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Avg Pace</span>
-            <span className="font-headline font-bold text-[#4bdece]">{cardioPace} /km</span>
+          <div className="bg-surface-container rounded-xl px-4 py-2.5 flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Avg Pace</span>
+            <span className="font-headline font-bold text-tertiary">{cardioPace} /km</span>
           </div>
         )}
         {/* Screenshot scan */}
@@ -2506,17 +1974,17 @@ export default function LogPage() {
         <button
           onClick={() => parseInputRef.current?.click()}
           disabled={parseLoading}
-          className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors mt-2 active:scale-95 disabled:opacity-50"
+          className="w-full py-3 rounded-xl border border-outline-variant/40 flex items-center justify-center gap-2 text-on-surface-variant text-sm hover:bg-surface-container transition-colors mt-2 active:scale-95 disabled:opacity-50"
         >
           {parseLoading ? (
-            <div className="w-4 h-4 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
           ) : (
-            <span className="material-symbols-outlined text-base text-[#ff9066]">photo_camera</span>
+            <span className="material-symbols-outlined text-base text-primary-container">photo_camera</span>
           )}
           {parseLoading ? 'Scanning…' : 'Scan run screenshot'}
         </button>
         {parseError && <p className="text-red-400 text-xs mt-2 text-center">{parseError}</p>}
-        <Link href="/import" className="w-full py-3 rounded-xl border border-[#56423c]/40 flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors mt-2">
+        <Link href="/import" className="w-full py-3 rounded-xl border border-outline-variant/40 flex items-center justify-center gap-2 text-on-surface-variant text-sm hover:bg-surface-container transition-colors mt-2">
           <span className="material-symbols-outlined text-base">ios_share</span>
           Import from Apple Health
         </Link>
@@ -2526,20 +1994,20 @@ export default function LogPage() {
         <button
           type="button"
           onClick={() => { setNotesDraft(blockNotes); setNotesTarget('block') }}
-          className="w-full mb-3 bg-[#201f1f] rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-[#2a2a2a] transition-colors"
+          className="w-full mb-3 bg-surface-container rounded-xl px-4 py-2.5 text-left flex items-start gap-3 hover:bg-surface-container-high transition-colors"
         >
-          <span className="material-symbols-outlined text-[#a48b83] text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
+          <span className="material-symbols-outlined text-outline text-base shrink-0 mt-0.5">{blockNotes ? 'sticky_note_2' : 'add_notes'}</span>
           {blockNotes ? (
-            <p className="text-sm text-[#dcc1b8] italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
+            <p className="text-sm text-on-surface-variant italic flex-1 line-clamp-2 whitespace-pre-wrap">{blockNotes}</p>
           ) : (
-            <span className="text-sm text-[#56423c] flex-1">Notes about this workout…</span>
+            <span className="text-sm text-outline-variant flex-1">Notes about this workout…</span>
           )}
-          <span className="material-symbols-outlined text-[#56423c] text-base shrink-0 mt-0.5">edit</span>
+          <span className="material-symbols-outlined text-outline-variant text-base shrink-0 mt-0.5">edit</span>
         </button>
         <button
           onClick={saveCardio}
           disabled={saving}
-          className="w-full py-4 bg-[#201f1f] text-[#e5e2e1] rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-[#2a2a2a]"
+          className="w-full py-4 bg-surface-container text-on-surface rounded-2xl font-headline font-bold text-base active:scale-95 transition-all disabled:opacity-30 hover:bg-surface-container-high"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>

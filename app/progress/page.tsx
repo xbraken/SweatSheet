@@ -30,7 +30,7 @@ function ActivityLabel({ activity, className }: { activity: string; className?: 
   return (
     <span className={`inline-flex items-center gap-1.5 ${className ?? ''}`}>
       {baseActivity(activity)}
-      {isInterval && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-[#4bdece]/20 text-[#4bdece] uppercase tracking-wide leading-none">INTV</span>}
+      {isInterval && <span className="px-1 py-0.5 rounded text-[8px] font-black font-label bg-tertiary/20 text-tertiary uppercase tracking-wide leading-none">INTV</span>}
     </span>
   )
 }
@@ -275,8 +275,8 @@ function RunDetailSheet({
     return (
       <>
         <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
-        <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex items-center justify-center animate-slide-up">
-          <div className="w-8 h-8 border-2 border-[#4bdece] border-t-transparent rounded-full animate-spin" />
+        <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-surface-container-lowest rounded-t-3xl md:rounded-none flex items-center justify-center animate-slide-up">
+          <div className="w-8 h-8 border-2 border-tertiary border-t-transparent rounded-full animate-spin" />
         </div>
       </>
     )
@@ -423,31 +423,31 @@ function RunDetailSheet({
   return (
     <>
       <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={handleClose} style={{ opacity: isClosing ? 0 : 1, transition: isClosing ? 'opacity 0.2s ease-out' : undefined }} />
-      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-[#0e0e0e] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up" style={{ opacity: isClosing ? 0 : 1, transform: isClosing ? 'translateY(16px)' : undefined, transition: isClosing ? 'opacity 0.2s ease-out, transform 0.2s ease-out' : undefined }}>
+      <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:left-56 z-50 bg-surface-container-lowest rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up" style={{ opacity: isClosing ? 0 : 1, transform: isClosing ? 'translateY(16px)' : undefined, transition: isClosing ? 'opacity 0.2s ease-out, transform 0.2s ease-out' : undefined }}>
         {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-[#201f1f] flex items-start justify-between shrink-0">
+        <div className="px-5 pt-5 pb-4 border-b border-surface-container flex items-start justify-between shrink-0">
           <div>
-            <p className="font-label text-[10px] uppercase tracking-widest text-[#4bdece] mb-1"><ActivityLabel activity={detail.activity} /></p>
+            <p className="font-label text-[10px] uppercase tracking-widest text-tertiary mb-1"><ActivityLabel activity={detail.activity} /></p>
             <div className="flex items-baseline gap-2">
-              <h2 className="font-headline text-xl font-black text-[#e5e2e1]">{formatDate(detail.date)}</h2>
+              <h2 className="font-headline text-xl font-black text-on-surface">{formatDate(detail.date)}</h2>
               {detail.started_at && (() => {
                 const iso = detail.started_at.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T').replace(/ ?Z$/, 'Z').replace(/ ([+-])/, '$1')
                 const hasOffset = iso.endsWith('Z') || /[+-]\d{2}/.test(iso.slice(10))
                 const d = new Date(hasOffset ? iso : iso + 'Z')
                 if (isNaN(d.getTime())) return null
-                return <span className="text-sm font-mono text-[#a48b83]">{d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                return <span className="text-sm font-mono text-outline">{d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
               })()}
             </div>
             <div className="flex gap-3 mt-2 flex-wrap">
-              {distLabel && <span className="text-sm font-bold text-[#e5e2e1]">{distLabel}</span>}
-              {durationLabel && <span className="text-sm text-[#a48b83]">{durationLabel}</span>}
-              {detail.pace && <span className="text-sm text-[#a48b83]">{detail.pace} /km</span>}
-              {detail.calories && <span className="text-sm text-[#a48b83]">{detail.calories} kcal</span>}
+              {distLabel && <span className="text-sm font-bold text-on-surface">{distLabel}</span>}
+              {durationLabel && <span className="text-sm text-outline">{durationLabel}</span>}
+              {detail.pace && <span className="text-sm text-outline">{detail.pace} /km</span>}
+              {detail.calories && <span className="text-sm text-outline">{detail.calories} kcal</span>}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
             <button onClick={handleClose} className="p-1">
-              <span className="material-symbols-outlined text-[#a48b83]">close</span>
+              <span className="material-symbols-outlined text-outline">close</span>
             </button>
             {detail && ['Run', 'Indoor run', 'Interval run'].includes(detail.activity) && (
               <button
@@ -461,7 +461,7 @@ function RunDetailSheet({
                     body: JSON.stringify({ activity: newActivity }),
                   })
                 }}
-                className="text-[10px] font-bold font-label uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-[#4bdece]/10 text-[#4bdece]"
+                className="text-[10px] font-bold font-label uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-tertiary/10 text-tertiary"
               >
                 {detail.activity === 'Interval run' ? 'Unmark interval' : 'Mark as interval'}
               </button>
@@ -474,21 +474,21 @@ function RunDetailSheet({
           {(detail.heart_rate || detail.hr_min || detail.hr_max) && (
             <div className="flex gap-2 mt-4 flex-wrap animate-fade-in" style={{ animationDelay: '0ms' }}>
               {mainAvg && (
-                <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
-                  <span className="text-xl font-black font-headline text-[#ff9066]">{mainAvg}</span>
-                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">avg bpm</span>
+                <div className="bg-surface-container rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+                  <span className="text-xl font-black font-headline text-primary-container">{mainAvg}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline">avg bpm</span>
                 </div>
               )}
               {detail.hr_min && (
-                <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
-                  <span className="text-xl font-black font-headline text-[#e5e2e1]">{detail.hr_min}</span>
-                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">min bpm</span>
+                <div className="bg-surface-container rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+                  <span className="text-xl font-black font-headline text-on-surface">{detail.hr_min}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline">min bpm</span>
                 </div>
               )}
               {detail.hr_max && (
-                <div className="bg-[#201f1f] rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
-                  <span className="text-xl font-black font-headline text-[#e5e2e1]">{detail.hr_max}</span>
-                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-[#a48b83]">max bpm</span>
+                <div className="bg-surface-container rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+                  <span className="text-xl font-black font-headline text-on-surface">{detail.hr_max}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline">max bpm</span>
                 </div>
               )}
             </div>
@@ -496,7 +496,7 @@ function RunDetailSheet({
 
           {/* Pace Chart */}
           {hasPace && (
-            <div className="mt-5 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '60ms' }}>
+            <div className="mt-5 bg-surface rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '60ms' }}>
               {(() => {
                 const maxT = paceMaxT
                 const interval = maxT > 1800 ? 600 : 300
@@ -513,12 +513,12 @@ function RunDetailSheet({
                     {/* Header row */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">
+                        <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-0.5">
                           {inCompare ? 'Pace comparison (% completion)' : 'Pace over time'}
                         </p>
                         {paceAvgSec && (
                           <span className="text-lg font-black font-headline" style={{ color: mainColor }}>
-                            {fmtPaceSec(paceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span>
+                            {fmtPaceSec(paceAvgSec)} <span className="text-xs font-normal text-outline">/km avg</span>
                           </span>
                         )}
                       </div>
@@ -526,21 +526,21 @@ function RunDetailSheet({
                         {inCompare ? (
                           comparePaceAvgSec && (
                             <>
-                              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">{formatDate(compareDetail!.date)}</p>
+                              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-0.5">{formatDate(compareDetail!.date)}</p>
                               <span className="text-lg font-black font-headline text-[#c084fc]">
-                                {fmtPaceSec(comparePaceAvgSec)} <span className="text-xs font-normal text-[#a48b83]">/km avg</span>
+                                {fmtPaceSec(comparePaceAvgSec)} <span className="text-xs font-normal text-outline">/km avg</span>
                               </span>
                             </>
                           )
                         ) : (
                           paceMinSec && paceMaxSec && (
                             <>
-                              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-0.5">Range</p>
-                              <p className="text-xs text-[#4bdece]">
+                              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-0.5">Range</p>
+                              <p className="text-xs text-tertiary">
                                 <span className="font-black">{fmtPaceSec(paceMinSec)}</span>
-                                <span className="text-[#a48b83] mx-1">→</span>
+                                <span className="text-outline mx-1">→</span>
                                 <span className="font-black">{fmtPaceSec(paceMaxSec)}</span>
-                                <span className="text-[#a48b83] ml-1">/km</span>
+                                <span className="text-outline ml-1">/km</span>
                               </p>
                             </>
                           )
@@ -553,7 +553,7 @@ function RunDetailSheet({
                       {paceHoveredIdx !== null && pHovPaceLabel && (
                         <>
                           {!inCompare && pHovTimeSec !== null && (
-                            <span className="text-[10px] text-[#a48b83]">
+                            <span className="text-[10px] text-outline">
                               {pHovTimeSec >= 3600
                                 ? `${Math.floor(pHovTimeSec / 3600)}:${String(Math.floor((pHovTimeSec % 3600) / 60)).padStart(2, '0')}:${String(pHovTimeSec % 60).padStart(2, '0')}`
                                 : `${Math.floor(pHovTimeSec / 60)}:${String(pHovTimeSec % 60).padStart(2, '0')}`}
@@ -670,12 +670,12 @@ function RunDetailSheet({
                         <div className="flex gap-4">
                           <div className="flex items-center gap-1.5">
                             <div className="w-3 h-0.5 rounded" style={{ backgroundColor: mainColor }} />
-                            <span className="text-[10px] text-[#a48b83]">{formatDate(detail.date)}</span>
+                            <span className="text-[10px] text-outline">{formatDate(detail.date)}</span>
                             {paceAvgSec && <span className="text-[10px] font-bold" style={{ color: mainColor }}>{fmtPaceSec(paceAvgSec)} /km</span>}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <div className="w-3 h-0.5 bg-[#c084fc] rounded" />
-                            <span className="text-[10px] text-[#a48b83]">{formatDate(compareDetail!.date)}</span>
+                            <span className="text-[10px] text-outline">{formatDate(compareDetail!.date)}</span>
                             {comparePaceAvgSec && <span className="text-[10px] font-bold text-[#c084fc]">{fmtPaceSec(comparePaceAvgSec)} /km</span>}
                           </div>
                         </div>
@@ -683,7 +683,7 @@ function RunDetailSheet({
                           const delta = paceAvgSec - comparePaceAvgSec
                           const isFaster = delta < 0  // main has lower sec/km = faster
                           return (
-                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${isFaster ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#c084fc]/20 text-[#c084fc]'}`}>
+                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${isFaster ? 'bg-tertiary/20 text-tertiary' : 'bg-[#c084fc]/20 text-[#c084fc]'}`}>
                               {isFaster ? `${fmtPaceSec(Math.abs(delta))} faster` : `${fmtPaceSec(Math.abs(delta))} slower`}
                             </div>
                           )
@@ -705,9 +705,9 @@ function RunDetailSheet({
                 { label: 'Best Half', sec: bestHalfSec },
                 { label: 'Best Marathon', sec: bestMarathonSec },
               ].filter(b => b.sec !== null).map(b => (
-                <div key={b.label} className="flex-1 min-w-[100px] bg-[#131313] rounded-2xl px-4 py-3 flex flex-col items-center">
-                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">{b.label}</span>
-                  <span className="text-xl font-black font-headline text-[#4bdece]">{fmtSegTime(b.sec!)}</span>
+                <div key={b.label} className="flex-1 min-w-[100px] bg-surface rounded-2xl px-4 py-3 flex flex-col items-center">
+                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-outline mb-1">{b.label}</span>
+                  <span className="text-xl font-black font-headline text-tertiary">{fmtSegTime(b.sec!)}</span>
                 </div>
               ))}
             </div>
@@ -724,9 +724,9 @@ function RunDetailSheet({
                 const delta = negSplit.delta
                 const sign = delta > 0 ? '+' : ''
                 return (
-                  <div className="bg-[#131313] rounded-xl px-3 py-2 flex flex-col">
+                  <div className="bg-surface rounded-xl px-3 py-2 flex flex-col">
                     <span className="text-[9px] font-bold font-label uppercase tracking-wider" style={{ color }}>{label}</span>
-                    <span className="text-xs text-[#a48b83]">2nd half {sign}{Math.round(delta)}s</span>
+                    <span className="text-xs text-outline">2nd half {sign}{Math.round(delta)}s</span>
                   </div>
                 )
               })()}
@@ -736,9 +736,9 @@ function RunDetailSheet({
                 const color = isBad ? '#ff9066' : isOk ? '#4bdece' : '#dcc1b8'
                 const label = isBad ? 'Aerobic decoupling' : 'Solid aerobic'
                 return (
-                  <div className="bg-[#131313] rounded-xl px-3 py-2 flex flex-col">
+                  <div className="bg-surface rounded-xl px-3 py-2 flex flex-col">
                     <span className="text-[9px] font-bold font-label uppercase tracking-wider" style={{ color }}>{label}</span>
-                    <span className="text-xs text-[#a48b83]">{decouple > 0 ? '+' : ''}{decouple.toFixed(1)}% EF drift</span>
+                    <span className="text-xs text-outline">{decouple > 0 ? '+' : ''}{decouple.toFixed(1)}% EF drift</span>
                   </div>
                 )
               })()}
@@ -751,9 +751,9 @@ function RunDetailSheet({
             const zColors = ['#5b8def', '#4bdece', '#a0e857', '#ffb84d', '#ff6b6b']
             const zLabels = ['Z1 Recovery', 'Z2 Easy', 'Z3 Tempo', 'Z4 Threshold', 'Z5 VO2max']
             return (
-              <div className="mt-4 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '180ms' }}>
+              <div className="mt-4 bg-surface rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '180ms' }}>
                 <div className="flex justify-between items-center mb-3">
-                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Time in zones</p>
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Time in zones</p>
                   <p className="text-[9px] text-[#5a5a5a]">HRmax {userHrMax}</p>
                 </div>
                 <div className="flex h-3 rounded-full overflow-hidden mb-3">
@@ -765,8 +765,8 @@ function RunDetailSheet({
                   {zArr.map((sec, i) => (
                     <div key={i} className="flex flex-col items-center">
                       <div className="w-2 h-2 rounded-sm mb-1" style={{ backgroundColor: zColors[i] }} />
-                      <span className="text-[9px] font-bold font-label text-[#a48b83]">Z{i+1}</span>
-                      <span className="text-[10px] font-mono text-[#e5e2e1]">{Math.round(sec/60)}m</span>
+                      <span className="text-[9px] font-bold font-label text-outline">Z{i+1}</span>
+                      <span className="text-[10px] font-mono text-on-surface">{Math.round(sec/60)}m</span>
                       <span className="text-[8px] text-[#5a5a5a]">{Math.round((sec/zoneTotal)*100)}%</span>
                     </div>
                   ))}
@@ -781,8 +781,8 @@ function RunDetailSheet({
             const splitMax = Math.max(...kmSplits.map(s => s.paceSec))
             const splitAvg = paceAvgSec ?? Math.round(kmSplits.reduce((a, b) => a + b.paceSec, 0) / kmSplits.length)
             return (
-              <div className="mt-4 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '160ms' }}>
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Km splits</p>
+              <div className="mt-4 bg-surface rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '160ms' }}>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-3">Km splits</p>
                 <div className="space-y-1.5">
                   {kmSplits.map(({ km, paceSec, partial }) => {
                     const barPct = splitMax > splitMin
@@ -793,26 +793,26 @@ function RunDetailSheet({
                     const barColor = isFast ? '#4bdece' : isSlow ? '#ff9066' : '#dcc1b8'
                     return (
                       <div key={km} className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-[#a48b83] w-6 text-right shrink-0">{km}</span>
+                        <span className="text-[10px] font-mono text-outline w-6 text-right shrink-0">{km}</span>
                         <div className="flex-1 h-4 flex items-center">
                           <div className="h-2.5 rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor, opacity: 0.8 }} />
                         </div>
                         <span className="text-xs font-bold font-headline shrink-0 w-12 text-right" style={{ color: barColor }}>
                           {fmtPaceSec(paceSec)}
                         </span>
-                        {partial && <span className="text-[9px] text-[#a48b83] shrink-0">~</span>}
+                        {partial && <span className="text-[9px] text-outline shrink-0">~</span>}
                       </div>
                     )
                   })}
                 </div>
-                <p className="text-[10px] text-[#a48b83] mt-2 text-right">avg {fmtPaceSec(splitAvg)} /km</p>
+                <p className="text-[10px] text-outline mt-2 text-right">avg {fmtPaceSec(splitAvg)} /km</p>
               </div>
             )
           })()}
 
           {/* HR Chart */}
           {hasHr ? (
-            <div className="mt-5 bg-[#131313] rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+            <div className="mt-5 bg-surface rounded-2xl p-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
               {(() => {
                 const maxT = hasHr ? detail.hrSamples[detail.hrSamples.length - 1].time_offset_sec : 0
                 const interval = maxT > 1800 ? 600 : 300
@@ -829,7 +829,7 @@ function RunDetailSheet({
                 return (
                   <>
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">
+                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">
                         {compareDetail ? 'HR comparison (% completion)' : 'Heart rate over time'}
                       </p>
                     </div>
@@ -838,9 +838,9 @@ function RunDetailSheet({
                       {chartHoveredIdx !== null && hVal !== undefined && (
                         <>
                           {!compareDetail && hTimeLabel && (
-                            <span className="text-[10px] text-[#a48b83]">{hTimeLabel}</span>
+                            <span className="text-[10px] text-outline">{hTimeLabel}</span>
                           )}
-                          <span className="text-sm font-black font-headline text-[#ff9066]">{hVal} bpm</span>
+                          <span className="text-sm font-black font-headline text-primary-container">{hVal} bpm</span>
                           {hCompareVal !== null && compareValues.length > 0 && (
                             <span className="text-sm font-black font-headline text-[#c084fc]">{hCompareVal} bpm</span>
                           )}
@@ -957,13 +957,13 @@ function RunDetailSheet({
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex gap-4">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-0.5 bg-[#ff9066] rounded" />
-                      <span className="text-[10px] text-[#a48b83]">{formatDate(detail.date)}</span>
-                      {mainAvg && <span className="text-[10px] font-bold text-[#ff9066]">{mainAvg} bpm</span>}
+                      <div className="w-3 h-0.5 bg-primary-container rounded" />
+                      <span className="text-[10px] text-outline">{formatDate(detail.date)}</span>
+                      {mainAvg && <span className="text-[10px] font-bold text-primary-container">{mainAvg} bpm</span>}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-3 h-0.5 bg-[#c084fc] rounded" />
-                      <span className="text-[10px] text-[#a48b83]">{formatDate(compareDetail.date)}</span>
+                      <span className="text-[10px] text-outline">{formatDate(compareDetail.date)}</span>
                       {compareAvg && <span className="text-[10px] font-bold text-[#c084fc]">{compareAvg} bpm</span>}
                     </div>
                   </div>
@@ -971,7 +971,7 @@ function RunDetailSheet({
                     const delta = compareAvg - mainAvg
                     const better = delta > 0 // compare is higher = current is lower = better
                     return (
-                      <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${better ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-[#c084fc]/20 text-[#c084fc]'}`}>
+                      <div className={`px-2 py-0.5 rounded-full text-[10px] font-black font-label ${better ? 'bg-tertiary/20 text-tertiary' : 'bg-[#c084fc]/20 text-[#c084fc]'}`}>
                         {better ? `${delta} bpm lower` : `${Math.abs(delta)} bpm higher`}
                       </div>
                     )
@@ -980,9 +980,9 @@ function RunDetailSheet({
               )}
             </div>
           ) : (
-            <div className="mt-4 bg-[#131313] rounded-2xl p-5 text-center animate-fade-in" style={{ animationDelay: '200ms' }}>
-              <span className="material-symbols-outlined text-3xl text-[#353534]">monitor_heart</span>
-              <p className="text-sm text-[#a48b83] mt-2">No HR data — re-import from Apple Health to get your full heart rate curve</p>
+            <div className="mt-4 bg-surface rounded-2xl p-5 text-center animate-fade-in" style={{ animationDelay: '200ms' }}>
+              <span className="material-symbols-outlined text-3xl text-surface-container-highest">monitor_heart</span>
+              <p className="text-sm text-outline mt-2">No HR data — re-import from Apple Health to get your full heart rate curve</p>
             </div>
           )}
 
@@ -991,9 +991,9 @@ function RunDetailSheet({
             {!showComparePicker && !compareDetail && (
               <button
                 onClick={() => setShowComparePicker(true)}
-                className="w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors active:scale-95"
+                className="w-full py-3 rounded-xl border border-surface-container-highest flex items-center justify-center gap-2 text-on-surface-variant text-sm hover:bg-surface-container transition-colors active:scale-95"
               >
-                <span className="material-symbols-outlined text-base text-[#4bdece]">compare_arrows</span>
+                <span className="material-symbols-outlined text-base text-tertiary">compare_arrows</span>
                 Compare with another {baseActivity(detail.activity).toLowerCase()}
               </button>
             )}
@@ -1001,7 +1001,7 @@ function RunDetailSheet({
             {compareDetail && (
               <button
                 onClick={() => { setCompareId(null); setCompareDetail(null) }}
-                className="w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#a48b83] text-sm hover:bg-[#201f1f] transition-colors"
+                className="w-full py-3 rounded-xl border border-surface-container-highest flex items-center justify-center gap-2 text-outline text-sm hover:bg-surface-container transition-colors"
               >
                 <span className="material-symbols-outlined text-base">close</span>
                 Remove comparison
@@ -1009,20 +1009,20 @@ function RunDetailSheet({
             )}
 
             {showComparePicker && !compareDetail && (
-              <div className="bg-[#131313] rounded-2xl border border-[#201f1f] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#201f1f]">
-                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Compare with</p>
+              <div className="bg-surface rounded-2xl border border-surface-container overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-surface-container">
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Compare with</p>
                   <button onClick={() => { setShowComparePicker(false); setCompareSearch('') }}>
-                    <span className="material-symbols-outlined text-[#a48b83] text-sm">close</span>
+                    <span className="material-symbols-outlined text-outline text-sm">close</span>
                   </button>
                 </div>
-                <div className="px-4 py-2 border-b border-[#201f1f]">
+                <div className="px-4 py-2 border-b border-surface-container">
                   <input
                     type="text"
                     placeholder="Search by date or activity…"
                     value={compareSearch}
                     onChange={e => setCompareSearch(e.target.value)}
-                    className="w-full bg-transparent text-sm text-[#e5e2e1] placeholder-[#a48b83] outline-none"
+                    className="w-full bg-transparent text-sm text-on-surface placeholder-outline outline-none"
                   />
                 </div>
                 {allCardio
@@ -1038,16 +1038,16 @@ function RunDetailSheet({
                     <button
                       key={r.cardio_id}
                       onClick={() => { setCompareId(r.cardio_id); setShowComparePicker(false); setCompareSearch('') }}
-                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#201f1f] transition-colors text-left border-b border-[#201f1f]/50 last:border-0"
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-surface-container transition-colors text-left border-b border-surface-container/50 last:border-0"
                     >
                       <div>
-                        <p className="text-[10px] text-[#a48b83] font-label uppercase">{formatDate(r.date)}</p>
-                        <p className="font-headline font-bold text-sm text-[#e5e2e1]">{r.distance ? `${r.distance} km` : r.activity}</p>
-                        <p className="text-[10px] text-[#a48b83]"><ActivityLabel activity={r.activity} /></p>
+                        <p className="text-[10px] text-outline font-label uppercase">{formatDate(r.date)}</p>
+                        <p className="font-headline font-bold text-sm text-on-surface">{r.distance ? `${r.distance} km` : r.activity}</p>
+                        <p className="text-[10px] text-outline"><ActivityLabel activity={r.activity} /></p>
                       </div>
                       <div className="text-right">
-                        {r.pace && <p className="text-sm font-bold text-[#4bdece]">{r.pace} /km</p>}
-                        {r.heart_rate && <p className="text-xs text-[#a48b83]">avg {r.heart_rate} bpm</p>}
+                        {r.pace && <p className="text-sm font-bold text-tertiary">{r.pace} /km</p>}
+                        {r.heart_rate && <p className="text-xs text-outline">avg {r.heart_rate} bpm</p>}
                       </div>
                     </button>
                   ))}
@@ -1059,27 +1059,27 @@ function RunDetailSheet({
           {!compareDetail && !editingStats && (
             <button
               onClick={() => { setEditDist(detail.distance ?? ''); setEditDuration(detail.duration ?? ''); setEditingStats(true) }}
-              className="mt-4 w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors"
+              className="mt-4 w-full py-3 rounded-xl border border-surface-container-highest flex items-center justify-center gap-2 text-on-surface-variant text-sm hover:bg-surface-container transition-colors"
             >
-              <span className="material-symbols-outlined text-base text-[#a48b83]">edit</span>
+              <span className="material-symbols-outlined text-base text-outline">edit</span>
               Edit stats
             </button>
           )}
           {editingStats && (
-            <div className="mt-4 bg-[#131313] rounded-2xl p-4">
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Edit stats</p>
+            <div className="mt-4 bg-surface rounded-2xl p-4">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-3">Edit stats</p>
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="bg-[#201f1f] rounded-xl p-3 text-center">
-                  <input type="number" value={editDist} onChange={e => setEditDist(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-2xl font-black outline-none placeholder:text-[#353534]" />
-                  <span className="block text-[10px] font-label uppercase tracking-widest text-[#a48b83] mt-1">Distance km</span>
+                <div className="bg-surface-container rounded-xl p-3 text-center">
+                  <input type="number" value={editDist} onChange={e => setEditDist(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-2xl font-black outline-none placeholder:text-surface-container-highest" />
+                  <span className="block text-[10px] font-label uppercase tracking-widest text-outline mt-1">Distance km</span>
                 </div>
-                <div className="bg-[#201f1f] rounded-xl p-3 text-center">
-                  <input type="text" value={editDuration} onChange={e => setEditDuration(e.target.value)} placeholder="00:00" className="w-full bg-transparent text-center font-headline text-2xl font-black outline-none placeholder:text-[#353534]" />
-                  <span className="block text-[10px] font-label uppercase tracking-widest text-[#a48b83] mt-1">Duration</span>
+                <div className="bg-surface-container rounded-xl p-3 text-center">
+                  <input type="text" value={editDuration} onChange={e => setEditDuration(e.target.value)} placeholder="00:00" className="w-full bg-transparent text-center font-headline text-2xl font-black outline-none placeholder:text-surface-container-highest" />
+                  <span className="block text-[10px] font-label uppercase tracking-widest text-outline mt-1">Duration</span>
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setEditingStats(false)} className="flex-1 py-2.5 rounded-xl border border-[#353534] text-[#a48b83] text-sm font-bold transition-colors hover:bg-[#201f1f]">Cancel</button>
+                <button onClick={() => setEditingStats(false)} className="flex-1 py-2.5 rounded-xl border border-surface-container-highest text-outline text-sm font-bold transition-colors hover:bg-surface-container">Cancel</button>
                 <button
                   onClick={() => {
                     const dist = parseFloat(editDist)
@@ -1093,7 +1093,7 @@ function RunDetailSheet({
                     setEditingStats(false)
                     fetch(`/api/run/${runId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ distance: editDist || null, duration: editDuration || null, pace }) })
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-[#4bdece] text-[#003732] text-sm font-bold"
+                  className="flex-1 py-2.5 rounded-xl bg-tertiary text-on-tertiary text-sm font-bold"
                 >
                   Save
                 </button>
@@ -1106,34 +1106,34 @@ function RunDetailSheet({
           {hasPace && !compareDetail && !editingSegment && (
             <button
               onClick={() => { setSegRows([{ start: '', end: '', speed: '' }]); setSegError(''); setEditingSegment(true) }}
-              className="mt-3 w-full py-3 rounded-xl border border-[#353534] flex items-center justify-center gap-2 text-[#dcc1b8] text-sm hover:bg-[#201f1f] transition-colors"
+              className="mt-3 w-full py-3 rounded-xl border border-surface-container-highest flex items-center justify-center gap-2 text-on-surface-variant text-sm hover:bg-surface-container transition-colors"
             >
-              <span className="material-symbols-outlined text-base text-[#a48b83]">speed</span>
+              <span className="material-symbols-outlined text-base text-outline">speed</span>
               Correct pace segment
             </button>
           )}
           {editingSegment && (
-            <div className="mt-3 bg-[#131313] rounded-2xl p-4">
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Correct pace segment(s)</p>
+            <div className="mt-3 bg-surface rounded-2xl p-4">
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-3">Correct pace segment(s)</p>
               <div className="flex flex-col gap-2 mb-3">
                 {segRows.map((row, i) => (
                   <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
-                    <div className="bg-[#201f1f] rounded-xl p-2.5 text-center">
-                      <input type="text" value={row.start} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, start: e.target.value } : r))} placeholder="10 or 10:43" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-[#353534] placeholder:text-xs" />
-                      <span className="block text-[9px] font-label uppercase tracking-widest text-[#a48b83] mt-1">Start</span>
+                    <div className="bg-surface-container rounded-xl p-2.5 text-center">
+                      <input type="text" value={row.start} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, start: e.target.value } : r))} placeholder="10 or 10:43" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-surface-container-highest placeholder:text-xs" />
+                      <span className="block text-[9px] font-label uppercase tracking-widest text-outline mt-1">Start</span>
                     </div>
-                    <div className="bg-[#201f1f] rounded-xl p-2.5 text-center">
-                      <input type="text" value={row.end} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, end: e.target.value } : r))} placeholder="15 or 15:20" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-[#353534] placeholder:text-xs" />
-                      <span className="block text-[9px] font-label uppercase tracking-widest text-[#a48b83] mt-1">End</span>
+                    <div className="bg-surface-container rounded-xl p-2.5 text-center">
+                      <input type="text" value={row.end} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, end: e.target.value } : r))} placeholder="15 or 15:20" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-surface-container-highest placeholder:text-xs" />
+                      <span className="block text-[9px] font-label uppercase tracking-widest text-outline mt-1">End</span>
                     </div>
-                    <div className="bg-[#201f1f] rounded-xl p-2.5 text-center">
-                      <input type="number" value={row.speed} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, speed: e.target.value } : r))} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-[#353534]" />
-                      <span className="block text-[9px] font-label uppercase tracking-widest text-[#a48b83] mt-1">km/h</span>
+                    <div className="bg-surface-container rounded-xl p-2.5 text-center">
+                      <input type="number" value={row.speed} onChange={e => setSegRows(rows => rows.map((r, ri) => ri === i ? { ...r, speed: e.target.value } : r))} placeholder="0.0" className="w-full bg-transparent text-center font-headline text-base font-black outline-none placeholder:text-surface-container-highest" />
+                      <span className="block text-[9px] font-label uppercase tracking-widest text-outline mt-1">km/h</span>
                     </div>
                     <button
                       onClick={() => setSegRows(rows => rows.filter((_, ri) => ri !== i))}
                       disabled={segRows.length === 1}
-                      className="w-8 h-8 flex items-center justify-center text-[#a48b83] disabled:opacity-30"
+                      className="w-8 h-8 flex items-center justify-center text-outline disabled:opacity-30"
                     >
                       <span className="material-symbols-outlined text-lg">close</span>
                     </button>
@@ -1142,14 +1142,14 @@ function RunDetailSheet({
               </div>
               <button
                 onClick={() => setSegRows(rows => [...rows, { start: '', end: '', speed: '' }])}
-                className="w-full py-2 mb-3 rounded-xl border border-dashed border-[#353534] text-[#a48b83] text-xs font-bold flex items-center justify-center gap-1 hover:bg-[#201f1f] transition-colors"
+                className="w-full py-2 mb-3 rounded-xl border border-dashed border-surface-container-highest text-outline text-xs font-bold flex items-center justify-center gap-1 hover:bg-surface-container transition-colors"
               >
                 <span className="material-symbols-outlined text-sm">add</span>
                 Add segment
               </button>
               {segError && <p className="text-xs text-red-400 mb-3">{segError}</p>}
               <div className="flex gap-2">
-                <button onClick={() => setEditingSegment(false)} className="flex-1 py-2.5 rounded-xl border border-[#353534] text-[#a48b83] text-sm font-bold transition-colors hover:bg-[#201f1f]">Cancel</button>
+                <button onClick={() => setEditingSegment(false)} className="flex-1 py-2.5 rounded-xl border border-surface-container-highest text-outline text-sm font-bold transition-colors hover:bg-surface-container">Cancel</button>
                 <button
                   disabled={segSaving}
                   onClick={async () => {
@@ -1184,7 +1184,7 @@ function RunDetailSheet({
                     setDetail({ ...detail, distance: lastRes.distance ?? null, pace: lastRes.pace ?? null, distanceSamples: lastRes.distanceSamples ?? detail.distanceSamples })
                     setEditingSegment(false)
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-[#4bdece] text-[#003732] text-sm font-bold disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl bg-tertiary text-on-tertiary text-sm font-bold disabled:opacity-50"
                 >
                   {segSaving ? 'Saving…' : segRows.length > 1 ? `Apply ${segRows.length} segments` : 'Apply'}
                 </button>
@@ -1685,7 +1685,7 @@ export default function ProgressPage() {
 
   if (loading) return (
     <main key="loading" className="w-full max-w-[390px] md:max-w-3xl mx-auto min-h-screen flex items-center justify-center">
-      <div className="w-6 h-6 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
     </main>
   )
 
@@ -1708,7 +1708,7 @@ export default function ProgressPage() {
           </button>
           <button
             onClick={() => setTab('cardio')}
-            className={`font-headline text-xl font-bold tracking-tight transition-colors ${tab === 'cardio' ? 'text-[#4bdece]' : 'text-on-surface/30'}`}
+            className={`font-headline text-xl font-bold tracking-tight transition-colors ${tab === 'cardio' ? 'text-tertiary' : 'text-on-surface/30'}`}
           >
             CARDIO
           </button>
@@ -1760,10 +1760,10 @@ export default function ProgressPage() {
               className="bg-surface-container-low p-4 flex justify-between items-center rounded-xl cursor-pointer hover:bg-surface-container-high transition-colors"
             >
               <div>
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#4bdece] mb-1">Activity</p>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-tertiary mb-1">Activity</p>
                 <h2 className="font-headline text-xl font-bold">{cardioActivity}</h2>
               </div>
-              <span className="material-symbols-outlined text-[#4bdece]">expand_more</span>
+              <span className="material-symbols-outlined text-tertiary">expand_more</span>
             </div>
             {cardioOpen && (
               <div className="absolute top-full left-0 right-0 bg-surface-container-high rounded-xl mt-1 z-10 border border-outline-variant/20 overflow-hidden">
@@ -1802,7 +1802,7 @@ export default function ProgressPage() {
               key={m}
               onClick={() => { fadeThen(() => setLiftMetric(m), 'chart'); setHoveredIdx(null) }}
               className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
-                liftMetric === m ? 'bg-primary-container text-[#752805]' : 'bg-surface-container text-on-surface-variant'
+                liftMetric === m ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-on-surface-variant'
               }`}
             >
               {m === 'weight'
@@ -1825,7 +1825,7 @@ export default function ProgressPage() {
               key={m}
               onClick={() => fadeThen(() => setCardioMetric(m), 'chart')}
               className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
-                cardioMetric === m ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
+                cardioMetric === m ? 'bg-tertiary text-on-tertiary' : 'bg-surface-container text-on-surface-variant'
               }`}
             >
               {m === 'pace' ? 'Pace' : 'Distance'}
@@ -1840,11 +1840,11 @@ export default function ProgressPage() {
           <div className="flex flex-col gap-2">
             <div className="h-3 w-32 bg-[#1a1a1a] rounded" />
             <div className="flex gap-2 overflow-hidden">
-              {[0,1,2,3].map(i => <div key={i} className="bg-[#131313] rounded-xl h-[68px] min-w-[80px] shrink-0" />)}
+              {[0,1,2,3].map(i => <div key={i} className="bg-surface rounded-xl h-[68px] min-w-[80px] shrink-0" />)}
             </div>
           </div>
-          <div className="bg-[#131313] rounded-xl h-[180px]" />
-          <div className="bg-[#131313] rounded-xl h-[200px]" />
+          <div className="bg-surface rounded-xl h-[180px]" />
+          <div className="bg-surface rounded-xl h-[200px]" />
         </div>
       )}
 
@@ -1859,17 +1859,17 @@ export default function ProgressPage() {
         }
         return (
           <div className="flex flex-col gap-2">
-            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Best segment PRs</p>
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Best segment PRs</p>
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
               {tiles.map(({ label, rec }) => (
                 <button
                   key={label}
                   onClick={() => rec && setSelectedRunId(rec.cardio_id)}
-                  className="bg-[#131313] rounded-xl px-4 py-3 flex flex-col gap-0.5 shrink-0 active:scale-[0.97] transition-transform text-left min-w-[80px]"
+                  className="bg-surface rounded-xl px-4 py-3 flex flex-col gap-0.5 shrink-0 active:scale-[0.97] transition-transform text-left min-w-[80px]"
                 >
-                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-[#4bdece]">{label}</span>
-                  <span className="text-lg font-black font-headline text-[#e5e2e1] leading-tight">{fmtSec(rec!.seconds)}</span>
-                  <span className="text-[9px] text-[#a48b83]">{formatDate(rec!.date)}</span>
+                  <span className="text-[9px] font-bold font-label uppercase tracking-widest text-tertiary">{label}</span>
+                  <span className="text-lg font-black font-headline text-on-surface leading-tight">{fmtSec(rec!.seconds)}</span>
+                  <span className="text-[9px] text-outline">{formatDate(rec!.date)}</span>
                 </button>
               ))}
             </div>
@@ -1912,17 +1912,17 @@ export default function ProgressPage() {
         const avgY = maxKm > 0 ? 100 - (avgKm / maxKm) * 100 : 100
         const totalKm = weeks.reduce((a, b) => a + b.km, 0)
         return (
-          <div className="bg-[#131313] rounded-xl p-4 flex flex-col gap-4">
+          <div className="bg-surface rounded-xl p-4 flex flex-col gap-4">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">This week</p>
-                <span className="text-3xl font-black font-headline text-[#4bdece]">{thisWeek.toFixed(1)} <span className="text-sm font-normal text-[#a48b83]">km</span></span>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-1">This week</p>
+                <span className="text-3xl font-black font-headline text-tertiary">{thisWeek.toFixed(1)} <span className="text-sm font-normal text-outline">km</span></span>
                 <p className="text-[10px] text-[#5a5a5a] mt-0.5">{totalKm.toFixed(0)} km · 8 wk</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1">vs 7-wk avg</p>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-1">vs 7-wk avg</p>
                 {ratio !== null ? (
-                  <span className={`text-xl font-black font-headline ${ratio > 1.5 ? 'text-orange-400' : ratio < 0.5 ? 'text-red-400' : 'text-[#e5e2e1]'}`}>
+                  <span className={`text-xl font-black font-headline ${ratio > 1.5 ? 'text-orange-400' : ratio < 0.5 ? 'text-red-400' : 'text-on-surface'}`}>
                     {ratio >= 1 ? '+' : ''}{Math.round((ratio - 1) * 100)}%
                   </span>
                 ) : (
@@ -1936,7 +1936,7 @@ export default function ProgressPage() {
               {/* Avg dashed line overlay (positioned in the bar area, which is 96px tall) */}
               {avgKm > 0 && (
                 <div
-                  className="absolute left-0 right-0 border-t border-dashed border-[#4bdece]/40 z-10 pointer-events-none"
+                  className="absolute left-0 right-0 border-t border-dashed border-tertiary/40 z-10 pointer-events-none"
                   style={{ top: `${avgY}%`, height: 0 }}
                 />
               )}
@@ -1948,12 +1948,12 @@ export default function ProgressPage() {
                   return (
                     <div key={w.weekStart} className="flex-1 h-full flex flex-col justify-end items-center gap-1">
                       {!isEmpty && (
-                        <span className={`text-[9px] font-bold font-headline ${isCurrent ? 'text-[#4bdece]' : 'text-[#a48b83]'}`}>
+                        <span className={`text-[9px] font-bold font-headline ${isCurrent ? 'text-tertiary' : 'text-outline'}`}>
                           {w.km.toFixed(0)}
                         </span>
                       )}
                       <div
-                        className={`w-full rounded-t-sm transition-colors ${isCurrent ? 'bg-[#4bdece]' : isEmpty ? 'bg-[#2a2a2a]' : 'bg-[#4bdece]/40'}`}
+                        className={`w-full rounded-t-sm transition-colors ${isCurrent ? 'bg-tertiary' : isEmpty ? 'bg-surface-container-high' : 'bg-tertiary/40'}`}
                         style={{ height: isEmpty ? '2px' : `${heightPct}%` }}
                         title={`${w.weekStart}: ${w.km.toFixed(1)} km · ${w.sessions} ${sessionWord}${w.sessions === 1 ? '' : 's'}`}
                       />
@@ -2005,9 +2005,9 @@ export default function ProgressPage() {
         const zoneColors = ['#5b8def', '#4bdece', '#a0e857', '#ffb84d', '#ff6b6b']
         const zoneLabels = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
         return (
-          <div className="bg-[#131313] rounded-xl p-4 flex flex-col gap-3">
+          <div className="bg-surface rounded-xl p-4 flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Time in HR zones · last 8 wk</p>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Time in HR zones · last 8 wk</p>
               <p className="text-[9px] text-[#5a5a5a]">HRmax {cardioInsights.userHrMax || '—'}</p>
             </div>
             <div>
@@ -2021,7 +2021,7 @@ export default function ProgressPage() {
                       {total > 0 && (() => {
                         const mins = Math.round(total / 60)
                         const label = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
-                        return <span className="text-[9px] font-bold font-headline text-[#a48b83]">{label}</span>
+                        return <span className="text-[9px] font-bold font-headline text-outline">{label}</span>
                       })()}
                       <div className="w-full relative rounded-t-sm overflow-hidden" style={{ height: `${heightPct}%`, minHeight: total > 0 ? '3px' : '2px', backgroundColor: total > 0 ? undefined : '#2a2a2a' }}>
                         {total > 0 && zones.map((z, zi) => {
@@ -2051,7 +2051,7 @@ export default function ProgressPage() {
               {zoneLabels.map((l, i) => (
                 <div key={l} className="flex items-center gap-1">
                   <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: zoneColors[i] }} />
-                  <span className="text-[10px] font-bold font-label text-[#a48b83]">{l}</span>
+                  <span className="text-[10px] font-bold font-label text-outline">{l}</span>
                 </div>
               ))}
             </div>
@@ -2082,7 +2082,7 @@ export default function ProgressPage() {
                 onClick={() => { fadeThen(() => setChartRange(r), 'chart'); setHoveredIdx(null) }}
                 className={`px-2 py-1 rounded-full text-[10px] font-bold font-label uppercase tracking-widest transition-colors ${
                   chartRange === r
-                    ? tab === 'lifts' ? 'bg-primary-container/30 text-primary-container' : 'bg-[#4bdece]/20 text-[#4bdece]'
+                    ? tab === 'lifts' ? 'bg-primary-container/30 text-primary-container' : 'bg-tertiary/20 text-tertiary'
                     : 'text-on-surface-variant/40'
                 }`}
               >
@@ -2120,7 +2120,7 @@ export default function ProgressPage() {
                     : liftMetric === 'weight' ? 'kg peak' : 'kg vol peak'}
                 </span>
                 {liftMetric === 'topReps' && pt?.topWeight != null && (
-                  <span className="text-[10px] text-[#56423c] mt-0.5">@ {pt.topWeight}kg</span>
+                  <span className="text-[10px] text-outline-variant mt-0.5">@ {pt.topWeight}kg</span>
                 )}
               </div>
             )
@@ -2133,7 +2133,7 @@ export default function ProgressPage() {
               : pt.value.toFixed(1)
             return (
               <div className="absolute top-4 right-6 flex flex-col items-end">
-                <span className="text-3xl font-black font-headline text-[#4bdece] leading-none">{display}</span>
+                <span className="text-3xl font-black font-headline text-tertiary leading-none">{display}</span>
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
                   {hoveredIdx !== null ? formatDate(pt.date) : cardioMetric === 'pace' ? 'best pace' : 'km peak'}
                 </span>
@@ -2152,7 +2152,7 @@ export default function ProgressPage() {
           )}
           {tab === 'cardio' && cardioTrend !== null && (
             <div className={`absolute top-4 left-6 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
-              cardioTrend >= 0 ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'bg-red-500/20 text-red-400'
+              cardioTrend >= 0 ? 'bg-tertiary/20 text-tertiary' : 'bg-red-500/20 text-red-400'
             }`}>
               <span className="material-symbols-outlined text-[12px]">{cardioTrend >= 0 ? 'trending_up' : 'trending_down'}</span>
               {Math.abs(cardioTrend).toFixed(0)}% {cardioTrend >= 0 ? 'better' : 'worse'}
@@ -2367,7 +2367,7 @@ export default function ProgressPage() {
                       key={s}
                       onClick={() => fadeThen(() => setCardioSort(s), 'list')}
                       className={`px-2 py-1 rounded-lg text-[10px] font-bold font-label uppercase tracking-wide transition-colors ${
-                        cardioSort === s ? 'bg-[#4bdece]/20 text-[#4bdece]' : 'text-on-surface-variant/40'
+                        cardioSort === s ? 'bg-tertiary/20 text-tertiary' : 'text-on-surface-variant/40'
                       }`}
                     >
                       {s === 'date' ? 'Date' : s === 'distance' ? 'Dist' : 'Pace'}
@@ -2393,7 +2393,7 @@ export default function ProgressPage() {
                 key={s}
                 onClick={() => { fadeThen(() => setRunSubFilter(s), 'both'); setSelectedIds(new Set()) }}
                 className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
-                  runSubFilter === s ? 'bg-[#4bdece] text-[#003732]' : 'bg-surface-container text-on-surface-variant'
+                  runSubFilter === s ? 'bg-tertiary text-on-tertiary' : 'bg-surface-container text-on-surface-variant'
                 }`}
               >
                 {s === 'all' ? 'All' : s === 'run' ? 'Regular' : 'Interval'}
@@ -2424,7 +2424,7 @@ export default function ProgressPage() {
                   body: JSON.stringify({ ids, activity: newActivity }),
                 })
               }}
-              className="flex-1 py-3 rounded-xl bg-[#4bdece]/10 border border-[#4bdece]/30 text-[#4bdece] text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-[#4bdece]/20"
+              className="flex-1 py-3 rounded-xl bg-tertiary/10 border border-tertiary/30 text-tertiary text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-tertiary/20"
             >
               <span className="material-symbols-outlined text-base">timer</span>
               {(() => {
@@ -2489,7 +2489,7 @@ export default function ProgressPage() {
                             </span>
                           </span>
                           {isPb && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-primary-container text-[#752805] uppercase tracking-wide">PB</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-primary-container text-on-primary-container uppercase tracking-wide">PB</span>
                           )}
                         </div>
                       </div>
@@ -2515,7 +2515,7 @@ export default function ProgressPage() {
                             <button
                               key={j}
                               onClick={() => r.id && setEditSetModal({ id: r.id, weight: r.weight, reps: r.reps, duration_secs: r.duration_secs ?? null })}
-                              className={`bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg transition-colors ${r.id ? 'hover:bg-[#2a2a2a] active:scale-95' : ''}`}
+                              className={`bg-surface-container-high text-on-surface-variant text-xs px-2.5 py-1 rounded-lg transition-colors ${r.id ? 'hover:bg-surface-container-high active:scale-95' : ''}`}
                             >
                               {exerciseType === 'timed' ? (
                                 <span className="text-on-surface">{fmtDuration(r.duration_secs ?? 0)}</span>
@@ -2573,12 +2573,12 @@ export default function ProgressPage() {
                       }
                     }}
                     className={`w-full p-5 flex justify-between items-start transition-all rounded-lg text-left ${isFading ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'} ${
-                      isSelected ? 'bg-red-950/30 border border-red-900/40' : `bg-surface-container hover:bg-surface-container-high active:scale-[0.99] ${isFastest ? 'border border-[#4bdece]/30' : ''}`
+                      isSelected ? 'bg-red-950/30 border border-red-900/40' : `bg-surface-container hover:bg-surface-container-high active:scale-[0.99] ${isFastest ? 'border border-tertiary/30' : ''}`
                     }`}
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {selectMode && (
-                        <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-red-500 border-red-500' : 'border-[#a48b83]'}`}>
+                        <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-red-500 border-red-500' : 'border-outline'}`}>
                           {isSelected && <span className="material-symbols-outlined text-white text-xs">check</span>}
                         </div>
                       )}
@@ -2603,7 +2603,7 @@ export default function ProgressPage() {
                           {s.distance ? `${s.distance} km` : s.duration ?? s.activity}
                         </span>
                         {isFastest && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-[#4bdece] text-[#003732] uppercase tracking-wide">Fastest</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black font-label bg-tertiary text-on-tertiary uppercase tracking-wide">Fastest</span>
                         )}
                       </div>
                     </div>
@@ -2612,7 +2612,7 @@ export default function ProgressPage() {
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} /></p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
-                      {s.heart_rate && <p className="text-xs text-[#ff9066]">♥ {s.heart_rate} avg</p>}
+                      {s.heart_rate && <p className="text-xs text-primary-container">♥ {s.heart_rate} avg</p>}
                     </div>
                   </button>
                 )
@@ -2783,34 +2783,34 @@ export default function ProgressPage() {
       {editSetModal && (
         <>
           <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm" onClick={() => setEditSetModal(null)} />
-          <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-5 pb-10 animate-slide-up">
+          <div className="fixed bottom-0 inset-x-0 max-w-[390px] mx-auto z-50 bg-surface-sheet rounded-t-3xl px-5 pt-5 pb-10 animate-slide-up">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Edit set</p>
-              <button onClick={() => setEditSetModal(null)}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Edit set</p>
+              <button onClick={() => setEditSetModal(null)}><span className="material-symbols-outlined text-outline">close</span></button>
             </div>
             <div className="flex justify-center gap-10 mb-6">
               {exerciseType === 'timed' ? (
                 <div className="flex flex-col items-center gap-3">
-                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Duration</p>
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Duration</p>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setEditSetModal(m => m ? {...m, duration_secs: Math.max(0, (m.duration_secs ?? 0) - 15)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <button onClick={() => setEditSetModal(m => m ? {...m, duration_secs: Math.max(0, (m.duration_secs ?? 0) - 15)} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                       <span className="material-symbols-outlined text-sm">remove</span>
                     </button>
                     <span className="font-headline text-2xl font-black w-20 text-center">{fmtDuration(editSetModal.duration_secs ?? 0)}</span>
-                    <button onClick={() => setEditSetModal(m => m ? {...m, duration_secs: (m.duration_secs ?? 0) + 15} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <button onClick={() => setEditSetModal(m => m ? {...m, duration_secs: (m.duration_secs ?? 0) + 15} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                       <span className="material-symbols-outlined text-sm">add</span>
                     </button>
                   </div>
                 </div>
               ) : exerciseType === 'bodyweight' ? (
                 <div className="flex flex-col items-center gap-3">
-                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Reps</p>
+                  <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Reps</p>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                       <span className="material-symbols-outlined text-sm">remove</span>
                     </button>
                     <span className="font-headline text-2xl font-black w-10 text-center">{editSetModal.reps}</span>
-                    <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                    <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                       <span className="material-symbols-outlined text-sm">add</span>
                     </button>
                   </div>
@@ -2818,25 +2818,25 @@ export default function ProgressPage() {
               ) : (
                 <>
                   <div className="flex flex-col items-center gap-3">
-                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Weight kg</p>
+                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Weight kg</p>
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setEditSetModal(m => m ? {...m, weight: Math.max(0, +(m.weight - 2.5).toFixed(1))} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => setEditSetModal(m => m ? {...m, weight: Math.max(0, +(m.weight - 2.5).toFixed(1))} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
                       <span className="font-headline text-2xl font-black w-16 text-center">{editSetModal.weight}</span>
-                      <button onClick={() => setEditSetModal(m => m ? {...m, weight: +(m.weight + 2.5).toFixed(1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => setEditSetModal(m => m ? {...m, weight: +(m.weight + 2.5).toFixed(1)} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-3">
-                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Reps</p>
+                    <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Reps</p>
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => setEditSetModal(m => m ? {...m, reps: Math.max(1, m.reps - 1)} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">remove</span>
                       </button>
                       <span className="font-headline text-2xl font-black w-10 text-center">{editSetModal.reps}</span>
-                      <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-[#353534] flex items-center justify-center active:scale-90 transition-transform">
+                      <button onClick={() => setEditSetModal(m => m ? {...m, reps: m.reps + 1} : m)} className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center active:scale-90 transition-transform">
                         <span className="material-symbols-outlined text-sm">add</span>
                       </button>
                     </div>
@@ -2844,7 +2844,7 @@ export default function ProgressPage() {
                 </>
               )}
             </div>
-            <button onClick={saveEditSet} className="w-full py-3.5 bg-[#ff9066] text-[#752805] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
+            <button onClick={saveEditSet} className="w-full py-3.5 bg-primary-container text-on-primary-container rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform">
               Save
             </button>
           </div>

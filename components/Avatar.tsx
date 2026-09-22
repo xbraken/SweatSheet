@@ -19,13 +19,13 @@ export default function Avatar({ username, avatar, size = 'md', className = '' }
       <img
         src={avatar}
         alt={username}
-        className={`${sizeClass} rounded-full object-cover border-[#ff9066]/20 shrink-0 ${className}`}
+        className={`${sizeClass} rounded-full object-cover border-primary-container/20 shrink-0 ${className}`}
       />
     )
   }
   return (
-    <div className={`${sizeClass} rounded-full bg-[#2a2a2a] flex items-center justify-center border-[#ff9066]/20 shrink-0 ${className}`}>
-      <span className="font-headline font-black text-[#ffb9a0]">{username.slice(0, 2).toUpperCase()}</span>
+    <div className={`${sizeClass} rounded-full bg-surface-container-high flex items-center justify-center border-primary-container/20 shrink-0 ${className}`}>
+      <span className="font-headline font-black text-primary">{username.slice(0, 2).toUpperCase()}</span>
     </div>
   )
 }

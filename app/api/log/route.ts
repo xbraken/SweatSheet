@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { userToday } from '@/lib/tz'
 
 await initDb()
+
+function validRpe(v: unknown): number | null {
+  const n = Number(v)
+  return v != null && Number.isFinite(n) && n >= 1 && n <= 10 ? Math.round(n * 2) / 2 : null
+}
 
 /** GET — return logged blocks for a given date (defaults to today) */
 export async function GET(req: NextRequest) {
@@ -10,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const today = searchParams.get('date') ?? new Date().toISOString().split('T')[0]
+  const today = await userToday(searchParams.get('date'))
   const includeAll = searchParams.get('include') === 'all'
 
   // lastSession: return exercises from the most recent past session
@@ -54,7 +60,7 @@ export async function GET(req: NextRequest) {
       args: [session.userId, today],
     }),
     db.execute({
-      sql: `SELECT st.id, st.block_id, st.weight, st.reps, st.duration_secs
+      sql: `SELECT st.id, st.block_id, st.weight, st.reps, st.duration_secs, st.is_warmup, st.rpe
             FROM sets st
             JOIN blocks b ON st.block_id = b.id
             JOIN sessions s ON b.session_id = s.id
@@ -89,7 +95,7 @@ export async function GET(req: NextRequest) {
                   FROM sets st
                   JOIN blocks b ON st.block_id = b.id
                   JOIN sessions s ON b.session_id = s.id
-                  WHERE s.user_id = ?
+                  WHERE s.user_id = ? AND COALESCE(st.is_warmup, 0) = 0
                 ) WHERE rn = 1
                 ORDER BY exercise`,
           args: [session.userId],
@@ -104,7 +110,7 @@ export async function GET(req: NextRequest) {
                   (SELECT st2.reps FROM sets st2
                    JOIN blocks b2 ON st2.block_id = b2.id
                    JOIN sessions s2 ON b2.session_id = s2.id
-                   WHERE st2.exercise = p.exercise AND st2.weight = p.pr_weight AND s2.user_id = ?
+                   WHERE st2.exercise = p.exercise AND st2.weight = p.pr_weight AND s2.user_id = ? AND COALESCE(st2.is_warmup, 0) = 0
                    ORDER BY st2.reps DESC LIMIT 1) as pr_reps,
                   p.pr_duration, p.pr_volume, p.pr_reps_total, p.pr_duration_total, p.pr_e1rm
                 FROM (
@@ -120,7 +126,7 @@ export async function GET(req: NextRequest) {
                     FROM sets st
                     JOIN blocks b ON st.block_id = b.id
                     JOIN sessions s ON b.session_id = s.id
-                    WHERE s.user_id = ?
+                    WHERE s.user_id = ? AND COALESCE(st.is_warmup, 0) = 0
                     GROUP BY st.exercise, s.id
                   )
                   GROUP BY exercise
@@ -133,11 +139,16 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ rows: [] }),
   ])
 
-  const setsByBlock: Record<number, {id: number; weight: number; reps: number; duration_secs: number | null}[]> = {}
+  const setsByBlock: Record<number, {id: number; weight: number; reps: number; duration_secs: number | null; is_warmup: boolean; rpe: number | null}[]> = {}
   for (const r of setsRes.rows) {
     const bid = r.block_id as number
     if (!setsByBlock[bid]) setsByBlock[bid] = []
-    setsByBlock[bid].push({ id: r.id as number, weight: Number(r.weight), reps: Number(r.reps), duration_secs: r.duration_secs != null ? Number(r.duration_secs) : null })
+    setsByBlock[bid].push({
+      id: r.id as number, weight: Number(r.weight), reps: Number(r.reps),
+      duration_secs: r.duration_secs != null ? Number(r.duration_secs) : null,
+      is_warmup: Number(r.is_warmup ?? 0) === 1,
+      rpe: r.rpe != null ? Number(r.rpe) : null,
+    })
   }
 
   return NextResponse.json({
@@ -170,9 +181,20 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const today = new Date().toISOString().split('T')[0]
+  // Client sends its local date so late-evening / offline-queued saves land on the right day
+  const today = await userToday(body.date)
+  const clientId = typeof body.client_id === 'string' ? body.client_id.slice(0, 64) : null
 
   try {
+    // Offline-queue retry whose first attempt already landed — don't duplicate
+    if (clientId) {
+      const dup = await db.execute({
+        sql: `SELECT b.id FROM blocks b JOIN sessions s ON b.session_id = s.id WHERE b.client_id = ? AND s.user_id = ?`,
+        args: [clientId, session.userId],
+      })
+      if (dup.rows.length > 0) return NextResponse.json({ ok: true, blockId: dup.rows[0].id, duplicate: true })
+    }
+
     // Find or create today's session
     let sessionId: number
     const existing = await db.execute({
@@ -204,45 +226,69 @@ export async function POST(req: NextRequest) {
       }
 
       const blockRes = await db.execute({
-        sql: 'INSERT INTO blocks (session_id, type, position, notes) VALUES (?, ?, ?, ?) RETURNING id',
-        args: [sessionId, 'lift', position, notes || null],
+        sql: 'INSERT INTO blocks (session_id, type, position, notes, client_id) VALUES (?, ?, ?, ?, ?) RETURNING id',
+        args: [sessionId, 'lift', position, notes || null, clientId],
       })
       const blockId = blockRes.rows[0].id as number
 
-      await Promise.all(doneSets.map((s: { weight: number; reps: number; duration_secs?: number }, j: number) =>
+      type IncomingSet = { weight: number; reps: number; duration_secs?: number; warmup?: boolean; rpe?: number | null }
+      await Promise.all(doneSets.map((s: IncomingSet, j: number) =>
         db.execute({
-          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at, duration_secs) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?)',
-          args: [blockId, exercise, s.weight, s.reps, j, s.duration_secs ?? null],
+          sql: 'INSERT INTO sets (block_id, exercise, weight, reps, position, logged_at, duration_secs, is_warmup, rpe) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?, ?, ?)',
+          args: [blockId, exercise, s.weight, s.reps, j, s.duration_secs ?? null, s.warmup ? 1 : 0, validRpe(s.rpe)],
         })
       ))
+
+      // Warm-ups never count towards PRs
+      const workSets = (doneSets as IncomingSet[]).filter(s => !s.warmup)
 
       // PR detection — skip for bodyweight, use duration for timed, weight for weights
       let isPr = false
       let prValue = 0
-      if (exerciseType === 'timed') {
-        const maxDur = Math.max(...doneSets.map((s: { duration_secs?: number }) => s.duration_secs ?? 0))
+      let prReps: number | null = null
+      if (workSets.length === 0) {
+        // nothing to compare
+      } else if (exerciseType === 'timed') {
+        const maxDur = Math.max(...workSets.map(s => s.duration_secs ?? 0))
         const prevMax = await db.execute({
           sql: `SELECT MAX(st.duration_secs) as max_d FROM sets st
                 JOIN blocks b ON st.block_id = b.id
                 JOIN sessions s ON b.session_id = s.id
-                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ?`,
+                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ? AND COALESCE(st.is_warmup, 0) = 0`,
           args: [exercise, session.userId, blockId],
         })
         const prev = prevMax.rows[0].max_d as number | null
         isPr = prev === null || maxDur > prev
         prValue = maxDur
       } else if (exerciseType !== 'bodyweight') {
-        const maxNew = Math.max(...doneSets.map((s: { weight: number }) => s.weight))
+        const maxNew = Math.max(...workSets.map(s => s.weight))
+        prReps = Math.max(...workSets.filter(s => s.weight === maxNew).map(s => s.reps))
         const prevMax = await db.execute({
           sql: `SELECT MAX(st.weight) as max_w FROM sets st
                 JOIN blocks b ON st.block_id = b.id
                 JOIN sessions s ON b.session_id = s.id
-                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ?`,
+                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ? AND COALESCE(st.is_warmup, 0) = 0`,
           args: [exercise, session.userId, blockId],
         })
         const prev = prevMax.rows[0].max_w as number | null
         isPr = prev === null || maxNew > prev
         prValue = maxNew
+      }
+
+      // Record the PR so friends see it in the feed. The very first time an exercise
+      // is logged is technically a PR too, but it's noise in a feed — skip those.
+      if (isPr && prValue > 0) {
+        const hadHistory = await db.execute({
+          sql: `SELECT 1 FROM sets st JOIN blocks b ON st.block_id = b.id JOIN sessions s ON b.session_id = s.id
+                WHERE st.exercise = ? AND s.user_id = ? AND b.id != ? LIMIT 1`,
+          args: [exercise, session.userId, blockId],
+        })
+        if (hadHistory.rows.length > 0) {
+          await db.execute({
+            sql: 'INSERT INTO prs (user_id, session_id, block_id, exercise, kind, value, reps) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            args: [session.userId, sessionId, blockId, exercise, exerciseType === 'timed' ? 'duration' : 'weight', prValue, prReps],
+          })
+        }
       }
 
       return NextResponse.json({ ok: true, blockId, isPr, exercise, weight: prValue })
@@ -252,8 +298,8 @@ export async function POST(req: NextRequest) {
       const blockType = activity === 'Cycling' ? 'cycle' : 'run'
 
       const blockRes = await db.execute({
-        sql: 'INSERT INTO blocks (session_id, type, position, notes) VALUES (?, ?, ?, ?) RETURNING id',
-        args: [sessionId, blockType, position, notes || null],
+        sql: 'INSERT INTO blocks (session_id, type, position, notes, client_id) VALUES (?, ?, ?, ?, ?) RETURNING id',
+        args: [sessionId, blockType, position, notes || null, clientId],
       })
       const blockId = blockRes.rows[0].id as number
 
@@ -279,7 +325,7 @@ export async function PATCH(req: NextRequest) {
 
   // Session notes
   if ('sessionNotes' in body) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = await userToday(body.date)
     const existing = await db.execute({
       sql: 'SELECT id FROM sessions WHERE user_id = ? AND date = ? LIMIT 1',
       args: [session.userId, today],
@@ -352,6 +398,7 @@ export async function DELETE(req: NextRequest) {
   await Promise.all([
     db.execute({ sql: 'DELETE FROM sets WHERE block_id = ?', args: [blockId] }),
     db.execute({ sql: 'DELETE FROM cardio WHERE block_id = ?', args: [blockId] }),
+    db.execute({ sql: 'DELETE FROM prs WHERE block_id = ?', args: [blockId] }),
   ])
   await db.execute({ sql: 'DELETE FROM blocks WHERE id = ?', args: [blockId] })
 
