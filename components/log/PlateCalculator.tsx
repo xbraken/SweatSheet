@@ -13,16 +13,16 @@ const PLATE_STYLE: Record<number, { bg: string; h: number }> = {
   1.25: { bg: '#56423c', h: 34 },
 }
 
-export default function PlateCalculator({ weightKg, isLbs, onClose }: { weightKg: number; isLbs: boolean; onClose: () => void }) {
+export default function PlateCalculator({ weightKg, isLbs, exercise, onClose }: { weightKg: number; isLbs: boolean; exercise?: string; onClose: () => void }) {
   const bars = isLbs ? LB_BARS : KG_BARS
-  const [bar, setBar] = useState(() => loadBar(isLbs))
+  const [bar, setBar] = useState(() => loadBar(isLbs, exercise))
   const total = isLbs ? Math.round(weightKg * 2.20462 * 10) / 10 : weightKg
   const unit = isLbs ? 'lbs' : 'kg'
   const { plates, remainder } = useMemo(() => platesPerSide(total, bar, isLbs ? LB_PLATES : KG_PLATES), [total, bar, isLbs])
 
   const pickBar = (b: number) => {
     setBar(b)
-    saveBar(isLbs, b)
+    saveBar(isLbs, b, exercise)
   }
 
   return (
@@ -46,7 +46,7 @@ export default function PlateCalculator({ weightKg, isLbs, onClose }: { weightKg
               className={`px-3 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
                 bar === b ? 'bg-primary-container/20 text-primary-container' : 'bg-surface-container text-outline'
               }`}
-            >{b} {unit}</button>
+            >{b === 0 ? 'None' : `${b} ${unit}`}</button>
           ))}
         </div>
 
@@ -68,7 +68,7 @@ export default function PlateCalculator({ weightKg, isLbs, onClose }: { weightKg
         {total < bar ? (
           <p className="text-sm text-outline text-center">That&apos;s lighter than the bar.</p>
         ) : plates.length === 0 ? (
-          <p className="text-sm text-outline text-center">Just the bar.</p>
+          <p className="text-sm text-outline text-center">{bar === 0 ? 'No plates needed.' : 'Just the bar.'}</p>
         ) : (
           <div className="flex flex-wrap gap-2 justify-center">
             {Object.entries(plates.reduce<Record<string, number>>((acc, p) => { acc[p] = (acc[p] ?? 0) + 1; return acc }, {}))

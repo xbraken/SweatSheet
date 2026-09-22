@@ -1738,7 +1738,7 @@ export default function LogPage() {
                     const plan = suggestionFor(view.exercise, 'weights')
                     if (!plan) return null
                     const targetKg = plan.suggestion.weight
-                    const w = warmupSet(kgToDisplay(targetKg), isLbs, barbell ? loadBar(isLbs) : undefined)
+                    const w = warmupSet(kgToDisplay(targetKg), isLbs, barbell ? loadBar(isLbs, view.exercise) : undefined)
                     if (!w) return null
                     const text = (
                       <>
@@ -1760,7 +1760,7 @@ export default function LogPage() {
             </div>
           )}
         </ExerciseShell>
-        {plateCalcKg !== null && <PlateCalculator weightKg={plateCalcKg} isLbs={isLbs} onClose={() => setPlateCalcKg(null)} />}
+        {plateCalcKg !== null && <PlateCalculator weightKg={plateCalcKg} isLbs={isLbs} exercise={view.exercise} onClose={() => setPlateCalcKg(null)} />}
       </>
     )
   }
