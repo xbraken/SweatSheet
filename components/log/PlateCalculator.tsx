@@ -1,11 +1,6 @@
 'use client'
 import { useMemo, useState } from 'react'
-import { platesPerSide } from '@/lib/plates'
-
-const KG_PLATES = [25, 20, 15, 10, 5, 2.5, 1.25]
-const LB_PLATES = [45, 35, 25, 10, 5, 2.5]
-const KG_BARS = [20, 15, 10]
-const LB_BARS = [45, 35, 15]
+import { KG_BARS, KG_PLATES, LB_BARS, LB_PLATES, loadBar, platesPerSide, saveBar } from '@/lib/plates'
 
 // Competition-ish colours so the picture reads at a glance
 const PLATE_STYLE: Record<number, { bg: string; h: number }> = {
@@ -20,20 +15,14 @@ const PLATE_STYLE: Record<number, { bg: string; h: number }> = {
 
 export default function PlateCalculator({ weightKg, isLbs, onClose }: { weightKg: number; isLbs: boolean; onClose: () => void }) {
   const bars = isLbs ? LB_BARS : KG_BARS
-  const [bar, setBar] = useState(() => {
-    try {
-      const saved = Number(localStorage.getItem(isLbs ? 'ss_bar_lb' : 'ss_bar_kg'))
-      if (bars.includes(saved)) return saved
-    } catch { /* storage blocked */ }
-    return bars[0]
-  })
+  const [bar, setBar] = useState(() => loadBar(isLbs))
   const total = isLbs ? Math.round(weightKg * 2.20462 * 10) / 10 : weightKg
   const unit = isLbs ? 'lbs' : 'kg'
   const { plates, remainder } = useMemo(() => platesPerSide(total, bar, isLbs ? LB_PLATES : KG_PLATES), [total, bar, isLbs])
 
   const pickBar = (b: number) => {
     setBar(b)
-    try { localStorage.setItem(isLbs ? 'ss_bar_lb' : 'ss_bar_kg', String(b)) } catch { /* storage blocked */ }
+    saveBar(isLbs, b)
   }
 
   return (
