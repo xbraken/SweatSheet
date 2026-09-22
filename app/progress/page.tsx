@@ -1338,13 +1338,12 @@ export default function ProgressPage() {
         : (baseActivities.find(a => a === 'Run') ?? baseActivities[0] ?? '')
       setCardioActivity(restoredActivity)
 
-      // Restore saved exercise if still valid, else pick first
-      const restoredExercise = savedExercise && (data.exercises ?? []).includes(savedExercise)
-        ? savedExercise
-        : data.exercises?.[0] ?? ''
+      // Restore saved exercise if still valid, else the one trained most recently/often
+      const savedValid = !!savedExercise && (data.exercises ?? []).includes(savedExercise)
+      const restoredExercise = savedValid ? savedExercise! : (data.topExercise ?? data.exercises?.[0] ?? '')
       if (restoredExercise) {
-        // Skip the exercise useEffect re-fetch — we already have the data
-        skipNextExerciseFetch.current = true
+        // Only skip the exercise re-fetch when the initial request already included it
+        if (savedValid) skipNextExerciseFetch.current = true
         setExercise(restoredExercise)
       }
       setLoading(false)
@@ -1508,6 +1507,8 @@ export default function ProgressPage() {
     const pts: Array<{ date: string; value: number; raw: CardioEntry }> = []
     for (const e of cardioChartData) {
       const paceSec = toSeconds(e.pace)
+      // Very short entries (walks, warm-up jogs, GPS blips) swing pace wildly — keep them off the pace chart
+      if (cardioMetric === 'pace' && (!e.distance || parseFloat(e.distance) < 2)) continue
       const v = cardioMetric === 'pace'
         ? (paceSec == null ? null : speedMode ? paceToKmh(paceSec) : paceSec)
         : (e.distance ? parseFloat(e.distance) : null)
@@ -1518,8 +1519,17 @@ export default function ProgressPage() {
   const cardioValues = useMemo(() => cardioChartPts.map(p => p.value), [cardioChartPts])
 
   const cardioInvert = cardioMetric === 'pace' && !speedMode
-  const cardioSvgPts = cardioValues.length > 1 ? buildSvgPoints(cardioValues, cardioInvert) : null
-  const cardioTrend = useMemo(() => trendPercent(cardioValues, cardioInvert), [cardioValues, cardioInvert])
+  // Pace/speed line is a rolling median of 5 runs so one hilly or tired day doesn't spike the chart.
+  // Hover still reads the actual run; peak/best uses the raw values.
+  const cardioLine = useMemo(() => {
+    if (cardioMetric !== 'pace' || cardioValues.length < 8) return cardioValues
+    return cardioValues.map((_, i) => {
+      const w = cardioValues.slice(Math.max(0, i - 2), i + 3).sort((a, b) => a - b)
+      return w[Math.floor(w.length / 2)]
+    })
+  }, [cardioValues, cardioMetric])
+  const cardioSvgPts = cardioLine.length > 1 ? buildSvgPoints(cardioLine, cardioInvert) : null
+  const cardioTrend = useMemo(() => trendPercent(cardioLine, cardioInvert), [cardioLine, cardioInvert])
   const liftTrend = useMemo(() => trendPercent(liftPts), [liftPts])
 
   // Default dot position = peak value in the visible range, not the last point
@@ -1920,7 +1930,7 @@ export default function ProgressPage() {
                 <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Warm-up heart rate</p>
                 <p className="mt-1">
                   <span className="text-3xl font-black font-headline text-tertiary">{hIdx != null ? values[hIdx] : t.current}</span>
-                  <span className="text-xs text-outline ml-1">bpm in your interval warm-up</span>
+                  <span className="text-sm text-outline ml-1">bpm</span>
                 </p>
                 <p className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
                   {hIdx != null ? formatDate(t.smoothed[hIdx].date) : 'now'}
@@ -2063,16 +2073,24 @@ export default function ProgressPage() {
                 <span className="text-3xl font-black font-headline text-tertiary">{thisWeek.toFixed(1)} <span className="text-sm font-normal text-outline">km</span></span>
                 <p className="text-[10px] text-[#5a5a5a] mt-0.5">{totalKm.toFixed(0)} km · 8 wk</p>
               </div>
+              {/* The current week is still in progress, so a % vs full weeks always looks bad early on.
+                  Show the weekly average and what's left to match it; only flag a genuinely big jump. */}
               <div className="text-right">
-                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-1">vs 7-wk avg</p>
-                {ratio !== null ? (
-                  <span className={`text-xl font-black font-headline ${ratio > 1.5 ? 'text-orange-400' : ratio < 0.5 ? 'text-red-400' : 'text-on-surface'}`}>
-                    {ratio >= 1 ? '+' : ''}{Math.round((ratio - 1) * 100)}%
-                  </span>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-1">7-wk avg</p>
+                {baseline > 0 ? (
+                  <>
+                    <span className="text-xl font-black font-headline text-on-surface">{baseline.toFixed(1)} <span className="text-xs font-normal text-outline">km</span></span>
+                    {ratio !== null && ratio > 1.5 ? (
+                      <p className="text-[10px] font-bold text-orange-400">+{Math.round((ratio - 1) * 100)}% — big jump</p>
+                    ) : thisWeek >= baseline ? (
+                      <p className="text-[10px] font-bold text-tertiary">Average reached ✓</p>
+                    ) : (
+                      <p className="text-[10px] text-outline">{(baseline - thisWeek).toFixed(1)} km to match</p>
+                    )}
+                  </>
                 ) : (
                   <span className="text-sm text-[#5a5a5a]">no baseline</span>
                 )}
-                <p className="text-[9px] text-[#5a5a5a]">avg {baseline.toFixed(1)} km</p>
               </div>
             </div>
 
@@ -2355,7 +2373,7 @@ export default function ProgressPage() {
             cardioSvgPts ? (() => {
               const hIdx = hoveredIdx ?? cardioPeakIdx
               const hX = (hIdx / Math.max(cardioChartPts.length - 1, 1)) * 300
-              const hY = ptY(cardioValues, cardioValues[hIdx], cardioInvert)
+              const hY = ptY(cardioLine, cardioLine[hIdx], cardioInvert)
               return (
               <svg
                 className="w-full h-32 drop-shadow-[0_0_8px_rgba(75,222,206,0.3)]"

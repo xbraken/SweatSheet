@@ -55,3 +55,35 @@ export function paceToKmh(paceSec: number): number {
 export function usesSpeed(activity: string | null | undefined): boolean {
   return activity === 'Cycling'
 }
+
+/** "43" (bare number = minutes), "43:04", "1:02:08" → seconds */
+export function durationToSec(d: string | null | undefined): number | null {
+  if (!d) return null
+  const parts = String(d).split(':').map(Number)
+  if (parts.some(isNaN)) return null
+  if (parts.length === 1) return parts[0] * 60
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return null
+}
+
+/** Display a stored duration: bare minutes get a unit ("43 min"); clock formats are kept */
+export function fmtDuration(d: string | null | undefined): string | null {
+  if (!d) return null
+  return /^\d+$/.test(String(d).trim()) ? `${Number(d)} min` : String(d)
+}
+
+/** "19.0 km · 43 min · 26.5 km/h" for rides, "5.8 km · 43:04 · 7:24/km" for runs */
+export function cardioSummary(c: { activity: string; distance?: number | string | null; duration?: string | null; pace?: string | null }): string {
+  const km = c.distance != null && Number(c.distance) > 0 ? Number(c.distance) : null
+  const durSec = durationToSec(c.duration)
+  let rate: string | null = null
+  if (usesSpeed(c.activity)) {
+    const paceSec = durationToSec(c.pace)
+    const kmh = paceSec ? paceToKmh(paceSec) : km && durSec ? Math.round((km / (durSec / 3600)) * 10) / 10 : null
+    rate = kmh ? `${kmh} km/h` : null
+  } else if (c.pace) {
+    rate = `${c.pace}/km`
+  }
+  return [km != null ? `${km.toFixed(1)} km` : null, fmtDuration(c.duration), rate].filter(Boolean).join(' · ')
+}

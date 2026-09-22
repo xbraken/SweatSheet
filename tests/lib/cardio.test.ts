@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { smoothedTrend, paceToKmh, fmtPace } from '@/lib/cardio-trends'
+import { smoothedTrend, paceToKmh, fmtPace, cardioSummary } from '@/lib/cardio-trends'
 import { riegelPredict, warmupHr } from '@/lib/run-analysis'
 import { fmtPrValue } from '@/lib/pr-format'
 import { addDays } from '@/lib/dates'
@@ -85,5 +85,20 @@ describe('warmupHr (minutes 5–9 of interval sessions)', () => {
 
   it('null without data', () => {
     expect(warmupHr([], dist)).toBeNull()
+  })
+})
+
+describe('cardioSummary', () => {
+  it('rides show speed and bare minutes get a unit', () => {
+    expect(cardioSummary({ activity: 'Cycling', distance: 19, duration: '43', pace: '2:16' })).toBe('19.0 km · 43 min · 26.5 km/h')
+  })
+  it('rides without pace compute speed from distance and time', () => {
+    expect(cardioSummary({ activity: 'Cycling', distance: 20, duration: '1:00:00' })).toBe('20.0 km · 1:00:00 · 20 km/h')
+  })
+  it('runs show pace', () => {
+    expect(cardioSummary({ activity: 'Interval run', distance: '5.82', duration: '43:04', pace: '7:24' })).toBe('5.8 km · 43:04 · 7:24/km')
+  })
+  it('skips missing parts', () => {
+    expect(cardioSummary({ activity: 'HIIT', duration: '20' })).toBe('20 min')
   })
 })

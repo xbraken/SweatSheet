@@ -31,7 +31,7 @@ export default function NextSuggestion({ lastDate, lastSets, suggestion, fmtWeig
         <p className="text-sm text-on-surface mt-0.5">
           Try <span className="font-headline font-bold text-tertiary">{target}</span>
         </p>
-        <p className="text-[11px] text-outline truncate">{suggestion.reason}</p>
+        <p className="text-[11px] text-outline line-clamp-2">{suggestion.reason}</p>
       </div>
       <button
         onClick={onUse}

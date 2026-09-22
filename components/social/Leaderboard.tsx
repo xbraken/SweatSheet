@@ -16,6 +16,7 @@ const METRICS: { key: Metric; label: string }[] = [
 export default function Leaderboard({ isLbs }: { isLbs: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [metric, setMetric] = useState<Metric>('sessions')
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     try {
@@ -43,6 +44,11 @@ export default function Leaderboard({ isLbs }: { isLbs: boolean }) {
   }
   const barColor = metric === 'distance' ? 'bg-tertiary' : 'bg-primary-container'
 
+  // Compact by default: the top 3, plus you if you're further down. Everyone else is one tap away.
+  const TOP = 3
+  const visible = expanded ? sorted : sorted.filter((r, i) => i < TOP || r.isMe)
+  const hidden = sorted.length - visible.length
+
   return (
     <section className="bg-surface-container rounded-2xl p-4 mb-6">
       <div className="flex items-center justify-between mb-3">
@@ -60,7 +66,9 @@ export default function Leaderboard({ isLbs }: { isLbs: boolean }) {
         </div>
       </div>
       <ol className="space-y-2.5">
-        {sorted.map((r, i) => (
+        {visible.map(r => {
+          const i = sorted.indexOf(r)
+          return (
           <li key={r.userId}>
             <Link href={`/social/${r.username}`} className="flex items-center gap-3">
               <span className={`w-4 text-xs font-black font-headline ${i === 0 && r[metric] > 0 ? 'text-primary-container' : 'text-outline-variant'}`}>{i + 1}</span>
@@ -76,8 +84,18 @@ export default function Leaderboard({ isLbs }: { isLbs: boolean }) {
               </div>
             </Link>
           </li>
-        ))}
+          )
+        })}
       </ol>
+      {(hidden > 0 || expanded) && sorted.length > TOP + 1 && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="w-full mt-3 pt-3 border-t border-surface-container-highest/60 text-xs font-bold font-label text-outline flex items-center justify-center gap-1"
+        >
+          {expanded ? 'Show less' : `Show all ${sorted.length}`}
+          <span className="material-symbols-outlined text-sm">{expanded ? 'expand_less' : 'expand_more'}</span>
+        </button>
+      )}
     </section>
   )
 }
