@@ -13,7 +13,7 @@ export default function LogoutButton() {
   return (
     <button
       onClick={logout}
-      className="material-symbols-outlined text-[#a48b83] text-2xl active:scale-90 transition-transform"
+      className="material-symbols-outlined text-outline text-2xl active:scale-90 transition-transform"
       title="Log out"
     >
       logout

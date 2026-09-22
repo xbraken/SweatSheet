@@ -124,15 +124,15 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
 
   return (
     <>
-      <header className="bg-[#0e0e0e]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center gap-4 px-6 py-4 w-full max-w-[390px] mx-auto">
-        <button onClick={() => router.back()} className="text-[#ffb9a0] hover:opacity-80 active:scale-95 transition-all">
+      <header className="bg-surface-container-lowest/80 backdrop-blur-xl sticky top-0 z-50 flex items-center gap-4 px-6 py-4 w-full max-w-[390px] mx-auto">
+        <button onClick={() => router.back()} className="text-primary hover:opacity-80 active:scale-95 transition-all">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <h1 className="font-headline text-lg font-bold tracking-tight text-[#ffb9a0] truncate flex-1">
+        <h1 className="font-headline text-lg font-bold tracking-tight text-primary truncate flex-1">
           {date ? formatDate(date) : '—'}
         </h1>
         {data && data.sessions.length > 0 && (
-          <button onClick={shareWorkout} className="text-[#a48b83] hover:text-[#ffb9a0] active:scale-95 transition-all shrink-0" title="Share workout">
+          <button onClick={shareWorkout} className="text-outline hover:text-primary active:scale-95 transition-all shrink-0" title="Share workout">
             <span className="material-symbols-outlined">{copied ? 'check' : 'share'}</span>
           </button>
         )}
@@ -141,10 +141,10 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
       <main className="max-w-[390px] mx-auto px-4 pb-32 pt-4">
         {loading ? (
           <div className="flex justify-center pt-20">
-            <div className="w-6 h-6 border-2 border-[#ff9066]/30 border-t-[#ff9066] rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-primary-container/30 border-t-primary-container rounded-full animate-spin" />
           </div>
         ) : isEmpty ? (
-          <p className="text-center text-[#a48b83] pt-20 animate-fade-in">No workout recorded for this day</p>
+          <p className="text-center text-outline pt-20 animate-fade-in">No workout recorded for this day</p>
         ) : (
           <div className="space-y-6 animate-fade-in">
             {data!.sessions.map((sess, si) => {
@@ -160,8 +160,8 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                   {/* Session time header */}
                   {displayTime && (
                     <div className="flex items-center gap-3 mb-3">
-                      <span className="text-[#a48b83] text-xs font-bold font-mono">{displayTime}</span>
-                      <div className="flex-1 h-px bg-[#201f1f]" />
+                      <span className="text-outline text-xs font-bold font-mono">{displayTime}</span>
+                      <div className="flex-1 h-px bg-surface-container" />
                     </div>
                   )}
 
@@ -170,43 +170,43 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                     {sess.cardio.map((c, i) => {
                       const cTime = formatTime(c.started_at)
                       return (
-                        <div key={i} className="rounded-2xl bg-[#131313] border border-[#201f1f] p-4">
+                        <div key={i} className="rounded-2xl bg-surface border border-surface-container p-4">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
-                              <span className="bg-[#4bdece]/20 text-[#4bdece] text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Cardio</span>
-                              {cTime && <span className="text-[#a48b83] text-xs font-mono">{cTime}</span>}
+                              <span className="bg-tertiary/20 text-tertiary text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Cardio</span>
+                              {cTime && <span className="text-outline text-xs font-mono">{cTime}</span>}
                             </div>
-                            <span className="text-[#e5e2e1] font-headline font-bold text-base">{c.activity}</span>
+                            <span className="text-on-surface font-headline font-bold text-base">{c.activity}</span>
                           </div>
                           <div className="grid grid-cols-3 gap-3">
                             {c.distance && Number(c.distance) > 0 && (
                               <div>
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest mb-1">Distance</p>
-                                <p className="font-headline font-bold text-lg text-[#e5e2e1]">{Number(c.distance).toFixed(1)} km</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest mb-1">Distance</p>
+                                <p className="font-headline font-bold text-lg text-on-surface">{Number(c.distance).toFixed(1)} km</p>
                               </div>
                             )}
                             {c.pace && (
                               <div>
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest mb-1">Pace</p>
-                                <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.pace}/km</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest mb-1">Pace</p>
+                                <p className="font-headline font-bold text-lg text-on-surface">{c.pace}/km</p>
                               </div>
                             )}
                             {c.duration && (
                               <div>
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest mb-1">Time</p>
-                                <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.duration}</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest mb-1">Time</p>
+                                <p className="font-headline font-bold text-lg text-on-surface">{c.duration}</p>
                               </div>
                             )}
                             {c.heart_rate && (
                               <div>
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest mb-1">HR Avg</p>
-                                <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.heart_rate} bpm</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest mb-1">HR Avg</p>
+                                <p className="font-headline font-bold text-lg text-on-surface">{c.heart_rate} bpm</p>
                               </div>
                             )}
                             {c.calories && (
                               <div>
-                                <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest mb-1">Calories</p>
-                                <p className="font-headline font-bold text-lg text-[#e5e2e1]">{c.calories} kcal</p>
+                                <p className="text-outline text-[10px] font-bold uppercase tracking-widest mb-1">Calories</p>
+                                <p className="font-headline font-bold text-lg text-on-surface">{c.calories} kcal</p>
                               </div>
                             )}
                           </div>
@@ -220,18 +220,18 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                       const max1RM = Math.max(...g.sets.map(s => epley1RM(s.weight, s.reps)))
                       const exTime = formatTime(g.sets[0]?.logged_at ?? null)
                       return (
-                        <div key={i} className="rounded-2xl bg-[#131313] border border-[#201f1f] p-4">
+                        <div key={i} className="rounded-2xl bg-surface border border-surface-container p-4">
                           <div className="flex items-start justify-between mb-3">
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="bg-[#ff9066]/20 text-[#ff9066] text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Lift</span>
-                                {exTime && <span className="text-[#a48b83] text-xs font-mono">{exTime}</span>}
+                                <span className="bg-primary-container/20 text-primary-container text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Lift</span>
+                                {exTime && <span className="text-outline text-xs font-mono">{exTime}</span>}
                               </div>
-                              <h3 className="font-headline font-bold text-base text-[#e5e2e1] mt-1">{g.exercise}</h3>
+                              <h3 className="font-headline font-bold text-base text-on-surface mt-1">{g.exercise}</h3>
                             </div>
                             <div className="text-right">
-                              <p className="text-[#a48b83] text-[10px] font-bold uppercase tracking-widest">Est. 1RM</p>
-                              <p className="font-headline font-bold text-lg text-[#ff9066]">{max1RM} kg</p>
+                              <p className="text-outline text-[10px] font-bold uppercase tracking-widest">Est. 1RM</p>
+                              <p className="font-headline font-bold text-lg text-primary-container">{max1RM} kg</p>
                             </div>
                           </div>
 
@@ -243,26 +243,26 @@ export default function SessionDetailPage({ params }: { params: Promise<{ date: 
                                 <div key={j}>
                                   {rest && (
                                     <div className="flex items-center gap-2 py-1">
-                                      <div className="flex-1 h-px bg-[#201f1f]" />
-                                      <span className="text-[#a48b83]/60 text-[10px] font-mono">{rest}</span>
-                                      <div className="flex-1 h-px bg-[#201f1f]" />
+                                      <div className="flex-1 h-px bg-surface-container" />
+                                      <span className="text-outline/60 text-[10px] font-mono">{rest}</span>
+                                      <div className="flex-1 h-px bg-surface-container" />
                                     </div>
                                   )}
-                                  <div className="flex items-center justify-between bg-[#1c1b1b] rounded-xl px-3 py-2.5">
+                                  <div className="flex items-center justify-between bg-surface-container-low rounded-xl px-3 py-2.5">
                                     <div className="flex items-center gap-3">
-                                      <span className="text-[#a48b83] text-[10px] font-bold w-5 text-center">{j + 1}</span>
-                                      <span className="text-[#e5e2e1] font-mono text-sm font-bold">{s.weight}kg × {s.reps}</span>
+                                      <span className="text-outline text-[10px] font-bold w-5 text-center">{j + 1}</span>
+                                      <span className="text-on-surface font-mono text-sm font-bold">{s.weight}kg × {s.reps}</span>
                                     </div>
-                                    <span className="text-[#a48b83] text-xs">~{oneRM} kg 1RM</span>
+                                    <span className="text-outline text-xs">~{oneRM} kg 1RM</span>
                                   </div>
                                 </div>
                               )
                             })}
                           </div>
 
-                          <div className="flex justify-between mt-3 pt-3 border-t border-[#201f1f]/50">
-                            <span className="text-[#a48b83] text-xs">{g.sets.length} sets · {g.sets.reduce((n, s) => n + s.reps, 0)} reps</span>
-                            <span className="text-[#a48b83] text-xs font-bold">
+                          <div className="flex justify-between mt-3 pt-3 border-t border-surface-container/50">
+                            <span className="text-outline text-xs">{g.sets.length} sets · {g.sets.reduce((n, s) => n + s.reps, 0)} reps</span>
+                            <span className="text-outline text-xs font-bold">
                               {totalVol >= 1000 ? `${(totalVol / 1000).toFixed(1)}k` : Math.round(totalVol)} kg vol
                             </span>
                           </div>

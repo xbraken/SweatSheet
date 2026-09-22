@@ -19,6 +19,7 @@ const config: Config = {
         'surface': '#131313',
         'surface-dim': '#131313',
         'surface-container-lowest': '#0e0e0e',
+        'surface-sheet': '#181818',
         'surface-container-low': '#1c1b1b',
         'surface-container': '#201f1f',
         'surface-container-high': '#2a2a2a',

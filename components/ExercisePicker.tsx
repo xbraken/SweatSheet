@@ -98,21 +98,21 @@ export default function ExercisePicker({
               onSelect(name, hint)
             }
           }}
-          className={`flex-1 flex items-center justify-between py-3 px-4 hover:bg-[#2a2a2a] active:bg-[#353534] transition-colors text-left rounded-xl ${isSelected ? 'bg-[#ff9066]/10' : ''}`}
+          className={`flex-1 flex items-center justify-between py-3 px-4 hover:bg-surface-container-high active:bg-surface-container-highest transition-colors text-left rounded-xl ${isSelected ? 'bg-primary-container/10' : ''}`}
         >
           <div className="flex items-center gap-3">
             {multiSelect && (
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors ${isSelected ? 'bg-[#ff9066] border-[#ff9066] text-[#752805]' : 'border-[#56423c]'}`}>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors ${isSelected ? 'bg-primary-container border-primary-container text-on-primary-container' : 'border-outline-variant'}`}>
                 {isSelected && selIdx + 1}
               </div>
             )}
-            <span className="font-body text-sm text-[#e5e2e1]">{name}</span>
+            <span className="font-body text-sm text-on-surface">{name}</span>
           </div>
-          {!multiSelect && (pr || hint) && <span className="text-[10px] text-[#a48b83] text-right shrink-0">{
+          {!multiSelect && (pr || hint) && <span className="text-[10px] text-outline text-right shrink-0">{
             (() => {
               const ex = EXERCISES.find(e => e.name === name)
               const rel = relTime(hint?.last_date)
-              const sub = rel ? <span className="block text-[#56423c]">{rel}</span> : null
+              const sub = rel ? <span className="block text-outline-variant">{rel}</span> : null
               if (pr && pr.pr_weight > 0) {
                 let main = ''
                 if (ex?.type === 'timed') { const d = pr.pr_duration ?? 0; main = `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')} PR` }
@@ -133,7 +133,7 @@ export default function ExercisePicker({
         {!multiSelect && (
           <button onClick={() => onToggleStar(name)} className="p-2 shrink-0">
             <span
-              className={`material-symbols-outlined text-lg ${isStarred ? 'text-[#ff9066]' : 'text-[#56423c]'}`}
+              className={`material-symbols-outlined text-lg ${isStarred ? 'text-primary-container' : 'text-outline-variant'}`}
               style={{ fontVariationSettings: isStarred ? "'FILL' 1" : "'FILL' 0" }}
             >star</span>
           </button>
@@ -145,33 +145,33 @@ export default function ExercisePicker({
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-[#131313] rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up">
-        <div className="px-5 pt-5 pb-3 border-b border-[#201f1f]">
+      <div className="fixed inset-x-0 bottom-0 top-12 md:top-0 md:left-56 z-50 bg-surface rounded-t-3xl md:rounded-none flex flex-col overflow-hidden animate-slide-up">
+        <div className="px-5 pt-5 pb-3 border-b border-surface-container">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-headline text-lg font-bold">Choose exercise</h2>
-            <button onClick={onClose}><span className="material-symbols-outlined text-[#a48b83]">close</span></button>
+            <button onClick={onClose}><span className="material-symbols-outlined text-outline">close</span></button>
           </div>
-          <div className="flex items-center gap-2 bg-[#201f1f] rounded-xl px-3 py-2.5">
-            <span className="material-symbols-outlined text-[#a48b83] text-lg">search</span>
+          <div className="flex items-center gap-2 bg-surface-container rounded-xl px-3 py-2.5">
+            <span className="material-symbols-outlined text-outline text-lg">search</span>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search exercises…"
-              className="flex-1 bg-transparent outline-none text-sm text-[#e5e2e1] placeholder:text-[#56423c]"
+              className="flex-1 bg-transparent outline-none text-sm text-on-surface placeholder:text-outline-variant"
             />
-            {search && <button onClick={() => setSearch('')}><span className="material-symbols-outlined text-[#a48b83] text-sm">close</span></button>}
+            {search && <button onClick={() => setSearch('')}><span className="material-symbols-outlined text-outline text-sm">close</span></button>}
           </div>
           {availableCategories.length > 0 && (
             <div className="flex gap-1.5 mt-3 overflow-x-auto no-scrollbar">
               <button
                 onClick={() => setFilterCat(null)}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${!filterCat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
+                className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${!filterCat ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-outline'}`}
               >All</button>
               {availableCategories.map(cat => (
                 <button
                   key={cat}
                   onClick={() => setFilterCat(filterCat === cat ? null : cat)}
-                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${filterCat === cat ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#201f1f] text-[#a48b83]'}`}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${filterCat === cat ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-outline'}`}
                 >{cat}</button>
               ))}
             </div>
@@ -180,24 +180,24 @@ export default function ExercisePicker({
         <div className={`flex-1 overflow-y-auto px-2 ${multiSelect && selected.length > 0 ? 'pb-24' : 'pb-32 md:pb-8'}`}>
           {!search && !filterCat && recents.length > 0 && (
             <>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-4 pt-4 pb-1">Recent</p>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline px-4 pt-4 pb-1">Recent</p>
               {recents.map(name => renderRow(name))}
-              {(starredList.length > 0 || unstarredList.length > 0) && <div className="mx-4 my-2 border-t border-[#201f1f]" />}
+              {(starredList.length > 0 || unstarredList.length > 0) && <div className="mx-4 my-2 border-t border-surface-container" />}
             </>
           )}
           {starredList.length > 0 && (
             <>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#ff9066] px-4 pt-4 pb-1">Starred</p>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-primary-container px-4 pt-4 pb-1">Starred</p>
               {starredList.map(e => renderRow(e.name))}
             </>
           )}
           {unstarredList.length > 0 && (
             <>
-              {starredList.length > 0 && <div className="mx-4 my-2 border-t border-[#201f1f]" />}
+              {starredList.length > 0 && <div className="mx-4 my-2 border-t border-surface-container" />}
               {!search && !filterCat
                 ? CATEGORIES.filter(cat => unstarredList.some(e => e.category === cat)).map(cat => (
                     <div key={cat}>
-                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] px-4 pt-4 pb-1">{cat}</p>
+                      <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline px-4 pt-4 pb-1">{cat}</p>
                       {unstarredList.filter(e => e.category === cat).map(e => renderRow(e.name))}
                     </div>
                   ))
@@ -207,16 +207,16 @@ export default function ExercisePicker({
           )}
           {filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <span className="material-symbols-outlined text-4xl text-[#353534] mb-3">search_off</span>
-              <p className="text-sm text-[#a48b83]">No exercises match &ldquo;{search}&rdquo;</p>
+              <span className="material-symbols-outlined text-4xl text-surface-container-highest mb-3">search_off</span>
+              <p className="text-sm text-outline">No exercises match &ldquo;{search}&rdquo;</p>
             </div>
           )}
         </div>
         {multiSelect && selected.length > 0 && (
-          <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-[#131313] via-[#131313] to-transparent pt-8">
+          <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-surface via-surface to-transparent pt-8">
             <button
               onClick={() => { onMultiSelect?.(selected); onClose() }}
-              className="w-full py-4 bg-[#ff9066] text-[#752805] rounded-2xl font-headline font-bold text-sm active:scale-95 transition-transform"
+              className="w-full py-4 bg-primary-container text-on-primary-container rounded-2xl font-headline font-bold text-sm active:scale-95 transition-transform"
             >
               Add {selected.length} exercise{selected.length !== 1 ? 's' : ''}
             </button>

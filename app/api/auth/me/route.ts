@@ -8,9 +8,9 @@ export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const res = await db.execute({
-    sql: `SELECT avatar FROM users WHERE id = ?`,
+    sql: `SELECT avatar, unit_pref FROM users WHERE id = ?`,
     args: [session.userId],
   })
   const avatar = (res.rows[0]?.avatar as string | null) ?? null
-  return NextResponse.json({ userId: session.userId, username: session.username, avatar })
+  return NextResponse.json({ userId: session.userId, username: session.username, avatar, unit_pref: (res.rows[0]?.unit_pref as string | null) ?? 'metric' })
 }

@@ -79,34 +79,34 @@ export default function SettingsPage() {
 
   if (loading) return (
     <main className="max-w-[390px] mx-auto min-h-screen flex items-center justify-center">
-      <div className="w-6 h-6 border-2 border-[#ff9066] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
     </main>
   )
 
   return (
     <main className="max-w-[390px] md:max-w-xl mx-auto min-h-screen pb-32 md:pb-12 px-6 pt-12 animate-fade-in-view">
       <header className="mb-10 flex items-center gap-4">
-        <button onClick={() => router.back()} className="text-[#a48b83] active:scale-95 transition-all">
+        <button onClick={() => router.back()} className="text-outline active:scale-95 transition-all">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <div>
-          <h1 className="font-headline text-3xl font-black tracking-tight text-[#e5e2e1]">Settings</h1>
-          <p className="text-sm text-[#a48b83] mt-0.5">@{username}</p>
+          <h1 className="font-headline text-3xl font-black tracking-tight text-on-surface">Settings</h1>
+          <p className="text-sm text-outline mt-0.5">@{username}</p>
         </div>
       </header>
 
       {/* Preferences */}
       <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Preferences</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5">
-          <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-3">Units</p>
+        <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Preferences</h3>
+        <div className="bg-surface-container rounded-2xl p-5">
+          <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-3">Units</p>
           <div className="flex gap-2">
             {(['metric', 'imperial'] as const).map(u => (
               <button
                 key={u}
                 onClick={() => setUnitPref(u)}
                 className={`flex-1 py-3 rounded-xl text-sm font-bold font-label transition-colors ${
-                  unitPref === u ? 'bg-[#ff9066] text-[#752805]' : 'bg-[#2a2a2a] text-[#a48b83]'
+                  unitPref === u ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-high text-outline'
                 }`}
               >
                 {u === 'metric' ? 'Metric (kg / km)' : 'Imperial (lbs / mi)'}
@@ -117,7 +117,7 @@ export default function SettingsPage() {
         <button
           onClick={savePrefs}
           disabled={saving}
-          className="w-full py-4 bg-[#ff9066]/20 text-[#ff9066] rounded-2xl font-headline font-bold transition-colors disabled:opacity-50"
+          className="w-full py-4 bg-primary-container/20 text-primary-container rounded-2xl font-headline font-bold transition-colors disabled:opacity-50"
         >
           {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save preferences'}
         </button>
@@ -126,16 +126,16 @@ export default function SettingsPage() {
       {/* Data cleanup */}
       {invalidExercises.length > 0 && (
         <section className="flex flex-col gap-3 mb-8 animate-fade-in">
-          <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Data cleanup</h3>
-          <div className="bg-[#201f1f] rounded-2xl p-5">
-            <p className="text-sm text-[#a48b83] mb-3">
+          <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Data cleanup</h3>
+          <div className="bg-surface-container rounded-2xl p-5">
+            <p className="text-sm text-outline mb-3">
               {invalidExercises.length} exercise{invalidExercises.length > 1 ? 's' : ''} in your history don&apos;t match the exercise list:
             </p>
             <div className="flex flex-col gap-1.5 mb-4">
               {invalidExercises.map(e => (
-                <div key={e.exercise} className="flex justify-between items-center px-3 py-2 bg-[#2a2a2a] rounded-lg text-sm">
-                  <span className="text-[#e5e2e1]">{e.exercise || '(empty name)'}</span>
-                  <span className="text-[#a48b83] text-xs">{e.set_count} sets</span>
+                <div key={e.exercise} className="flex justify-between items-center px-3 py-2 bg-surface-container-high rounded-lg text-sm">
+                  <span className="text-on-surface">{e.exercise || '(empty name)'}</span>
+                  <span className="text-outline text-xs">{e.set_count} sets</span>
                 </div>
               ))}
             </div>
@@ -148,7 +148,7 @@ export default function SettingsPage() {
                 setCleaning(false)
               }}
               disabled={cleaning}
-              className="w-full py-3 bg-[#ff9066]/20 text-[#ff9066] rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
+              className="w-full py-3 bg-primary-container/20 text-primary-container rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
             >
               {cleaning ? 'Cleaning…' : 'Remove invalid exercises'}
             </button>
@@ -158,16 +158,16 @@ export default function SettingsPage() {
 
       {/* Strava */}
       <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Connected Apps</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
+        <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Connected Apps</h3>
+        <div className="bg-surface-container rounded-2xl p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-[#fc4c02]/20 rounded-xl flex items-center justify-center">
                 <svg viewBox="0 0 24 24" className="w-5 h-5 fill-[#fc4c02]"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-[#e5e2e1]">Strava</p>
-                <p className="text-xs text-[#a48b83]">
+                <p className="text-sm font-bold text-on-surface">Strava</p>
+                <p className="text-xs text-outline">
                   {stravaConnected ? 'Auto-imports runs and rides' : 'Connect to auto-import cardio'}
                 </p>
               </div>
@@ -182,7 +182,7 @@ export default function SettingsPage() {
                   setStravaLoading(false)
                 }}
                 disabled={stravaLoading}
-                className="px-4 py-2 rounded-xl bg-[#2a2a2a] text-[#a48b83] text-xs font-bold font-label transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-surface-container-high text-outline text-xs font-bold font-label transition-colors disabled:opacity-50"
               >
                 Disconnect
               </button>
@@ -197,38 +197,38 @@ export default function SettingsPage() {
           </div>
           {stravaConnected && (
             <div className="flex flex-col gap-2">
-              <div className="flex gap-2 p-1 bg-[#2a2a2a] rounded-xl">
+              <div className="flex gap-2 p-1 bg-surface-container-high rounded-xl">
                 <button
                   onClick={() => setStravaSyncMode('latest')}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'latest' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-[#a48b83]'}`}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'latest' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-outline'}`}
                 >
                   Latest
                 </button>
                 <button
                   onClick={() => setStravaSyncMode('recent')}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'recent' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-[#a48b83]'}`}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'recent' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-outline'}`}
                 >
                   Last 30
                 </button>
                 <button
                   onClick={() => setStravaSyncMode('custom')}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'custom' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-[#a48b83]'}`}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${stravaSyncMode === 'custom' ? 'bg-[#fc4c02]/20 text-[#fc4c02]' : 'text-outline'}`}
                 >
                   Custom
                 </button>
               </div>
               {stravaSyncMode === 'custom' && (
                 <label className="flex items-center gap-2 px-1">
-                  <span className="text-xs text-[#a48b83]">Count</span>
+                  <span className="text-xs text-outline">Count</span>
                   <input
                     type="number"
                     min={1}
                     max={150}
                     value={stravaSyncCount}
                     onChange={e => setStravaSyncCount(Math.max(1, Math.min(150, Number(e.target.value) || 1)))}
-                    className="w-20 py-1 px-2 bg-[#2a2a2a] rounded-lg text-sm text-[#e5e2e1] outline-none"
+                    className="w-20 py-1 px-2 bg-surface-container-high rounded-lg text-sm text-on-surface outline-none"
                   />
-                  <span className="text-xs text-[#a48b83]">activities (max 150)</span>
+                  <span className="text-xs text-outline">activities (max 150)</span>
                 </label>
               )}
               <label className="flex items-center gap-2 px-1 cursor-pointer select-none">
@@ -238,7 +238,7 @@ export default function SettingsPage() {
                   onChange={e => setStravaForce(e.target.checked)}
                   className="w-4 h-4 accent-[#fc4c02]"
                 />
-                <span className="text-xs text-[#a48b83]">Force re-import (ignore dedup)</span>
+                <span className="text-xs text-outline">Force re-import (ignore dedup)</span>
               </label>
               <button
                 onClick={async () => {
@@ -268,7 +268,7 @@ export default function SettingsPage() {
                 }
               </button>
               {stravaSyncResult && (
-                <p className="text-xs text-center text-[#a48b83]">
+                <p className="text-xs text-center text-outline">
                   {stravaSyncResult.imported > 0
                     ? `✓ ${stravaSyncResult.imported} imported, ${stravaSyncResult.skipped} already up to date`
                     : `All ${stravaSyncResult.skipped} activities already up to date`
@@ -277,8 +277,8 @@ export default function SettingsPage() {
               )}
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${webhookActive === null ? 'bg-[#a48b83]' : webhookActive ? 'bg-green-400' : 'bg-red-400'}`} />
-                  <span className="text-xs text-[#a48b83]">
+                  <span className={`w-2 h-2 rounded-full ${webhookActive === null ? 'bg-outline' : webhookActive ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <span className="text-xs text-outline">
                     {webhookActive === null ? 'Checking auto-import…' : webhookActive ? 'Auto-import active' : 'Auto-import inactive'}
                   </span>
                 </div>
@@ -305,10 +305,10 @@ export default function SettingsPage() {
             </div>
           )}
           {stravaStatus === 'connected' && (
-            <p className="text-xs text-[#4bdece] bg-[#4bdece]/10 rounded-xl px-3 py-2">Strava connected — new workouts will import automatically.</p>
+            <p className="text-xs text-tertiary bg-tertiary/10 rounded-xl px-3 py-2">Strava connected — new workouts will import automatically.</p>
           )}
           {stravaStatus === 'denied' && (
-            <p className="text-xs text-[#a48b83] bg-[#2a2a2a] rounded-xl px-3 py-2">Strava connection cancelled.</p>
+            <p className="text-xs text-outline bg-surface-container-high rounded-xl px-3 py-2">Strava connection cancelled.</p>
           )}
           {stravaStatus === 'error' && (
             <p className="text-xs text-red-400 bg-red-950/30 rounded-xl px-3 py-2">Something went wrong connecting to Strava. Try again.</p>
@@ -319,15 +319,15 @@ export default function SettingsPage() {
       {/* Intervals.icu — single global API key, so only its owner account gets this section */}
       {username === 'edmond' && (
       <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Intervals.icu</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
+        <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Intervals.icu</h3>
+        <div className="bg-surface-container rounded-2xl p-5 flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#4bdece]/20 rounded-xl flex items-center justify-center">
-              <span className="material-symbols-outlined text-[#4bdece] text-xl">directions_run</span>
+            <div className="w-9 h-9 bg-tertiary/20 rounded-xl flex items-center justify-center">
+              <span className="material-symbols-outlined text-tertiary text-xl">directions_run</span>
             </div>
             <div>
-              <p className="text-sm font-bold text-[#e5e2e1]">Intervals.icu</p>
-              <p className="text-xs text-[#a48b83]">Auto-syncs when you open the app (daily cron as backup)</p>
+              <p className="text-sm font-bold text-on-surface">Intervals.icu</p>
+              <p className="text-xs text-outline">Auto-syncs when you open the app (daily cron as backup)</p>
             </div>
           </div>
           <label className="flex items-center gap-2 px-1 cursor-pointer select-none">
@@ -335,9 +335,9 @@ export default function SettingsPage() {
               type="checkbox"
               checked={intervalsForce}
               onChange={e => setIntervalsForce(e.target.checked)}
-              className="w-4 h-4 accent-[#4bdece]"
+              className="w-4 h-4 accent-tertiary"
             />
-            <span className="text-xs text-[#a48b83]">Force re-import (ignore dedup)</span>
+            <span className="text-xs text-outline">Force re-import (ignore dedup)</span>
           </label>
           <button
             onClick={async () => {
@@ -353,15 +353,15 @@ export default function SettingsPage() {
               setTimeout(() => setIntervalsSyncResult(null), 4000)
             }}
             disabled={intervalsSyncing}
-            className="w-full py-3 bg-[#4bdece]/10 text-[#4bdece] rounded-xl text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+            className="w-full py-3 bg-tertiary/10 text-tertiary rounded-xl text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
           >
             {intervalsSyncing
-              ? <><div className="w-4 h-4 border-2 border-[#4bdece]/30 border-t-[#4bdece] rounded-full animate-spin" /> Syncing…</>
+              ? <><div className="w-4 h-4 border-2 border-tertiary/30 border-t-tertiary rounded-full animate-spin" /> Syncing…</>
               : <><span className="material-symbols-outlined text-base">sync</span> Sync now</>
             }
           </button>
           {intervalsSyncResult && (
-            <p className="text-xs text-center text-[#a48b83]">
+            <p className="text-xs text-center text-outline">
               {intervalsSyncResult.imported > 0
                 ? `✓ ${intervalsSyncResult.imported} imported, ${intervalsSyncResult.skipped} already up to date`
                 : `All ${intervalsSyncResult.skipped} activities already up to date`
@@ -374,13 +374,13 @@ export default function SettingsPage() {
 
       {/* Shortcut sync */}
       <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Shortcut Sync</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-4">
-          <p className="text-sm text-[#a48b83] leading-snug">Use this key in the SweatSheet iPhone Shortcut to sync workouts directly.</p>
+        <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Shortcut Sync</h3>
+        <div className="bg-surface-container rounded-2xl p-5 flex flex-col gap-4">
+          <p className="text-sm text-outline leading-snug">Use this key in the SweatSheet iPhone Shortcut to sync workouts directly.</p>
           <div className="flex flex-col gap-2">
-            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83]">Your API Key</p>
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Your API Key</p>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-[#2a2a2a] rounded-xl px-4 py-3 font-mono text-xs text-[#e5e2e1] truncate select-all">
+              <div className="flex-1 bg-surface-container-high rounded-xl px-4 py-3 font-mono text-xs text-on-surface truncate select-all">
                 {apiKey || '—'}
               </div>
               <button
@@ -389,7 +389,7 @@ export default function SettingsPage() {
                   setKeyCopied(true)
                   setTimeout(() => setKeyCopied(false), 2000)
                 }}
-                className="shrink-0 px-4 py-3 bg-[#4bdece]/20 text-[#4bdece] rounded-xl text-sm font-bold font-label transition-colors"
+                className="shrink-0 px-4 py-3 bg-tertiary/20 text-tertiary rounded-xl text-sm font-bold font-label transition-colors"
               >
                 {keyCopied ? '✓ Copied' : 'Copy'}
               </button>
@@ -408,13 +408,13 @@ export default function SettingsPage() {
               setRegenerating(false)
             }}
             disabled={regenerating}
-            className="text-xs text-[#a48b83] underline underline-offset-2 self-start disabled:opacity-50"
+            className="text-xs text-outline underline underline-offset-2 self-start disabled:opacity-50"
           >
             {regenerating ? 'Regenerating…' : 'Regenerate key'}
           </button>
           <a
             href="/SweatSheet Sync.shortcut" download
-            className="w-full py-3 rounded-xl bg-[#4bdece]/20 text-[#4bdece] text-sm font-bold font-label text-center flex items-center justify-center gap-2 hover:bg-[#4bdece]/30 transition-colors"
+            className="w-full py-3 rounded-xl bg-tertiary/20 text-tertiary text-sm font-bold font-label text-center flex items-center justify-center gap-2 hover:bg-tertiary/30 transition-colors"
           >
             <span className="material-symbols-outlined text-base">download</span>
             Download SweatSheet Shortcut
@@ -424,20 +424,20 @@ export default function SettingsPage() {
 
       {/* Security */}
       <section className="flex flex-col gap-4 mb-8">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Security</h3>
-        <div className="bg-[#201f1f] rounded-2xl p-5 flex flex-col gap-3">
+        <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Security</h3>
+        <div className="bg-surface-container rounded-2xl p-5 flex flex-col gap-3">
           {[
             { label: 'Current password', value: currentPassword, set: setCurrentPassword },
             { label: 'New password', value: newPassword, set: setNewPassword },
             { label: 'Confirm new password', value: confirmPassword, set: setConfirmPassword },
           ].map(({ label, value, set }) => (
             <div key={label}>
-              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-[#a48b83] mb-1.5">{label}</p>
+              <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline mb-1.5">{label}</p>
               <input
                 type="password"
                 value={value}
                 onChange={e => { set(e.target.value); setPwError(''); setPwSaved(false) }}
-                className="w-full bg-[#2a2a2a] rounded-xl px-4 py-3 text-sm text-[#e5e2e1] outline-none focus:ring-1 focus:ring-[#ff9066]/50"
+                className="w-full bg-surface-container-high rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary-container/50"
               />
             </div>
           ))}
@@ -459,7 +459,7 @@ export default function SettingsPage() {
               setTimeout(() => setPwSaved(false), 2000)
             }}
             disabled={pwSaving || !currentPassword || !newPassword || !confirmPassword}
-            className="w-full py-3 bg-[#ff9066]/20 text-[#ff9066] rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
+            className="w-full py-3 bg-primary-container/20 text-primary-container rounded-xl font-headline font-bold text-sm transition-colors disabled:opacity-50"
           >
             {pwSaved ? '✓ Password updated' : pwSaving ? 'Saving…' : 'Change password'}
           </button>
@@ -468,12 +468,12 @@ export default function SettingsPage() {
 
       {/* Account actions */}
       <section className="flex flex-col gap-3">
-        <h3 className="font-headline text-sm font-bold text-[#a48b83] uppercase tracking-widest">Account</h3>
+        <h3 className="font-headline text-sm font-bold text-outline uppercase tracking-widest">Account</h3>
         <button
           onClick={logout}
-          className="w-full bg-[#201f1f] py-4 rounded-2xl flex items-center justify-center gap-2 font-headline font-bold text-[#e5e2e1] hover:bg-[#2a2a2a] transition-colors"
+          className="w-full bg-surface-container py-4 rounded-2xl flex items-center justify-center gap-2 font-headline font-bold text-on-surface hover:bg-surface-container-high transition-colors"
         >
-          <span className="material-symbols-outlined text-lg text-[#a48b83]">logout</span>
+          <span className="material-symbols-outlined text-lg text-outline">logout</span>
           Log out
         </button>
         <button
@@ -488,29 +488,29 @@ export default function SettingsPage() {
         {showDeleteConfirm && (
           <>
             <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }} />
-            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-[#181818] rounded-t-3xl px-5 pt-6 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
+            <div className="fixed inset-x-0 bottom-0 max-w-[390px] mx-auto z-50 bg-surface-sheet rounded-t-3xl px-5 pt-6 pb-[calc(env(safe-area-inset-bottom,0px)+140px)] animate-slide-up">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-red-400">warning</span>
                 </div>
                 <div>
-                  <p className="font-headline font-bold text-[#e5e2e1]">Delete all data?</p>
-                  <p className="text-xs text-[#a48b83]">This cannot be undone.</p>
+                  <p className="font-headline font-bold text-on-surface">Delete all data?</p>
+                  <p className="text-xs text-outline">This cannot be undone.</p>
                 </div>
               </div>
-              <p className="text-sm text-[#a48b83] mb-3">Type <span className="font-bold text-red-400">DELETE</span> to confirm.</p>
+              <p className="text-sm text-outline mb-3">Type <span className="font-bold text-red-400">DELETE</span> to confirm.</p>
               <input
                 type="text"
                 value={deleteInput}
                 onChange={e => setDeleteInput(e.target.value)}
                 placeholder="Type DELETE"
                 autoFocus
-                className="w-full bg-[#201f1f] rounded-xl px-4 py-3 text-[#e5e2e1] font-headline font-bold placeholder-[#56423c] mb-4 outline-none focus:ring-1 focus:ring-red-500/40"
+                className="w-full bg-surface-container rounded-xl px-4 py-3 text-on-surface font-headline font-bold placeholder-outline-variant mb-4 outline-none focus:ring-1 focus:ring-red-500/40"
               />
               <div className="flex gap-2">
                 <button
                   onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}
-                  className="flex-1 py-3.5 bg-[#201f1f] text-[#a48b83] rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform"
+                  className="flex-1 py-3.5 bg-surface-container text-outline rounded-xl font-headline font-bold text-sm active:scale-95 transition-transform"
                 >
                   Cancel
                 </button>

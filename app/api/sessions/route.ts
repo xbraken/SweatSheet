@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { userToday } from '@/lib/tz'
 
 await initDb()
 
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No blocks provided' }, { status: 400 })
   }
 
-  const date = body.date ?? new Date().toISOString().split('T')[0]
+  const date = await userToday(body.date)
 
   try {
     // Create session
