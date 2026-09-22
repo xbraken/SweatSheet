@@ -17,6 +17,8 @@ import WorkoutTypePicker from '@/components/log/WorkoutTypePicker'
 import CalendarSheet from '@/components/log/CalendarSheet'
 import ExerciseShell from '@/components/log/ExerciseShell'
 import PlateCalculator from '@/components/log/PlateCalculator'
+import { BARBELL_EXERCISES, warmupSet } from '@/lib/warmup'
+import { loadBar } from '@/lib/plates'
 import NextSuggestion from '@/components/log/NextSuggestion'
 import { RestButton, playChime, unlockChime } from '@/components/log/RestTimer'
 
@@ -1713,6 +1715,30 @@ export default function LogPage() {
                       style={{ accentColor: '#ff9066' }}
                     />
                   </div>
+                  {/* One warm-up set before the first working set. Tap on barbell lifts to see the plates. */}
+                  {doneCount === 0 && (() => {
+                    const barbell = BARBELL_EXERCISES.has(view.exercise)
+                    // Based on last session (the "Try …" weight), not the weight box — so moving
+                    // the box to do the warm-up doesn't change it
+                    const plan = suggestionFor(view.exercise, 'weights')
+                    if (!plan) return null
+                    const targetKg = plan.suggestion.weight
+                    const w = warmupSet(kgToDisplay(targetKg), isLbs, barbell ? loadBar(isLbs) : undefined)
+                    if (!w) return null
+                    const text = (
+                      <>
+                        <span className="material-symbols-outlined text-base text-primary-container">local_fire_department</span>
+                        <span className="text-outline">Warm-up:</span>
+                        <span className="font-headline font-bold text-on-surface">{w.weight} {weightLabel} × {w.reps}</span>
+                        <span className="text-outline-variant truncate">· then {kgToDisplay(targetKg)} {weightLabel}</span>
+                        {barbell && <span className="material-symbols-outlined text-sm text-outline ml-auto">calculate</span>}
+                      </>
+                    )
+                    const cls = 'w-full mb-2 px-3 py-2.5 rounded-xl bg-surface-container-high/60 text-sm flex items-center gap-2'
+                    return barbell
+                      ? <button onClick={() => setPlateCalcKg(displayToKg(w.weight))} className={`${cls} active:scale-95 transition-transform`}>{text}</button>
+                      : <div className={cls}>{text}</div>
+                  })()}
                   {logSetBtn(activeSet.id)}
                 </div>
               )}
