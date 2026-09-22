@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Run independent queries in parallel
-    const [exercisesRes, cardioRes, calendarRes, liftRes] = await Promise.all([
+    const [exercisesRes, cardioRes, calendarRes, liftRes, topRes] = await Promise.all([
       db.execute({
         sql: `SELECT DISTINCT st.exercise FROM sets st
               JOIN blocks b ON st.block_id = b.id
@@ -97,9 +97,18 @@ export async function GET(req: NextRequest) {
             args: [exercise, userId],
           })
         : Promise.resolve({ rows: [] }),
+      // Default exercise for the Lifts tab: most working sets in the last 90 days (all-time as a fallback)
+      db.execute({
+        sql: `SELECT st.exercise, SUM(CASE WHEN s.date >= date('now', '-90 days') THEN 1 ELSE 0 END) as recent, COUNT(*) as total
+              FROM sets st JOIN blocks b ON st.block_id = b.id JOIN sessions s ON b.session_id = s.id
+              WHERE s.user_id = ? AND COALESCE(st.is_warmup, 0) = 0
+              GROUP BY st.exercise ORDER BY recent DESC, total DESC LIMIT 1`,
+        args: [userId],
+      }),
     ])
 
     const exercises = exercisesRes.rows.map(r => r.exercise as string)
+    const topExercise = (topRes.rows[0]?.exercise as string | undefined) ?? null
 
     let liftHistory: object[] = []
     if (exercise && liftRes.rows.length > 0) {
@@ -138,6 +147,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       exercises,
+      topExercise,
       liftHistory,
       cardioHistory: cardioRes.rows,
       calendarData: calendarRes.rows,

@@ -34,17 +34,17 @@ export default function ExerciseShell({
   return (
     <main className="max-w-[390px] md:max-w-3xl mx-auto min-h-screen pb-32 md:pb-12 flex flex-col animate-fade-in-view">
       <div className="sticky top-0 z-40 px-4 py-4 flex flex-col gap-3 bg-surface-container-lowest/90 backdrop-blur-md border-b border-surface-container">
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1 text-outline w-16">
+        {/* Fixed side columns keep the title centred; badges get their own line so they never
+            collide with Back on a phone-width screen */}
+        <div className="grid grid-cols-[4.5rem_1fr_4.5rem] items-center">
+          <button onClick={onBack} className="flex items-center gap-1 text-outline justify-self-start">
             <span className="material-symbols-outlined text-lg">arrow_back</span>
             <span className="text-sm font-bold">Back</span>
           </button>
-          <div className="flex flex-col items-center gap-1 min-w-0">
-            <h2 className="font-headline font-bold text-on-surface text-center">{title}</h2>
-            {badges}
-          </div>
-          {headerRight ?? <div className="w-16" />}
+          <h2 className="font-headline font-bold text-on-surface text-center truncate">{title}</h2>
+          <div className="justify-self-end">{headerRight}</div>
         </div>
+        {badges && <div className="flex justify-center -mt-1">{badges}</div>}
         {routineBar}
         <RestSettingsBar value={restValue} onChange={onRestChange} unitLabel={unitLabel} onToggleUnit={onToggleUnit} />
       </div>

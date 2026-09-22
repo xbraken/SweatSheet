@@ -8,6 +8,7 @@ import IntervalsSyncTrigger from '@/components/IntervalsSyncTrigger'
 import WeeklyGoalRing from '@/components/WeeklyGoalRing'
 import { getUserTz } from '@/lib/tz'
 import { addDays, hourIn, todayIn, weekdayMon0 } from '@/lib/dates'
+import { cardioSummary } from '@/lib/cardio-trends'
 
 function toSecondsLoose(str: string | null): number {
   if (!str) return 0
@@ -42,7 +43,8 @@ async function getTodayData(userId: number, today: string) {
     db.execute({
       sql: `SELECT
         COALESCE(SUM(CASE WHEN COALESCE(st.is_warmup, 0) = 0 THEN st.weight * st.reps END), 0) as total_volume,
-        COALESCE(SUM(c.distance), 0) as total_distance
+        COALESCE(SUM(CASE WHEN lower(c.activity) LIKE '%run%' AND c.distance <= 300 THEN c.distance END), 0) as run_km,
+        COALESCE(SUM(CASE WHEN c.activity = 'Cycling' AND c.distance <= 1000 THEN c.distance END), 0) as ride_km
         FROM sessions s
         LEFT JOIN blocks b ON b.session_id = s.id
         LEFT JOIN sets st ON st.block_id = b.id
@@ -71,7 +73,7 @@ async function getTodayData(userId: number, today: string) {
       args: [userId, today],
     }),
     db.execute({
-      sql: `SELECT c.activity, c.distance, c.duration
+      sql: `SELECT c.activity, c.distance, c.duration, c.pace
             FROM cardio c JOIN blocks b ON c.block_id = b.id JOIN sessions s ON b.session_id = s.id
             WHERE s.user_id = ? AND s.date = ?
             ORDER BY b.position, b.id`,
@@ -116,13 +118,14 @@ async function getTodayData(userId: number, today: string) {
   return {
     today: todaySession.rows[0] ?? null,
     todayLifts: todayLifts.rows.map(r => ({ exercise: r.exercise as string, sets: Number(r.sets), topWeight: Number(r.top_weight ?? 0) })),
-    todayCardio: todayCardio.rows.map(r => ({ activity: r.activity as string, distance: r.distance != null ? Number(r.distance) : null, duration: (r.duration as string | null) ?? null })),
+    todayCardio: todayCardio.rows.map(r => ({ activity: r.activity as string, distance: r.distance != null ? Number(r.distance) : null, duration: (r.duration as string | null) ?? null, pace: (r.pace as string | null) ?? null })),
     weeklyGoal: goalRes.rows[0]?.weekly_goal != null ? Number(goalRes.rows[0].weekly_goal) : null,
     isLbs: goalRes.rows[0]?.unit_pref === 'imperial',
     completedDates: weekSessions.rows.map(r => r.date as string),
     weekDates,
     weekVolume: Number(ws?.total_volume ?? 0),
-    weekDistance: Number(ws?.total_distance ?? 0),
+    weekRunKm: Number(ws?.run_km ?? 0),
+    weekRideKm: Number(ws?.ride_km ?? 0),
     sessionCount: weekSessions.rows.length,
     load: {
       last7Min: last7,
@@ -146,7 +149,7 @@ export default async function TodayPage() {
   const hour = hourIn(tz, now)
   const greeting = hour < 5 ? 'Late one' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  const { today, todayLifts, todayCardio, weeklyGoal, isLbs, completedDates, weekDates, weekVolume, weekDistance, sessionCount, load } = await getTodayData(session.userId, todayStr)
+  const { today, todayLifts, todayCardio, weeklyGoal, isLbs, completedDates, weekDates, weekVolume, weekRunKm, weekRideKm, sessionCount, load } = await getTodayData(session.userId, todayStr)
 
   // Monthly recap: in the first week of a month, point at last month's; otherwise this month so far
   const dayOfMonth = Number(todayStr.slice(8, 10))
@@ -160,6 +163,9 @@ export default async function TodayPage() {
     if (r !== null && r > 1.5) return { tone: 'warn', label: 'Ramping up fast', hint: 'Consider an easier day' }
     if (r !== null && r < 0.5 && load.prior21Weekly > 0) return { tone: 'muted', label: 'Detrained', hint: 'Easy build back up' }
     if (load.streak >= 6) return { tone: 'warn', label: `${load.streak} days straight`, hint: 'A rest day would help' }
+    // The label has to agree with the % shown next to it
+    if (r !== null && r < 0.8 && load.prior21Weekly > 0) return { tone: 'muted', label: 'Lighter week', hint: 'Fine for recovery — ease back in' }
+    if (r !== null && r > 1.2) return { tone: 'ok', label: 'Building', hint: 'Good progression — keep it steady' }
     if (load.streak >= 3) return { tone: 'ok', label: `${load.streak} day streak`, hint: 'Looking consistent' }
     return { tone: 'ok', label: 'Balanced', hint: 'Train as planned' }
   })()
@@ -211,7 +217,7 @@ export default async function TodayPage() {
                   <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
                     <p className="font-headline font-bold text-on-surface truncate">{c.activity}</p>
                     <p className="text-sm text-outline shrink-0">
-                      {[c.distance ? `${c.distance.toFixed(1)} km` : null, c.duration].filter(Boolean).join(' · ')}
+                      {cardioSummary(c)}
                     </p>
                   </div>
                 </div>
@@ -321,27 +327,26 @@ export default async function TodayPage() {
         )
       })()}
 
-      {/* Weekly summary */}
-      {(weekVolume > 0 || weekDistance > 0) && (
-        <section className="mb-10 grid grid-cols-3 gap-3">
-          <div className="bg-surface-container rounded-xl p-3 flex flex-col items-center">
-            <span className="font-headline font-black text-lg text-on-surface">{sessionCount}</span>
-            <span className="font-label text-[9px] uppercase tracking-widest text-outline mt-0.5">Sessions</span>
-          </div>
-          {weekVolume > 0 && (
-            <div className="bg-surface-container rounded-xl p-3 flex flex-col items-center">
-              <span className="font-headline font-black text-lg text-primary-container">{(weekVolume / 1000).toFixed(1)}t</span>
-              <span className="font-label text-[9px] uppercase tracking-widest text-outline mt-0.5">Volume</span>
-            </div>
-          )}
-          {weekDistance > 0 && (
-            <div className="bg-surface-container rounded-xl p-3 flex flex-col items-center">
-              <span className="font-headline font-black text-lg text-tertiary">{weekDistance.toFixed(1)}</span>
-              <span className="font-label text-[9px] uppercase tracking-widest text-outline mt-0.5">km run</span>
-            </div>
-          )}
-        </section>
-      )}
+      {/* Weekly summary — runs and rides kept separate so "km run" means running */}
+      {(() => {
+        const tiles = [
+          { value: String(sessionCount), label: sessionCount === 1 ? 'Session' : 'Sessions', cls: 'text-on-surface' },
+          ...(weekVolume > 0 ? [{ value: `${(weekVolume / 1000).toFixed(1)}t`, label: 'Volume', cls: 'text-primary-container' }] : []),
+          ...(weekRunKm > 0 ? [{ value: weekRunKm.toFixed(1), label: 'km run', cls: 'text-tertiary' }] : []),
+          ...(weekRideKm > 0 ? [{ value: weekRideKm.toFixed(1), label: 'km ride', cls: 'text-tertiary' }] : []),
+        ]
+        if (tiles.length === 1) return null
+        return (
+          <section className={`mb-10 grid gap-3 ${tiles.length === 4 ? 'grid-cols-4' : tiles.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {tiles.map(t => (
+              <div key={t.label} className="bg-surface-container rounded-xl p-3 flex flex-col items-center">
+                <span className={`font-headline font-black text-lg ${t.cls}`}>{t.value}</span>
+                <span className="font-label text-[9px] uppercase tracking-widest text-outline mt-0.5">{t.label}</span>
+              </div>
+            ))}
+          </section>
+        )
+      })()}
 
       {/* Monthly recap */}
       <Link href={`/recap?month=${recapMonth}`} className="mb-10 flex items-center gap-4 bg-surface-container hover:bg-surface-container-high transition-colors rounded-2xl p-4">

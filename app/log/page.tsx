@@ -1148,17 +1148,26 @@ export default function LogPage() {
               </button>
             )}
             {!browsedDate && (
-              <button onClick={repeatLastSession} disabled={repeatLoading} title="Repeat last session" className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container disabled:opacity-50">
-                {repeatLoading
-                  ? <span className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
-                  : <span className="material-symbols-outlined text-outline text-[18px]">replay</span>}
+              <button onClick={repeatLastSession} disabled={repeatLoading} aria-label="Repeat last session" className="flex flex-col items-center gap-1 disabled:opacity-50">
+                <span className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container">
+                  {repeatLoading
+                    ? <span className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+                    : <span className="material-symbols-outlined text-outline text-[18px]">replay</span>}
+                </span>
+                <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline-variant">Repeat</span>
               </button>
             )}
-            <button onClick={toggleUnit} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container text-[10px] font-bold font-label text-outline">
-              {isLbs ? 'lbs' : 'kg'}
+            <button onClick={toggleUnit} aria-label="Switch kg / lbs" className="flex flex-col items-center gap-1">
+              <span className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container text-[10px] font-bold font-label text-outline">
+                {isLbs ? 'lbs' : 'kg'}
+              </span>
+              <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline-variant">Units</span>
             </button>
-            <button onClick={() => setCalOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container">
-              <span className="material-symbols-outlined text-outline">calendar_month</span>
+            <button onClick={() => setCalOpen(true)} aria-label="Past sessions" className="flex flex-col items-center gap-1">
+              <span className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container">
+                <span className="material-symbols-outlined text-outline">calendar_month</span>
+              </span>
+              <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline-variant">History</span>
             </button>
           </div>
         </header>
@@ -1586,7 +1595,7 @@ export default function LogPage() {
   )
 
   const prBadge = (active: boolean, icon: string, text: string) => (
-    <div className={`flex items-center gap-1 text-[10px] font-bold font-label transition-colors ${active ? 'text-primary-container' : 'text-outline-variant'}`}>
+    <div className={`flex items-center gap-1 text-[10px] font-bold font-label whitespace-nowrap transition-colors ${active ? 'text-primary-container' : 'text-outline-variant'}`}>
       <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: `'FILL' ${active ? 1 : 0}` }}>{icon}</span>
       {text}
     </div>
@@ -1640,8 +1649,8 @@ export default function LogPage() {
           unitLabel={weightLabel}
           onToggleUnit={toggleUnit}
           badges={pr && (pr.pr_volume > 0 || pr.pr_weight > 0 || pr.pr_e1rm) ? (
-            <div className="flex items-center gap-2">
-              {pr.pr_e1rm && <div className="text-[10px] font-bold font-label text-outline-variant">{kgToDisplay(pr.pr_e1rm)} {weightLabel} 1RM</div>}
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              {pr.pr_e1rm && <div className="text-[10px] font-bold font-label text-outline-variant whitespace-nowrap">{kgToDisplay(pr.pr_e1rm)} {weightLabel} 1RM</div>}
               {pr.pr_e1rm && (pr.pr_volume > 0 || pr.pr_weight > 0) && badgeSep}
               {pr.pr_volume > 0 && prBadge(isVolPR, 'monitoring',
                 isVolPR ? `Vol PR! ${fmtVol(currentVol)}` : currentVol > 0 ? `${fmtVol(currentVol)} / ${fmtVol(pr.pr_volume)}` : fmtVol(pr.pr_volume))}
@@ -1771,7 +1780,7 @@ export default function LogPage() {
         title={view.exercise}
         headerRight={historyButton(view.exercise)}
         badges={pr && (pr.pr_reps_total > 0 || pr.pr_reps > 0) ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
             {pr.pr_reps_total > 0 && prBadge(isRepTotalPR, 'monitoring',
               isRepTotalPR ? `Rep PR! ${currentReps}` : currentReps > 0 ? `${currentReps} / ${pr.pr_reps_total} reps` : `${pr.pr_reps_total} reps`)}
             {pr.pr_reps_total > 0 && pr.pr_reps > 0 && badgeSep}
@@ -1869,7 +1878,7 @@ export default function LogPage() {
         title={view.exercise}
         headerRight={historyButton(view.exercise)}
         badges={pr && (pr.pr_duration_total != null || pr.pr_duration != null) ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
             {pr.pr_duration_total != null && pr.pr_duration_total > 0 && prBadge(isDurTotalPR, 'monitoring',
               isDurTotalPR ? `Total PR! ${fmtDurShort(currentDur)}` : currentDur > 0 ? `${fmtDurShort(currentDur)} / ${fmtDurShort(pr.pr_duration_total)}` : fmtDurShort(pr.pr_duration_total))}
             {pr.pr_duration_total != null && pr.pr_duration != null && badgeSep}

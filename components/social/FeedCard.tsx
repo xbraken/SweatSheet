@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Avatar from '@/components/Avatar'
 import { toast } from '@/components/Toast'
 import { fmtPrValue } from '@/lib/pr-format'
+import { cardioSummary } from '@/lib/cardio-trends'
 
 export const REACTIONS = ['🔥', '💪', '👏'] as const
 
@@ -108,9 +109,7 @@ export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boole
         <div key={`c${i}`} className="flex items-center gap-3 py-1.5">
           <span className="material-symbols-outlined text-tertiary text-xl">{c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : 'directions_run'}</span>
           <p className="font-headline font-bold text-on-surface flex-1 truncate">{c.activity}</p>
-          <p className="text-sm text-outline shrink-0">
-            {[c.distance && Number(c.distance) > 0 ? `${Number(c.distance).toFixed(1)} km` : null, c.duration, c.pace ? `${c.pace}/km` : null].filter(Boolean).join(' · ')}
-          </p>
+          <p className="text-sm text-outline shrink-0">{cardioSummary(c)}</p>
         </div>
       ))}
 
@@ -125,7 +124,7 @@ export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boole
             {exercises.slice(0, 4).map(e => (
               <li key={e.name} className="text-xs text-on-surface-variant flex justify-between gap-2">
                 <span className="truncate">{e.name}</span>
-                <span className="text-outline shrink-0">{e.sets} × {e.topWeight > 0 ? w(e.topWeight) : 'BW'}</span>
+                <span className="text-outline shrink-0">{e.sets} {e.sets === 1 ? 'set' : 'sets'} · {e.topWeight > 0 ? w(e.topWeight) : 'bodyweight'}</span>
               </li>
             ))}
             {exercises.length > 4 && <li className="text-xs text-outline">+{exercises.length - 4} more</li>}
