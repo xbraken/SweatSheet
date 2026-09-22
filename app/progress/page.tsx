@@ -5,7 +5,8 @@ import BottomNav from '@/components/BottomNav'
 import ExercisePicker, { type ExerciseHint } from '@/components/ExercisePicker'
 import BodyHeatmap from '@/components/BodyHeatmap'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
-import { zoneSeconds, decouplingPct, negativeSplit } from '@/lib/run-analysis'
+import { zoneSeconds, decouplingPct, negativeSplit, riegelPredict } from '@/lib/run-analysis'
+import { aerobicTrend, fmtPace, paceAtTypicalHr, paceToKmh, usesSpeed } from '@/lib/cardio-trends'
 
 function getExerciseType(name: string): ExerciseType {
   return EXERCISES.find(e => e.name === name)?.type ?? 'weights'
@@ -69,9 +70,11 @@ type RunDetail = {
 type CardioInsights = {
   userHrMax: number
   bestSegments: Record<'5K' | '10K' | 'Half' | 'Marathon', { seconds: number; cardio_id: number; date: string } | null>
+  recentBest?: Record<'5K' | '10K', { seconds: number; cardio_id: number; date: string } | null>
   weeklyVolume: { weekStart: string; activity: string; km: number; sessions: number }[]
   weeklyZones: { weekStart: string; activity: string; z1: number; z2: number; z3: number; z4: number; z5: number }[]
   z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[]
+  efficiency?: { date: string; cardio_id: number; ef: number; avgHr: number }[]
 }
 type CalendarDay = {
   date: string
@@ -99,6 +102,13 @@ function toSeconds(str: string | null): number | null {
 }
 
 /** Like toSeconds, but a bare number ("10") means minutes ("10:00"), not seconds */
+/** "5:00 /km" for runs, "24.0 km/h" for rides */
+function paceLabel(pace: string, activity: string): string {
+  if (!usesSpeed(activity)) return `${pace} /km`
+  const sec = toSeconds(pace)
+  return sec ? `${paceToKmh(sec)} km/h` : `${pace} /km`
+}
+
 function toSecondsMinDefault(str: string | null): number | null {
   if (!str) return null
   if (!str.includes(':')) {
@@ -441,7 +451,7 @@ function RunDetailSheet({
             <div className="flex gap-3 mt-2 flex-wrap">
               {distLabel && <span className="text-sm font-bold text-on-surface">{distLabel}</span>}
               {durationLabel && <span className="text-sm text-outline">{durationLabel}</span>}
-              {detail.pace && <span className="text-sm text-outline">{detail.pace} /km</span>}
+              {detail.pace && <span className="text-sm text-outline">{paceLabel(detail.pace, detail.activity)}</span>}
               {detail.calories && <span className="text-sm text-outline">{detail.calories} kcal</span>}
             </div>
           </div>
@@ -1046,7 +1056,7 @@ function RunDetailSheet({
                         <p className="text-[10px] text-outline"><ActivityLabel activity={r.activity} /></p>
                       </div>
                       <div className="text-right">
-                        {r.pace && <p className="text-sm font-bold text-tertiary">{r.pace} /km</p>}
+                        {r.pace && <p className="text-sm font-bold text-tertiary">{paceLabel(r.pace, r.activity)}</p>}
                         {r.heart_rate && <p className="text-xs text-outline">avg {r.heart_rate} bpm</p>}
                       </div>
                     </button>
@@ -1250,6 +1260,7 @@ export default function ProgressPage() {
     const lm = ls.getItem('ss_prog_lift_metric'); if (lm === 'weight' || lm === 'volume' || lm === 'e1rm' || lm === 'topReps' || lm === 'avgWeight') setLiftMetric(lm)
   }, [])
   const [cardioInsights, setCardioInsights] = useState<CardioInsights | null>(null)
+  const [aeroHoverIdx, setAeroHoverIdx] = useState<number | null>(null)
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
@@ -1491,17 +1502,22 @@ export default function ProgressPage() {
   }, [filteredCardioHistory, rangeCutoff])
   const hasPaceData = filteredCardioHistory.some(e => e.pace)
 
+  // Cycling is charted as speed (km/h, higher = better); runs as pace (sec/km, lower = better)
+  const speedMode = usesSpeed(cardioActivity)
   const cardioChartPts = useMemo(() => {
     const pts: Array<{ date: string; value: number; raw: CardioEntry }> = []
     for (const e of cardioChartData) {
-      const v = cardioMetric === 'pace' ? toSeconds(e.pace) : (e.distance ? parseFloat(e.distance) : null)
-      if (v !== null && !isNaN(v)) pts.push({ date: e.date, value: v, raw: e })
+      const paceSec = toSeconds(e.pace)
+      const v = cardioMetric === 'pace'
+        ? (paceSec == null ? null : speedMode ? paceToKmh(paceSec) : paceSec)
+        : (e.distance ? parseFloat(e.distance) : null)
+      if (v !== null && !isNaN(v) && v > 0) pts.push({ date: e.date, value: v, raw: e })
     }
     return pts
-  }, [cardioChartData, cardioMetric])
+  }, [cardioChartData, cardioMetric, speedMode])
   const cardioValues = useMemo(() => cardioChartPts.map(p => p.value), [cardioChartPts])
 
-  const cardioInvert = cardioMetric === 'pace'
+  const cardioInvert = cardioMetric === 'pace' && !speedMode
   const cardioSvgPts = cardioValues.length > 1 ? buildSvgPoints(cardioValues, cardioInvert) : null
   const cardioTrend = useMemo(() => trendPercent(cardioValues, cardioInvert), [cardioValues, cardioInvert])
   const liftTrend = useMemo(() => trendPercent(liftPts), [liftPts])
@@ -1513,19 +1529,19 @@ export default function ProgressPage() {
   )
   const cardioPeakIdx = useMemo(() => {
     if (cardioValues.length === 0) return 0
-    return cardioMetric === 'pace'
+    return cardioInvert
       ? cardioValues.indexOf(Math.min(...cardioValues))  // lowest seconds = fastest
       : cardioValues.indexOf(Math.max(...cardioValues))
-  }, [cardioValues, cardioMetric])
+  }, [cardioValues, cardioInvert])
 
   const peakCardioValue = useMemo(() => {
     if (cardioValues.length === 0) return null
-    if (cardioMetric === 'pace') {
+    if (cardioInvert) {
       const best = Math.min(...cardioValues)
       return `${Math.floor(best / 60)}:${String(best % 60).padStart(2, '0')}`
     }
     return Math.max(...cardioValues).toFixed(1)
-  }, [cardioValues, cardioMetric])
+  }, [cardioValues, cardioInvert])
 
   /** Compute SVG y coordinate (viewBox 0–100) for a value in a dataset */
   function ptY(values: number[], value: number, invert: boolean): number {
@@ -1828,7 +1844,7 @@ export default function ProgressPage() {
                 cardioMetric === m ? 'bg-tertiary text-on-tertiary' : 'bg-surface-container text-on-surface-variant'
               }`}
             >
-              {m === 'pace' ? 'Pace' : 'Distance'}
+              {m === 'pace' ? (speedMode ? 'Speed' : 'Pace') : 'Distance'}
             </button>
           ))}
         </div>
@@ -1874,6 +1890,134 @@ export default function ProgressPage() {
               ))}
             </div>
           </div>
+        )
+      })()}
+
+      {/* Aerobic fitness — each steady run's pace, adjusted to the user's typical heart rate.
+          Faster at the same heart rate = fitter. */}
+      {tab === 'cardio' && cardioInsights && cardioActivity === 'Run' && (() => {
+        const adj = paceAtTypicalHr(cardioInsights.efficiency ?? [])
+        const t = adj && aerobicTrend(adj.points)
+        if (!adj || !t) return null
+        const values = t.smoothed.map(p => p.paceSec)
+        const pts = buildSvgPoints(values, true)
+        const steady = Math.abs(t.deltaSec) < 3
+        const faster = t.deltaSec < 0
+        // Hover/drag to read a point, same as the Pace trend chart
+        const n = values.length
+        const hIdx = aeroHoverIdx != null && aeroHoverIdx < n ? aeroHoverIdx : null
+        const hX = hIdx != null ? (hIdx / Math.max(n - 1, 1)) * 300 : 0
+        const hY = hIdx != null ? ptY(values, values[hIdx], true) : 0
+        const onPointer = (e: React.PointerEvent<SVGSVGElement>) => {
+          if (n < 2) return
+          const rect = e.currentTarget.getBoundingClientRect()
+          const x = (e.clientX - rect.left) / rect.width
+          setAeroHoverIdx(Math.max(0, Math.min(n - 1, Math.round(x * (n - 1)))))
+        }
+        return (
+          <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Aerobic fitness</p>
+                <p className="mt-1">
+                  <span className="text-3xl font-black font-headline text-tertiary">{fmtPace(hIdx != null ? values[hIdx] : t.currentSec)}</span>
+                  <span className="text-xs text-outline ml-1">/km at {adj.refHr} bpm</span>
+                </p>
+                <p className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
+                  {hIdx != null ? formatDate(t.smoothed[hIdx].date) : 'now'}
+                </p>
+              </div>
+              <span className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
+                steady ? 'bg-surface-container-high text-outline' : faster ? 'bg-tertiary/20 text-tertiary' : 'bg-red-500/20 text-red-400'
+              }`}>
+                <span className="material-symbols-outlined text-[12px]">{steady ? 'trending_flat' : faster ? 'trending_up' : 'trending_down'}</span>
+                {steady ? 'Steady' : `${Math.abs(t.deltaSec)}s/km ${faster ? 'faster' : 'slower'}`}
+              </span>
+            </div>
+            <svg
+              className="w-full h-24 drop-shadow-[0_0_8px_rgba(75,222,206,0.3)]"
+              viewBox="0 0 300 100" preserveAspectRatio="none"
+              style={{ touchAction: 'pan-y' }}
+              onPointerMove={onPointer}
+              onPointerDown={onPointer}
+              onPointerLeave={() => setAeroHoverIdx(null)}
+              onPointerCancel={() => setAeroHoverIdx(null)}
+            >
+              <defs>
+                <linearGradient id="z2Grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#4bdece" stopOpacity="0.18" />
+                  <stop offset="100%" stopColor="#4bdece" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <polygon points={`0,100 ${pts} 300,100`} fill="url(#z2Grad)" />
+              <polyline points={pts} fill="none" stroke="#4bdece" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+              {hIdx != null && <>
+                <line x1={hX} y1={0} x2={hX} y2={100} stroke="#4bdece" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                <circle cx={hX} cy={hY} r="5" fill="#4bdece" />
+              </>}
+            </svg>
+            <div className="flex justify-between text-[10px] text-outline-variant -mt-1">
+              <span>{formatDate(t.smoothed[0].date)}</span>
+              <span>{t.runs} runs</span>
+              <span>{formatDate(t.smoothed[t.smoothed.length - 1].date)}</span>
+            </div>
+            <p className="text-xs text-outline leading-relaxed">
+              Your steady runs, adjusted to your typical heart rate ({adj.refHr} bpm) so easy and hard days compare fairly —
+              vs {t.baselineLabel} ({fmtPace(t.baselineSec)}/km). Faster at the same heart rate means your aerobic fitness is improving.
+            </p>
+          </section>
+        )
+      })()}
+
+      {/* Race predictions — Riegel formula from the best recent 5K / 10K efforts.
+          Each distance uses whichever source predicts faster: a slow 10K was probably an easy
+          run, not a max effort, so it shouldn't drag the predictions down. */}
+      {tab === 'cardio' && cardioInsights && cardioActivity === 'Run' && (() => {
+        const rb = cardioInsights.recentBest
+        const sources = ([['5K', 5], ['10K', 10]] as const)
+          .filter(([l]) => rb?.[l])
+          .map(([label, km]) => ({ label, km, ...rb![label]! }))
+        if (sources.length === 0) return null
+        const targets = [
+          { label: '5K', km: 5 }, { label: '10K', km: 10 },
+          { label: 'Half', km: 21.0975 }, { label: 'Marathon', km: 42.195 },
+        ]
+        const fmtTime = (sec: number) => {
+          const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = Math.round(sec % 60)
+          return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s2).padStart(2, '0')}` : `${m}:${String(s2).padStart(2, '0')}`
+        }
+        const used = new Set<string>()
+        const tiles = targets.map(tg => {
+          const options = sources.map(src => ({
+            src: src.label,
+            actual: src.label === tg.label,
+            sec: src.label === tg.label ? src.seconds : riegelPredict(src.seconds, src.km, tg.km),
+          }))
+          const best = options.reduce((a2, b2) => (b2.sec < a2.sec ? b2 : a2))
+          used.add(best.src)
+          return { ...tg, ...best }
+        })
+        const usedSources = sources.filter(s2 => used.has(s2.label))
+        return (
+          <section className="flex flex-col gap-2">
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Race predictions</p>
+            <div className="grid grid-cols-2 gap-2">
+              {tiles.map(tg => (
+                <div key={tg.label} className={`rounded-xl px-4 py-3 ${tg.actual ? 'bg-tertiary/10 border border-tertiary/30' : 'bg-surface'}`}>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[9px] font-bold font-label uppercase tracking-widest text-tertiary">{tg.label}</span>
+                    {tg.actual && <span className="text-[9px] font-bold font-label uppercase text-outline">your best</span>}
+                  </div>
+                  <p className="text-lg font-black font-headline text-on-surface leading-tight">{fmtTime(tg.sec)}</p>
+                  <p className="text-[10px] text-outline">{fmtPace(tg.sec / tg.km)} /km</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-outline-variant leading-relaxed">
+              Based on your fastest {usedSources.map(s2 => `${s2.label} (${formatDate(s2.date)})`).join(' and ')} in the last 6 months.
+              Assumes race-day effort — longer predictions need the training to back them up.
+            </p>
+          </section>
         )
       })()}
 
@@ -2073,7 +2217,7 @@ export default function ProgressPage() {
                 : liftMetric === 'weight'
                 ? exerciseType === 'timed' ? 'Duration trend' : exerciseType === 'bodyweight' ? 'Reps trend' : 'Max weight trend'
                 : exerciseType === 'timed' ? 'Total duration trend' : exerciseType === 'bodyweight' ? 'Total reps trend' : 'Volume trend'
-              : `${cardioMetric === 'pace' ? 'Pace' : 'Distance'} trend`}
+              : `${cardioMetric === 'pace' ? (speedMode ? 'Speed' : 'Pace') : 'Distance'} trend`}
           </h3>
           <div className="flex gap-1">
             {(['week', 'month', 'year', 'all'] as const).map(r => (
@@ -2128,14 +2272,14 @@ export default function ProgressPage() {
           {tab === 'cardio' && cardioChartPts.length > 0 && (() => {
             const idx = hoveredIdx ?? cardioPeakIdx
             const pt = cardioChartPts[idx]
-            const display = cardioMetric === 'pace'
+            const display = cardioInvert
               ? `${Math.floor(pt.value / 60)}:${String(Math.round(pt.value % 60)).padStart(2, '0')}`
               : pt.value.toFixed(1)
             return (
               <div className="absolute top-4 right-6 flex flex-col items-end">
                 <span className="text-3xl font-black font-headline text-tertiary leading-none">{display}</span>
                 <span className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
-                  {hoveredIdx !== null ? formatDate(pt.date) : cardioMetric === 'pace' ? 'best pace' : 'km peak'}
+                  {hoveredIdx !== null ? formatDate(pt.date) : cardioMetric === 'pace' ? (speedMode ? 'top km/h' : 'best pace') : 'km peak'}
                 </span>
               </div>
             )
@@ -2308,7 +2452,7 @@ export default function ProgressPage() {
                     <p className="text-xs text-on-surface-variant"><ActivityLabel activity={w.activity} /></p>
                   </div>
                   <div className="text-right">
-                    {w.pace && <p className="text-sm font-bold text-on-surface">{w.pace} /km</p>}
+                    {w.pace && <p className="text-sm font-bold text-on-surface">{paceLabel(w.pace, w.activity)}</p>}
                     {w.duration && <p className="text-xs text-on-surface-variant">{w.duration}</p>}
                     {w.calories && <p className="text-xs text-on-surface-variant">{w.calories} kcal</p>}
                   </div>
@@ -2610,7 +2754,7 @@ export default function ProgressPage() {
                     </div>
                     <div className="text-right flex flex-col gap-0.5 ml-3 shrink-0">
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} /></p>
-                      {s.pace && <p className="font-bold text-on-surface text-sm">{s.pace} /km</p>}
+                      {s.pace && <p className="font-bold text-on-surface text-sm">{paceLabel(s.pace, s.activity)}</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
                       {s.heart_rate && <p className="text-xs text-primary-container">♥ {s.heart_rate} avg</p>}
                     </div>

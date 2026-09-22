@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { userToday } from '@/lib/tz'
+import { recordCardioPrs } from '@/lib/cardio-prs'
 
 await initDb()
 
@@ -122,6 +123,14 @@ export async function POST(req: NextRequest) {
       if (prev === null || prChecks[i].maxNew > prev) {
         prs.push({ exercise: prChecks[i].exercise, weight: prChecks[i].maxNew })
       }
+    }
+
+    if (cardioStmts.length > 0) {
+      const ids = await db.execute({
+        sql: 'SELECT c.id FROM cardio c JOIN blocks b ON c.block_id = b.id WHERE b.session_id = ?',
+        args: [sessionId],
+      })
+      for (const r of ids.rows) await recordCardioPrs(Number(r.id))
     }
 
     return NextResponse.json({ id: sessionId, date, prs })

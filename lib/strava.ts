@@ -1,4 +1,5 @@
 import { db } from './db'
+import { recordCardioPrs } from '@/lib/cardio-prs'
 
 const CLIENT_ID = process.env.STRAVA_CLIENT_ID!
 const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET!
@@ -218,6 +219,7 @@ export async function importActivity(userId: number, activityId: number, opts: {
         args: [cardioId, s.offsetSec, s.distKm] as (string | number | null)[],
       })))
     }
+    await recordCardioPrs(cardioId)
 
     return { ok: true }
   } catch (e) {

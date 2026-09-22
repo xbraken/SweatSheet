@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { recordCardioPrs } from '@/lib/cardio-prs'
 
 await initDb()
 
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
             })))
           : Promise.resolve(),
       ])
+      await recordCardioPrs(cardioId)
       count++
     } catch { /* skip failed rows, continue */ }
   }

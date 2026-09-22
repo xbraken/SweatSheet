@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { userToday } from '@/lib/tz'
+import { recordCardioPrs } from '@/lib/cardio-prs'
 
 await initDb()
 
@@ -303,12 +304,13 @@ export async function POST(req: NextRequest) {
       })
       const blockId = blockRes.rows[0].id as number
 
-      await db.execute({
-        sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace) VALUES (?, ?, ?, ?, ?)',
+      const cardioRes = await db.execute({
+        sql: 'INSERT INTO cardio (block_id, activity, distance, duration, pace) VALUES (?, ?, ?, ?, ?) RETURNING id',
         args: [blockId, activity, distance || null, time || null, pace || null],
       })
+      const cardioPrs = await recordCardioPrs(Number(cardioRes.rows[0].id))
 
-      return NextResponse.json({ ok: true, blockId })
+      return NextResponse.json({ ok: true, blockId, cardioPrs })
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'

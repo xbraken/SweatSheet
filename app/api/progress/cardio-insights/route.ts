@@ -3,7 +3,7 @@ import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import {
   type HrSample, type DistanceSample,
-  findBestSegment, zoneSeconds, longestZ2Window, weekStart,
+  findBestSegment, zoneSeconds, longestZ2Window, weekStart, plausibleSamples,
 } from '@/lib/run-analysis'
 
 await initDb()
@@ -34,7 +34,7 @@ export async function GET(_req: NextRequest) {
     // Friends-only scale: a few hundred runs at most.
     const [cardioRes, hrRes, distRes, hrMaxRes] = await Promise.all([
       db.execute({
-        sql: `SELECT c.id, s.date, c.distance, c.duration, c.hr_max, c.activity
+        sql: `SELECT c.id, s.date, c.distance, c.duration, c.hr_max, c.activity, c.heart_rate
               FROM cardio c
               JOIN blocks b ON c.block_id = b.id
               JOIN sessions s ON b.session_id = s.id
@@ -88,6 +88,10 @@ export async function GET(_req: NextRequest) {
       distByRun.get(id)!.push({ time_offset_sec: Number(r.time_offset_sec), distance_km: Number(r.distance_km) })
     }
 
+    // Recent bests (last ~6 months) drive race predictions — an all-time PR from years ago would mislead
+    const recentCutoff = new Date(Date.now() - 183 * 86400000).toISOString().slice(0, 10)
+    const recentBest: Record<'5K' | '10K', { seconds: number; cardio_id: number; date: string } | null> = { '5K': null, '10K': null }
+
     // Best segments across all runs
     const bestSegments: Record<string, { seconds: number; cardio_id: number; date: string } | null> =
       Object.fromEntries(RACE_DISTANCES.map(d => [d.label, null]))
@@ -101,6 +105,11 @@ export async function GET(_req: NextRequest) {
     // Map key = `${weekStart}|${activity}`
     const weeklyVolume = new Map<string, { weekStart: string; activity: string; km: number; sessions: number }>()
     const weeklyZones = new Map<string, { weekStart: string; activity: string; z1: number; z2: number; z3: number; z4: number; z5: number }>()
+
+    // Aerobic efficiency per steady run: average speed per heartbeat. Plotted as "pace at your
+    // typical heart rate" so it reads in familiar units. Uses whole-run averages, so it works for
+    // nearly every run (unlike the zone-2 window, which needs 10+ unbroken minutes in a narrow band).
+    const efficiency: { date: string; cardio_id: number; ef: number; avgHr: number }[] = []
 
     // Z2 trend points (runs only — paceSecPerKm is meaningless for cycling)
     const z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[] = []
@@ -130,12 +139,7 @@ export async function GET(_req: NextRequest) {
       // exclude from sample-based metrics rather than report fake PRs.
       let dist: DistanceSample[] = []
       if (isRun) {
-        const distRaw = distByRun.get(cardioId) ?? []
-        const sampleMaxKm = distRaw.length > 0 ? distRaw[distRaw.length - 1].distance_km : 0
-        const samplesPlausible = distKm > 0 && sampleMaxKm > 0
-          ? Math.abs(sampleMaxKm - distKm) / distKm <= 0.20
-          : distRaw.length > 1
-        dist = samplesPlausible ? distRaw : []
+        dist = plausibleSamples(distByRun.get(cardioId) ?? [], distKm)
 
         // Best segments
         for (const { label, km } of RACE_DISTANCES) {
@@ -144,6 +148,10 @@ export async function GET(_req: NextRequest) {
           const cur = bestSegments[label]
           if (cur == null || sec < cur.seconds) {
             bestSegments[label] = { seconds: sec, cardio_id: cardioId, date }
+          }
+          if ((label === '5K' || label === '10K') && date >= recentCutoff) {
+            const rc = recentBest[label]
+            if (rc == null || sec < rc.seconds) recentBest[label] = { seconds: sec, cardio_id: cardioId, date }
           }
         }
       }
@@ -162,7 +170,15 @@ export async function GET(_req: NextRequest) {
         if (w) z2Trend.push({ date, cardio_id: cardioId, paceSec: w.paceSecPerKm, durationSec: w.durationSec })
       }
 
-      void durSec
+      // Efficiency — steady runs only (intervals mix hard and easy, which skews averages)
+      const avgHr = r.heart_rate != null ? Number(r.heart_rate) : 0
+      const isInterval = typeof r.activity === 'string' && r.activity.toLowerCase().includes('interval')
+      if (isRun && !isInterval && avgHr >= 90 && avgHr <= 220 && distKm >= 2 && distKm <= 100 && durSec > 0) {
+        const paceSec = durSec / distKm
+        if (paceSec >= 150 && paceSec <= 900) {
+          efficiency.push({ date, cardio_id: cardioId, ef: (1000 / paceSec) / avgHr, avgHr })
+        }
+      }
     }
 
     const weeklyVolumeArr = Array.from(weeklyVolume.values())
@@ -173,13 +189,16 @@ export async function GET(_req: NextRequest) {
       .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
 
     z2Trend.sort((a, b) => a.date.localeCompare(b.date))
+    efficiency.sort((a, b) => a.date.localeCompare(b.date))
 
     return NextResponse.json({
       userHrMax,
       bestSegments,
+      recentBest,
       weeklyVolume: weeklyVolumeArr,
       weeklyZones: weeklyZonesArr,
       z2Trend,
+      efficiency,
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'

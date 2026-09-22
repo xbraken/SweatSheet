@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import Avatar from '@/components/Avatar'
 import { toast } from '@/components/Toast'
+import { fmtPrValue } from '@/lib/pr-format'
 
 export const REACTIONS = ['🔥', '💪', '👏'] as const
 
@@ -33,10 +34,6 @@ export function timeAgo(utcStr: string): string {
   const days = Math.floor(hrs / 24)
   if (days < 7) return `${days}d ago`
   return new Date(normalized).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
-function fmtDuration(secs: number) {
-  return `${Math.floor(secs / 60)}:${String(Math.round(secs % 60)).padStart(2, '0')}`
 }
 
 export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boolean }) {
@@ -98,8 +95,8 @@ export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boole
               <span className="material-symbols-outlined text-primary-container text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
               <p className="text-sm text-on-surface">
                 <span className="font-bold">New PR</span> · {p.exercise}{' '}
-                <span className="font-headline font-bold text-primary-container">
-                  {p.kind === 'duration' ? fmtDuration(p.value) : `${w(p.value)}${p.reps ? ` × ${p.reps}` : ''}`}
+                <span className={`font-headline font-bold ${p.kind === 'distance' || p.kind === 'segment' ? 'text-tertiary' : 'text-primary-container'}`}>
+                  {fmtPrValue(p, isLbs)}
                 </span>
               </p>
             </div>

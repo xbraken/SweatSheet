@@ -1,4 +1,5 @@
 import { db } from './db'
+import { recordCardioPrs } from '@/lib/cardio-prs'
 
 const API_KEY = process.env.INTERVALS_ICU_API_KEY!
 const ATHLETE_ID = process.env.INTERVALS_ICU_ATHLETE_ID!
@@ -193,6 +194,7 @@ export async function importActivity(
         args: [cardioId, s.offsetSec, s.distKm] as (string | number | null)[],
       })))
     }
+    await recordCardioPrs(cardioId)
 
     return { ok: true }
   } catch (e) {
