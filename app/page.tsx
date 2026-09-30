@@ -74,7 +74,7 @@ async function getTodayData(userId: number, today: string) {
       args: [userId, today],
     }),
     db.execute({
-      sql: `SELECT c.activity, c.distance, c.duration, c.pace
+      sql: `SELECT c.activity, c.distance, c.duration, c.pace, c.avg_watts
             FROM cardio c JOIN blocks b ON c.block_id = b.id JOIN sessions s ON b.session_id = s.id
             WHERE s.user_id = ? AND s.date = ?
             ORDER BY b.position, b.id`,
@@ -119,7 +119,7 @@ async function getTodayData(userId: number, today: string) {
   return {
     today: todaySession.rows[0] ?? null,
     todayLifts: todayLifts.rows.map(r => ({ exercise: r.exercise as string, sets: Number(r.sets), topWeight: Number(r.top_weight ?? 0) })),
-    todayCardio: todayCardio.rows.map(r => ({ activity: r.activity as string, distance: r.distance != null ? Number(r.distance) : null, duration: (r.duration as string | null) ?? null, pace: (r.pace as string | null) ?? null })),
+    todayCardio: todayCardio.rows.map(r => ({ activity: r.activity as string, distance: r.distance != null ? Number(r.distance) : null, duration: (r.duration as string | null) ?? null, pace: (r.pace as string | null) ?? null, avg_watts: r.avg_watts != null ? Number(r.avg_watts) : null })),
     weeklyGoal: goalRes.rows[0]?.weekly_goal != null ? Number(goalRes.rows[0].weekly_goal) : null,
     isLbs: goalRes.rows[0]?.unit_pref === 'imperial',
     completedDates: weekSessions.rows.map(r => r.date as string),

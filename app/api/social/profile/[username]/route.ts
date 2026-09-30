@@ -71,7 +71,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   let cardioRows: Record<string, unknown>[] = []
   if (cardioBlockIds.length > 0) {
     const ph = cardioBlockIds.map(() => '?').join(',')
-    const r = await db.execute({ sql: `SELECT block_id, activity, distance, duration, pace, heart_rate FROM cardio WHERE block_id IN (${ph})`, args: cardioBlockIds })
+    const r = await db.execute({ sql: `SELECT block_id, activity, distance, duration, pace, heart_rate, avg_watts FROM cardio WHERE block_id IN (${ph})`, args: cardioBlockIds })
     cardioRows = r.rows as Record<string, unknown>[]
   }
 

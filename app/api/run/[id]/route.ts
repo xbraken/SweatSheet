@@ -13,10 +13,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const cardioId = parseInt(id)
   if (isNaN(cardioId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const [runRes, samplesRes, distSamplesRes] = await Promise.all([
+  const [runRes, samplesRes, distSamplesRes, powerSamplesRes] = await Promise.all([
     db.execute({
       sql: `SELECT c.id as cardio_id, c.activity, c.distance, c.duration, c.pace,
                    c.calories, c.heart_rate, c.hr_min, c.hr_max, s.date,
+                   c.avg_watts, c.np_watts, c.max_watts, c.avg_cadence, c.ftp, c.training_load, c.hr_drift,
                    COALESCE(c.started_at, s.created_at) as started_at
             FROM cardio c
             JOIN blocks b ON c.block_id = b.id
@@ -35,6 +36,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             WHERE cardio_id = ? ORDER BY time_offset_sec`,
       args: [cardioId],
     }),
+    db.execute({
+      sql: `SELECT time_offset_sec, watts FROM cardio_power_samples
+            WHERE cardio_id = ? ORDER BY time_offset_sec`,
+      args: [cardioId],
+    }),
   ])
 
   if (runRes.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -43,6 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ...runRes.rows[0],
     hrSamples: samplesRes.rows,
     distanceSamples: distSamplesRes.rows,
+    powerSamples: powerSamplesRes.rows,
   })
 }
 

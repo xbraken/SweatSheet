@@ -19,7 +19,7 @@ export interface FeedItem {
   createdAt: string
   notes: string | null
   lift: { volume: number; sets: number; exercises: Array<{ name: string; volume: number; sets: number; topWeight: number }> } | null
-  cardio: Array<{ activity: string; distance: number | null; duration: string | null; pace: string | null }> | null
+  cardio: Array<{ activity: string; distance: number | null; duration: string | null; pace: string | null; avg_watts?: number | null }> | null
   prs: Array<{ exercise: string; kind: string; value: number; reps: number | null }>
   reactions: { counts: Record<string, number>; mine: string[]; names: string[] }
 }
