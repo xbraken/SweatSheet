@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import type { FeedSet } from '@/lib/feed-format'
 import { prsFor, reactionsFor } from '@/lib/social'
 
 await initDb()
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   if (liftBlockIds.length > 0) {
     const ph = liftBlockIds.map(() => '?').join(',')
     const r = await db.execute({
-      sql: `SELECT block_id, exercise, weight, reps, duration_secs FROM sets WHERE block_id IN (${ph}) AND COALESCE(is_warmup, 0) = 0`,
+      sql: `SELECT block_id, exercise, weight, reps, duration_secs FROM sets WHERE block_id IN (${ph}) AND COALESCE(is_warmup, 0) = 0 ORDER BY block_id, position, id`,
       args: liftBlockIds,
     })
     setsRows = r.rows as Record<string, unknown>[]
@@ -99,30 +100,22 @@ export async function GET(req: NextRequest) {
 
     let totalVolume = 0
     let totalSets = 0
-    // reps / bestSecs let the card describe bodyweight and timed exercises, where volume is 0
-    const exMap = new Map<string, { volume: number; sets: number; topWeight: number; reps: number; bestSecs: number; sameReps: boolean; lastReps: number | null }>()
+    // Every working set, in order — the card shows a top-set summary and expands to the full list
+    const exMap = new Map<string, { volume: number; setList: FeedSet[] }>()
     for (const b of liftBlocks) {
       for (const s of setsByBlock.get(b.id as number) ?? []) {
         const w = Number(s.weight)
         const vol = w * Number(s.reps)
         totalVolume += vol
-        const secs = Number(s.duration_secs ?? 0)
-        const reps = secs > 0 ? 0 : Number(s.reps)
         totalSets++
         const ex = s.exercise as string
-        const cur = exMap.get(ex) ?? { volume: 0, sets: 0, topWeight: 0, reps: 0, bestSecs: 0, sameReps: true, lastReps: null }
-        exMap.set(ex, {
-          volume: cur.volume + vol,
-          sets: cur.sets + 1,
-          topWeight: Math.max(cur.topWeight, w),
-          reps: cur.reps + reps,
-          bestSecs: Math.max(cur.bestSecs, secs),
-          sameReps: cur.sameReps && (cur.lastReps == null || cur.lastReps === reps),
-          lastReps: reps,
-        })
+        const cur = exMap.get(ex) ?? { volume: 0, setList: [] }
+        cur.volume += vol
+        cur.setList.push({ w, r: Number(s.reps), s: Number(s.duration_secs ?? 0) })
+        exMap.set(ex, cur)
       }
     }
-    const exercises = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: Math.round(st.volume), sets: st.sets, topWeight: st.topWeight, reps: st.reps, bestSecs: st.bestSecs, sameReps: st.sameReps }))
+    const exercises = Array.from(exMap.entries()).map(([name, st]) => ({ name, volume: Math.round(st.volume), sets: st.setList.length, setList: st.setList }))
     const cardioList = cardioBlocks.map(b => cardioByBlock.get(b.id as number)).filter(Boolean) as Record<string, unknown>[]
 
     return {
