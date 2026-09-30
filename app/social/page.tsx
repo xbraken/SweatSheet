@@ -4,6 +4,7 @@ import BottomNav from '@/components/BottomNav'
 import Avatar from '@/components/Avatar'
 import FeedCard, { type FeedItem } from '@/components/social/FeedCard'
 import Leaderboard from '@/components/social/Leaderboard'
+import PenguinGame from '@/components/social/PenguinGame'
 
 interface SearchUser { id: number; username: string; is_following: number; avatar?: string | null }
 
@@ -21,6 +22,7 @@ export default function SocialPage() {
   const [searching, setSearching] = useState(false)
   const [justFollowed, setJustFollowed] = useState<Set<string>>(new Set())
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [showGame, setShowGame] = useState(false)
 
   const loadFeed = () =>
     fetch('/api/social/feed')
@@ -81,9 +83,15 @@ export default function SocialPage() {
       <header className="sticky top-0 z-50 bg-surface-container-lowest/80 backdrop-blur-xl">
         <div className="flex items-center justify-between px-6 py-4 max-w-[390px] mx-auto">
           <h1 className="font-headline font-bold text-xl tracking-tight text-primary">Friends</h1>
-          <button onClick={() => setShowSearch(true)} className="text-primary hover:opacity-80 active:scale-95 transition-all">
-            <span className="material-symbols-outlined">person_add</span>
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Easter egg — a little game for rest periods */}
+            <button onClick={() => setShowGame(true)} aria-label="Play penguin slide" className="text-xl leading-none hover:opacity-80 active:scale-90 transition-all">
+              🐧
+            </button>
+            <button onClick={() => setShowSearch(true)} className="text-primary hover:opacity-80 active:scale-95 transition-all">
+              <span className="material-symbols-outlined">person_add</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -121,6 +129,8 @@ export default function SocialPage() {
           </>
         )}
       </main>
+
+      {showGame && <PenguinGame onClose={() => setShowGame(false)} />}
 
       {/* Search Modal — full page so keyboard doesn't push input off screen */}
       {showSearch && (
