@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 13
+const SCHEMA_VERSION = 14
 
 let _initPromise: Promise<void> | null = null
 
@@ -244,6 +244,15 @@ async function _runInit() {
     watts INTEGER NOT NULL
   )`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_power_samples_cardio ON cardio_power_samples(cardio_id)`)
+
+  // v14 — best score per user per mini-game (Friends page penguin easter egg). Additive only.
+  await db.execute(`CREATE TABLE IF NOT EXISTS game_scores (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game TEXT NOT NULL,
+    best INTEGER NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, game)
+  )`)
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)
