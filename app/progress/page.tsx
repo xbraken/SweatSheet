@@ -1582,11 +1582,6 @@ export default function ProgressPage() {
     return arr
   }, [liftHistory, liftSort, exerciseType])
 
-  const hasIntervalRuns = useMemo(
-    () => cardioHistory.some(e => runSubtype(e.activity) === 'interval' && baseActivity(e.activity) === cardioActivity),
-    [cardioHistory, cardioActivity]
-  )
-
   const sortedCardio = useMemo(() => {
     const arr = [...filteredCardioHistory]
     if (cardioSort === 'distance') return arr.sort((a, b) => (parseFloat(b.distance ?? '0') || 0) - (parseFloat(a.distance ?? '0') || 0))
@@ -2546,8 +2541,8 @@ export default function ProgressPage() {
           )}
         </div>
 
-        {/* Interval sub-filter pills — only show if the selected activity has interval sessions */}
-        {tab === 'cardio' && cardioActivity && hasIntervalRuns && (
+        {/* Interval sub-filter pills — shown for every activity so sessions can be marked from here too */}
+        {tab === 'cardio' && cardioActivity && (
           <div className="flex gap-2">
             {(['all', 'run', 'interval'] as const).map(s => (
               <button
@@ -2566,7 +2561,7 @@ export default function ProgressPage() {
         {/* Bulk action bar */}
         {selectMode && selectedIds.size > 0 && (
           <div className="flex gap-2">
-            {runSubFilter !== 'all' && <button
+            <button
               onClick={async () => {
                 const ids = [...selectedIds]
                 const allInterval = ids.every(id => {
@@ -2596,7 +2591,7 @@ export default function ProgressPage() {
                 })
                 return allInterval ? 'Unmark interval' : 'Mark interval'
               })()}
-            </button>}
+            </button>
             <button
               onClick={async () => {
                 if (!confirm(`Delete ${selectedIds.size} workout${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return
@@ -2779,7 +2774,11 @@ export default function ProgressPage() {
                 )
               })
             ) : (
-              !loading && <p className="text-sm text-on-surface-variant text-center py-4">No cardio history yet</p>
+              !loading && <p className="text-sm text-on-surface-variant text-center py-4">
+                {runSubFilter === 'interval'
+                  ? 'No interval sessions yet. Log one with the Intervals toggle, or mark past sessions via Regular → Select.'
+                  : 'No cardio history yet'}
+              </p>
             )
           )}
           {!loading && (() => {
