@@ -1953,62 +1953,6 @@ export default function ProgressPage() {
       {tab !== 'body' && (
       <div key={tab} className="flex flex-col gap-12 animate-fade-in-view">
 
-      {/* Lift metric toggle */}
-      {tab === 'lifts' && liftHistory.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
-          {(['weight', 'volume', 'e1rm', 'topReps', 'avgWeight'] as const)
-            .filter(m => (m !== 'e1rm' && m !== 'topReps' && m !== 'avgWeight') || exerciseType === 'weights')
-            .map(m => (
-            <button
-              key={m}
-              onClick={() => { fadeThen(() => setLiftMetric(m), 'chart'); setHoveredIdx(null) }}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
-                liftMetric === m ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-on-surface-variant'
-              }`}
-            >
-              {m === 'weight'
-                ? exerciseType === 'timed' ? 'Best duration' : exerciseType === 'bodyweight' ? 'Max reps' : 'Max weight'
-                : m === 'volume'
-                ? exerciseType === 'timed' ? 'Total duration' : exerciseType === 'bodyweight' ? 'Total reps' : 'Volume'
-                : m === 'e1rm' ? 'Est. 1RM'
-                : m === 'topReps' ? 'Reps at max'
-                : 'Avg weight'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Cardio metric toggle */}
-      {tab === 'cardio' && hasPaceData && (
-        <div className="flex gap-2">
-          {(['pace', 'distance'] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => fadeThen(() => setCardioMetric(m), 'chart')}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
-                cardioMetric === m ? 'bg-tertiary text-on-tertiary' : 'bg-surface-container text-on-surface-variant'
-              }`}
-            >
-              {m === 'pace' ? (speedMode ? 'Speed' : 'Pace') : 'Distance'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Skeleton placeholders while cardio insights load (endpoint aggregates all HR/distance samples) */}
-      {tab === 'cardio' && !cardioInsights && (
-        <div className="flex flex-col gap-4 animate-pulse">
-          <div className="flex flex-col gap-2">
-            <div className="h-3 w-32 bg-[#1a1a1a] rounded" />
-            <div className="flex gap-2 overflow-hidden">
-              {[0,1,2,3].map(i => <div key={i} className="bg-surface rounded-xl h-[68px] min-w-[80px] shrink-0" />)}
-            </div>
-          </div>
-          <div className="bg-surface rounded-xl h-[180px]" />
-          <div className="bg-surface rounded-xl h-[200px]" />
-        </div>
-      )}
-
       {/* Cycling power fitness — watts per heartbeat (normalized power ÷ avg HR) per ride. Indoor
           rides are the same conditions every time, so the same watts at a lower HR = fitter. */}
       {tab === 'cardio' && cardioInsights && cardioActivity === 'Cycling' && (cardioInsights.ridePower ?? []).length > 0 && (() => {
@@ -2119,8 +2063,64 @@ export default function ProgressPage() {
         )
       })()}
 
-      {/* Real best-segment PRs (computed from distance samples — actual fastest window) */}
-      {tab === 'cardio' && cardioInsights && (() => {
+      {/* Lift metric toggle */}
+      {tab === 'lifts' && liftHistory.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+          {(['weight', 'volume', 'e1rm', 'topReps', 'avgWeight'] as const)
+            .filter(m => (m !== 'e1rm' && m !== 'topReps' && m !== 'avgWeight') || exerciseType === 'weights')
+            .map(m => (
+            <button
+              key={m}
+              onClick={() => { fadeThen(() => setLiftMetric(m), 'chart'); setHoveredIdx(null) }}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest whitespace-nowrap transition-colors ${
+                liftMetric === m ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-on-surface-variant'
+              }`}
+            >
+              {m === 'weight'
+                ? exerciseType === 'timed' ? 'Best duration' : exerciseType === 'bodyweight' ? 'Max reps' : 'Max weight'
+                : m === 'volume'
+                ? exerciseType === 'timed' ? 'Total duration' : exerciseType === 'bodyweight' ? 'Total reps' : 'Volume'
+                : m === 'e1rm' ? 'Est. 1RM'
+                : m === 'topReps' ? 'Reps at max'
+                : 'Avg weight'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Cardio metric toggle */}
+      {tab === 'cardio' && hasPaceData && (
+        <div className="flex gap-2">
+          {(['pace', 'distance'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => fadeThen(() => setCardioMetric(m), 'chart')}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold font-label uppercase tracking-widest transition-colors ${
+                cardioMetric === m ? 'bg-tertiary text-on-tertiary' : 'bg-surface-container text-on-surface-variant'
+              }`}
+            >
+              {m === 'pace' ? (speedMode ? 'Speed' : 'Pace') : 'Distance'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Skeleton placeholders while cardio insights load (endpoint aggregates all HR/distance samples) */}
+      {tab === 'cardio' && !cardioInsights && (
+        <div className="flex flex-col gap-4 animate-pulse">
+          <div className="flex flex-col gap-2">
+            <div className="h-3 w-32 bg-[#1a1a1a] rounded" />
+            <div className="flex gap-2 overflow-hidden">
+              {[0,1,2,3].map(i => <div key={i} className="bg-surface rounded-xl h-[68px] min-w-[80px] shrink-0" />)}
+            </div>
+          </div>
+          <div className="bg-surface rounded-xl h-[180px]" />
+          <div className="bg-surface rounded-xl h-[200px]" />
+        </div>
+      )}
+
+      {/* Real best-segment PRs (computed from run distance samples — actual fastest window). Runs only */}
+      {tab === 'cardio' && cardioInsights && cardioActivity === 'Run' && (() => {
         const labels: ('5K' | '10K' | 'Half' | 'Marathon')[] = ['5K', '10K', 'Half', 'Marathon']
         const tiles = labels.map(l => ({ label: l, rec: cardioInsights.bestSegments[l] })).filter(t => t.rec)
         if (tiles.length === 0) return null
