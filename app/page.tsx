@@ -9,6 +9,7 @@ import WeeklyGoalRing from '@/components/WeeklyGoalRing'
 import { getUserTz } from '@/lib/tz'
 import { addDays, hourIn, todayIn, weekdayMon0 } from '@/lib/dates'
 import { cardioSummary } from '@/lib/cardio-trends'
+import { cardioIcon } from '@/lib/cardio-activity'
 
 function toSecondsLoose(str: string | null): number {
   if (!str) return 0
@@ -44,7 +45,7 @@ async function getTodayData(userId: number, today: string) {
       sql: `SELECT
         COALESCE(SUM(CASE WHEN COALESCE(st.is_warmup, 0) = 0 THEN st.weight * st.reps END), 0) as total_volume,
         COALESCE(SUM(CASE WHEN lower(c.activity) LIKE '%run%' AND c.distance <= 300 THEN c.distance END), 0) as run_km,
-        COALESCE(SUM(CASE WHEN c.activity = 'Cycling' AND c.distance <= 1000 THEN c.distance END), 0) as ride_km
+        COALESCE(SUM(CASE WHEN c.activity IN ('Cycling', 'Interval ride') AND c.distance <= 1000 THEN c.distance END), 0) as ride_km
         FROM sessions s
         LEFT JOIN blocks b ON b.session_id = s.id
         LEFT JOIN sets st ON st.block_id = b.id
@@ -213,7 +214,7 @@ export default async function TodayPage() {
               ))}
               {todayCardio.map((c, i) => (
                 <div key={`c${i}`} className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-tertiary">{c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : 'directions_run'}</span>
+                  <span className="material-symbols-outlined text-tertiary">{cardioIcon(c.activity)}</span>
                   <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
                     <p className="font-headline font-bold text-on-surface truncate">{c.activity}</p>
                     <p className="text-sm text-outline shrink-0">

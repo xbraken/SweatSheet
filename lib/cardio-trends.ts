@@ -1,5 +1,6 @@
 // Client-safe helpers for cardio progress charts.
 import { addDays } from '@/lib/dates'
+import { isCyclingActivity } from '@/lib/cardio-activity'
 
 function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b)
@@ -53,7 +54,7 @@ export function paceToKmh(paceSec: number): number {
 
 /** Cycling is shown as speed; everything else as pace */
 export function usesSpeed(activity: string | null | undefined): boolean {
-  return activity === 'Cycling'
+  return isCyclingActivity(activity)
 }
 
 /** "43" (bare number = minutes), "43:04", "1:02:08" → seconds */

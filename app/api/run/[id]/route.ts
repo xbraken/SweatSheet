@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { withInterval } from '@/lib/cardio-activity'
 
 await initDb()
 
@@ -89,18 +90,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (isNaN(cardioId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
   const body = await req.json()
-  const { activity, distance, duration, pace } = body
+  const { interval, distance, duration, pace } = body
 
-  if (activity !== undefined) {
-    if (!['Run', 'Indoor run', 'Interval run'].includes(activity)) {
-      return NextResponse.json({ error: 'Invalid activity' }, { status: 400 })
+  if (interval !== undefined) {
+    if (typeof interval !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid interval flag' }, { status: 400 })
     }
-    await db.execute({
-      sql: `UPDATE cardio SET activity = ? WHERE id = ? AND block_id IN (
-              SELECT b.id FROM blocks b JOIN sessions s ON s.id = b.session_id WHERE s.user_id = ?
-            )`,
-      args: [activity, cardioId, session.userId],
+    const cur = await db.execute({
+      sql: `SELECT c.activity FROM cardio c JOIN blocks b ON b.id = c.block_id JOIN sessions s ON s.id = b.session_id
+            WHERE c.id = ? AND s.user_id = ?`,
+      args: [cardioId, session.userId],
     })
+    if (cur.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const activity = withInterval(String(cur.rows[0].activity ?? ''), interval)
+    await db.execute({ sql: 'UPDATE cardio SET activity = ? WHERE id = ?', args: [activity, cardioId] })
     return NextResponse.json({ ok: true, activity })
   }
 

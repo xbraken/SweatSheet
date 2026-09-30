@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { recordCardioPrs } from '@/lib/cardio-prs'
+import { cardioBlockType } from '@/lib/cardio-activity'
 
 await initDb()
 
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
       })
       const sessionId = sessionRes.rows[0].id as number
 
-      const blockType = w.activity === 'Cycling' ? 'cycle' : 'run'
+      const blockType = cardioBlockType(w.activity)
       const blockRes = await db.execute({
         sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, 0) RETURNING id',
         args: [sessionId, blockType],

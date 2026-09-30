@@ -7,6 +7,7 @@ import BodyHeatmap from '@/components/BodyHeatmap'
 import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 import { zoneSeconds, decouplingPct, negativeSplit, riegelPredict } from '@/lib/run-analysis'
 import { smoothedTrend, fmtPace, paceToKmh, usesSpeed } from '@/lib/cardio-trends'
+import { baseActivity, isIntervalActivity, withInterval } from '@/lib/cardio-activity'
 
 function getExerciseType(name: string): ExerciseType {
   return EXERCISES.find(e => e.name === name)?.type ?? 'weights'
@@ -18,16 +19,12 @@ function fmtDuration(secs: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-function baseActivity(activity: string) {
-  return activity.toLowerCase().includes('run') ? 'Run' : activity
-}
-
 function runSubtype(activity: string): 'interval' | 'run' {
-  return activity.toLowerCase() === 'interval run' ? 'interval' : 'run'
+  return isIntervalActivity(activity) ? 'interval' : 'run'
 }
 
 function ActivityLabel({ activity, className }: { activity: string; className?: string }) {
-  const isInterval = activity.toLowerCase() === 'interval run'
+  const isInterval = isIntervalActivity(activity)
   return (
     <span className={`inline-flex items-center gap-1.5 ${className ?? ''}`}>
       {baseActivity(activity)}
@@ -459,21 +456,21 @@ function RunDetailSheet({
             <button onClick={handleClose} className="p-1">
               <span className="material-symbols-outlined text-outline">close</span>
             </button>
-            {detail && ['Run', 'Indoor run', 'Interval run'].includes(detail.activity) && (
+            {detail && (
               <button
                 onClick={async () => {
                   if (!detail) return
-                  const newActivity = detail.activity === 'Interval run' ? 'Run' : 'Interval run'
-                  setDetail({ ...detail, activity: newActivity })
+                  const interval = !isIntervalActivity(detail.activity)
+                  setDetail({ ...detail, activity: withInterval(detail.activity, interval) })
                   fetch(`/api/run/${runId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ activity: newActivity }),
+                    body: JSON.stringify({ interval }),
                   })
                 }}
                 className="text-[10px] font-bold font-label uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-tertiary/10 text-tertiary"
               >
-                {detail.activity === 'Interval run' ? 'Unmark interval' : 'Mark as interval'}
+                {isIntervalActivity(detail.activity) ? 'Unmark interval' : 'Mark as interval'}
               </button>
             )}
           </div>
@@ -1306,6 +1303,8 @@ export default function ProgressPage() {
     if ((liftMetric === 'e1rm' || liftMetric === 'topReps' || liftMetric === 'avgWeight') && exerciseType !== 'weights') setLiftMetric('weight')
   }, [exerciseType, liftMetric])
   useEffect(() => { setVisibleCount(10) }, [tab, liftSort, cardioSort, cardioActivity, runSubFilter])
+  // Interval/regular filter is per activity — don't carry it over to one that may have no intervals
+  useEffect(() => { setRunSubFilter('all') }, [cardioActivity])
   useEffect(() => { if (exercise) localStorage.setItem('ss_prog_exercise', exercise) }, [exercise])
   useEffect(() => { if (cardioActivity) localStorage.setItem('ss_prog_cardio_activity', cardioActivity) }, [cardioActivity])
 
@@ -1488,7 +1487,7 @@ export default function ProgressPage() {
   )
   const filteredCardioHistory = useMemo(() => {
     const result = cardioActivity ? cardioHistory.filter(e => baseActivity(e.activity) === cardioActivity) : cardioHistory
-    if (cardioActivity === 'Run' && runSubFilter !== 'all') {
+    if (cardioActivity && runSubFilter !== 'all') {
       return result.filter(e => runSubtype(e.activity) === runSubFilter)
     }
     return result
@@ -1584,8 +1583,8 @@ export default function ProgressPage() {
   }, [liftHistory, liftSort, exerciseType])
 
   const hasIntervalRuns = useMemo(
-    () => cardioHistory.some(e => runSubtype(e.activity) === 'interval'),
-    [cardioHistory]
+    () => cardioHistory.some(e => runSubtype(e.activity) === 'interval' && baseActivity(e.activity) === cardioActivity),
+    [cardioHistory, cardioActivity]
   )
 
   const sortedCardio = useMemo(() => {
@@ -2547,8 +2546,8 @@ export default function ProgressPage() {
           )}
         </div>
 
-        {/* Run sub-filter pills — only show if there are interval runs */}
-        {tab === 'cardio' && cardioActivity === 'Run' && hasIntervalRuns && (
+        {/* Interval sub-filter pills — only show if the selected activity has interval sessions */}
+        {tab === 'cardio' && cardioActivity && hasIntervalRuns && (
           <div className="flex gap-2">
             {(['all', 'run', 'interval'] as const).map(s => (
               <button
@@ -2574,16 +2573,16 @@ export default function ProgressPage() {
                   const entry = cardioHistory.find(e => e.cardio_id === id)
                   return entry && runSubtype(entry.activity) === 'interval'
                 })
-                const newActivity = allInterval ? 'Run' : 'Interval run'
+                const interval = !allInterval
                 setCardioHistory(prev => prev.map(e =>
-                  selectedIds.has(e.cardio_id!) ? { ...e, activity: newActivity } : e
+                  selectedIds.has(e.cardio_id!) ? { ...e, activity: withInterval(e.activity, interval) } : e
                 ))
                 setSelectedIds(new Set())
                 setSelectMode(false)
                 fetch('/api/run/bulk-patch', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ids, activity: newActivity }),
+                  body: JSON.stringify({ ids, interval }),
                 })
               }}
               className="flex-1 py-3 rounded-xl bg-tertiary/10 border border-tertiary/30 text-tertiary text-sm font-bold font-label flex items-center justify-center gap-2 disabled:opacity-50 transition-colors hover:bg-tertiary/20"

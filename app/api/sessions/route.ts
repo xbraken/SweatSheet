@@ -3,6 +3,7 @@ import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { userToday } from '@/lib/tz'
 import { recordCardioPrs } from '@/lib/cardio-prs'
+import { cardioBlockType } from '@/lib/cardio-activity'
 
 await initDb()
 
@@ -48,8 +49,7 @@ export async function POST(req: NextRequest) {
     // Insert all blocks in a batch
     const blockStmts = blocks.map((block: { type: string; activity?: string }, i: number) => {
       const blockType = block.type === 'lift' ? 'lift'
-        : block.activity === 'Cycling' ? 'cycle'
-        : 'run'
+        : cardioBlockType(block.activity)
       return {
         sql: 'INSERT INTO blocks (session_id, type, position) VALUES (?, ?, ?) RETURNING id',
         args: [sessionId, blockType, i],
