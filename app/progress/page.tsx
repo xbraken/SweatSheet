@@ -2119,8 +2119,8 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {/* Real best-segment PRs (computed from distance samples — actual fastest window) */}
-      {tab === 'cardio' && cardioInsights && (() => {
+      {/* Real best-segment PRs (computed from run distance samples — actual fastest window). Runs only */}
+      {tab === 'cardio' && cardioInsights && cardioActivity === 'Run' && (() => {
         const labels: ('5K' | '10K' | 'Half' | 'Marathon')[] = ['5K', '10K', 'Half', 'Marathon']
         const tiles = labels.map(l => ({ label: l, rec: cardioInsights.bestSegments[l] })).filter(t => t.rec)
         if (tiles.length === 0) return null
