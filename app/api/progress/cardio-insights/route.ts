@@ -5,6 +5,7 @@ import {
   type HrSample, type DistanceSample,
   findBestSegment, zoneSeconds, longestZ2Window, weekStart, plausibleSamples, warmupHr,
 } from '@/lib/run-analysis'
+import { baseActivity, isIntervalActivity } from '@/lib/cardio-activity'
 
 await initDb()
 
@@ -96,10 +97,8 @@ export async function GET(_req: NextRequest) {
     const bestSegments: Record<string, { seconds: number; cardio_id: number; date: string } | null> =
       Object.fromEntries(RACE_DISTANCES.map(d => [d.label, null]))
 
-    // Normalize "Interval run" / "Trail run" / etc. to "Run" so they group with the activity selector.
-    function baseAct(a: string): string {
-      return a.toLowerCase().includes('run') ? 'Run' : a
-    }
+    // Normalize "Interval run" / "Interval ride" / "Trail run" / etc. to their base so they group with the activity selector.
+    const baseAct = baseActivity
 
     // Per-activity weekly aggregates — the UI filters these by the active cardio activity selector.
     // Map key = `${weekStart}|${activity}`
@@ -171,7 +170,7 @@ export async function GET(_req: NextRequest) {
 
       // Warm-up heart rate: minutes 5–9 of each interval session's warm-up — a repeatable,
       // same-effort check. The same session imported twice (e.g. Strava + Intervals) counts once.
-      const isInterval = typeof r.activity === 'string' && r.activity.toLowerCase().includes('interval')
+      const isInterval = typeof r.activity === 'string' && isIntervalActivity(r.activity)
       if (isRun && isInterval) {
         const w = warmupHr(hr, dist)
         const dupKey = `${date}|${w}`

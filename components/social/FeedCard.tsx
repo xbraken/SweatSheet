@@ -5,6 +5,7 @@ import Avatar from '@/components/Avatar'
 import { toast } from '@/components/Toast'
 import { fmtPrValue } from '@/lib/pr-format'
 import { cardioSummary } from '@/lib/cardio-trends'
+import { cardioIcon } from '@/lib/cardio-activity'
 
 export const REACTIONS = ['🔥', '💪', '👏'] as const
 
@@ -107,7 +108,7 @@ export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boole
 
       {item.cardio?.map((c, i) => (
         <div key={`c${i}`} className="flex items-center gap-3 py-1.5">
-          <span className="material-symbols-outlined text-tertiary text-xl">{c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : 'directions_run'}</span>
+          <span className="material-symbols-outlined text-tertiary text-xl">{cardioIcon(c.activity)}</span>
           <p className="font-headline font-bold text-on-surface flex-1 truncate">{c.activity}</p>
           <p className="text-sm text-outline shrink-0">{cardioSummary(c)}</p>
         </div>

@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { findBestSegment, plausibleSamples, type DistanceSample } from '@/lib/run-analysis'
+import { baseActivity } from '@/lib/cardio-activity'
 
 // Cardio PRs recorded into the shared `prs` table so they show in the feed and recap.
 //   kind 'distance' — longest run / ride (value = km)
@@ -15,13 +16,12 @@ const RECENT_DAYS = 14
 const SEGMENTS = [{ label: 'Fastest 5K', km: 5 }, { label: 'Fastest 10K', km: 10 }]
 
 export function cardioBase(activity: string): 'Run' | 'Cycling' | null {
-  if (activity.toLowerCase().includes('run')) return 'Run'
-  if (activity === 'Cycling') return 'Cycling'
-  return null
+  const base = baseActivity(activity)
+  return base === 'Run' || base === 'Cycling' ? base : null
 }
 
 const sameBaseSql = (base: 'Run' | 'Cycling') =>
-  base === 'Run' ? `lower(c.activity) LIKE '%run%'` : `c.activity = 'Cycling'`
+  base === 'Run' ? `lower(c.activity) LIKE '%run%'` : `c.activity IN ('Cycling', 'Interval ride')`
 
 /** Check one saved cardio entry for PRs and record them. Never throws — PRs are a bonus, not critical. */
 export async function recordCardioPrs(cardioId: number): Promise<CardioPr[]> {

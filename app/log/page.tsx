@@ -22,6 +22,7 @@ import { BARBELL_EXERCISES, warmupSet } from '@/lib/warmup'
 import { loadBar } from '@/lib/plates'
 import NextSuggestion from '@/components/log/NextSuggestion'
 import { RestButton, playChime, unlockChime } from '@/components/log/RestTimer'
+import { cardioIcon } from '@/lib/cardio-activity'
 
 type SetRow = { id: number; weight: number; reps: number; duration_secs: number; done: boolean }
 type LoggedSet = { id: number; weight: number; reps: number; duration_secs: number | null }
@@ -1314,7 +1315,7 @@ export default function LogPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="material-symbols-outlined text-tertiary">
-                      {c.activity === 'Cycling' ? 'directions_bike' : c.activity === 'Walking' ? 'directions_walk' : c.activity.toLowerCase().includes('run') ? 'directions_run' : 'directions_run'}
+                      {cardioIcon(c.activity)}
                     </span>
                     <div>
                       <p className="font-headline font-bold text-on-surface">{c.activity}</p>

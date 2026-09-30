@@ -3,6 +3,7 @@ import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { userToday } from '@/lib/tz'
 import { recordCardioPrs } from '@/lib/cardio-prs'
+import { cardioBlockType } from '@/lib/cardio-activity'
 
 await initDb()
 
@@ -296,7 +297,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Cardio
       const { activity, distance, time, pace, notes } = body
-      const blockType = activity === 'Cycling' ? 'cycle' : 'run'
+      const blockType = cardioBlockType(activity)
 
       const blockRes = await db.execute({
         sql: 'INSERT INTO blocks (session_id, type, position, notes, client_id) VALUES (?, ?, ?, ?, ?) RETURNING id',
