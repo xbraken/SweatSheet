@@ -18,7 +18,7 @@ export interface FeedItem {
   date: string
   createdAt: string
   notes: string | null
-  lift: { volume: number; sets: number; exercises: Array<{ name: string; volume: number; sets: number; topWeight: number }> } | null
+  lift: { volume: number; sets: number; exercises: Array<{ name: string; volume: number; sets: number; topWeight: number; reps?: number; bestSecs?: number; sameReps?: boolean }> } | null
   cardio: Array<{ activity: string; distance: number | null; duration: string | null; pace: string | null; avg_watts?: number | null }> | null
   prs: Array<{ exercise: string; kind: string; value: number; reps: number | null }>
   reactions: { counts: Record<string, number>; mine: string[]; names: string[] }
@@ -47,6 +47,16 @@ export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boole
     const v = isLbs ? kg * 2.20462 : kg
     return v >= 1000 ? `${(v / 1000).toFixed(1)}${isLbs ? 'k lbs' : 't'}` : `${Math.round(v)} ${isLbs ? 'lbs' : 'kg'}`
   }
+
+  const secs = (s: number) => s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`
+  // Weighted → top weight; timed (plank) → longest hold; bodyweight (push-ups) → "3 × 25" or total reps
+  const setsLabel = (n: number) => `${n} ${n === 1 ? 'set' : 'sets'}`
+  const exDetail = (e: { sets: number; topWeight: number; reps?: number; bestSecs?: number; sameReps?: boolean }) =>
+    e.topWeight > 0 ? `${setsLabel(e.sets)} · ${w(e.topWeight)}`
+      : e.bestSecs ? `${setsLabel(e.sets)} · ${secs(e.bestSecs)} best`
+      : e.reps && e.sameReps ? `${e.sets} × ${e.reps / e.sets} reps`
+      : e.reps ? `${setsLabel(e.sets)} · ${e.reps} reps`
+      : `${setsLabel(e.sets)} · bodyweight`
 
   const react = async (emoji: string) => {
     if (pending) return
@@ -119,13 +129,13 @@ export default function FeedCard({ item, isLbs }: { item: FeedItem; isLbs: boole
           <div className="flex items-center gap-3 mb-1.5">
             <span className="material-symbols-outlined text-primary-container text-xl">fitness_center</span>
             <p className="font-headline font-bold text-on-surface flex-1">{exercises.length} exercise{exercises.length === 1 ? '' : 's'}</p>
-            <p className="text-sm text-outline shrink-0">{item.lift!.sets} sets · {vol(item.lift!.volume)}</p>
+            <p className="text-sm text-outline shrink-0">{item.lift!.sets} sets{item.lift!.volume > 0 ? ` · ${vol(item.lift!.volume)}` : ''}</p>
           </div>
           <ul className="ml-8 space-y-0.5">
             {exercises.slice(0, 4).map(e => (
               <li key={e.name} className="text-xs text-on-surface-variant flex justify-between gap-2">
                 <span className="truncate">{e.name}</span>
-                <span className="text-outline shrink-0">{e.sets} {e.sets === 1 ? 'set' : 'sets'} · {e.topWeight > 0 ? w(e.topWeight) : 'bodyweight'}</span>
+                <span className="text-outline shrink-0">{exDetail(e)}</span>
               </li>
             ))}
             {exercises.length > 4 && <li className="text-xs text-outline">+{exercises.length - 4} more</li>}
