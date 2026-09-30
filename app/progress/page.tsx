@@ -8,6 +8,10 @@ import { EXERCISES, type ExerciseType } from '@/lib/exercises'
 import { zoneSeconds, decouplingPct, negativeSplit, riegelPredict } from '@/lib/run-analysis'
 import { smoothedTrend, fmtPace, paceToKmh, usesSpeed } from '@/lib/cardio-trends'
 import { baseActivity, isIntervalActivity, withInterval } from '@/lib/cardio-activity'
+import { bestAvgPower, efficiencyFactor, type PowerSample } from '@/lib/cycling-power'
+
+// Power is drawn in its own colour so it never reads as HR (orange) or pace (teal)
+const POWER_COLOR = '#ffd166'
 
 function getExerciseType(name: string): ExerciseType {
   return EXERCISES.find(e => e.name === name)?.type ?? 'weights'
@@ -43,6 +47,7 @@ type CardioEntry = {
   pace: string | null
   calories: number | null
   heart_rate: number | null
+  avg_watts?: number | null
   started_at: string | null
 }
 
@@ -61,8 +66,16 @@ type RunDetail = {
   hr_min: number | null
   hr_max: number | null
   started_at: string | null
+  avg_watts?: number | null
+  np_watts?: number | null
+  max_watts?: number | null
+  avg_cadence?: number | null
+  ftp?: number | null
+  training_load?: number | null
+  hr_drift?: number | null
   hrSamples: HrSample[]
   distanceSamples: DistanceSample[]
+  powerSamples?: PowerSample[]
 }
 type CardioInsights = {
   userHrMax: number
@@ -72,6 +85,7 @@ type CardioInsights = {
   weeklyZones: { weekStart: string; activity: string; z1: number; z2: number; z3: number; z4: number; z5: number }[]
   z2Trend: { date: string; cardio_id: number; paceSec: number; durationSec: number }[]
   warmupSessions?: { date: string; cardio_id: number; avgHr: number }[]
+  ridePower?: { date: string; cardio_id: number; avgWatts: number; ef: number | null; best20: number | null; interval: boolean }[]
 }
 type CalendarDay = {
   date: string
@@ -139,6 +153,130 @@ function trendPercent(values: number[], lowerIsBetter = false): number | null {
   if (avgOlder === 0) return null
   const pct = ((avgNewer - avgOlder) / avgOlder) * 100
   return lowerIsBetter ? -pct : pct
+}
+
+// ── Ride power panel (cycling with power data) ─────────────────────────────────
+function fmtClock(sec: number): string {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60)
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
+}
+
+function RidePowerPanel({ detail }: { detail: RunDetail }) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const samples = detail.powerSamples ?? []
+  const avg = detail.avg_watts ?? null
+  const ef = efficiencyFactor(detail.np_watts ?? avg, detail.heart_rate)
+  const best20 = bestAvgPower(samples, 1200)
+  const isInterval = isIntervalActivity(detail.activity)
+
+  // 30s rolling average over the 10s buckets — readable shape without hiding surges
+  const smooth = samples.map((p, i) => {
+    const w = samples.slice(Math.max(0, i - 1), i + 2)
+    return Math.round(w.reduce((a, b) => a + b.watts, 0) / w.length)
+  })
+  const n = smooth.length
+  const maxT = n > 0 ? samples[n - 1].time_offset_sec : 0
+  const yMax = n > 0 ? Math.max(...smooth, detail.ftp ?? 0) * 1.1 : 1
+  const y = (w: number) => 80 - (w / yMax) * 70
+  const pts = n > 1 ? smooth.map((w, i) => `${((samples[i].time_offset_sec / (maxT || 1)) * 300).toFixed(1)},${y(w).toFixed(1)}`).join(' ') : null
+  const hIdx = hoverIdx != null && hoverIdx < n ? hoverIdx : null
+
+  const tiles: { value: number | string; label: string; main?: boolean }[] = []
+  if (avg) tiles.push({ value: avg, label: 'avg watts', main: true })
+  if (detail.np_watts) tiles.push({ value: detail.np_watts, label: 'normalized' })
+  if (detail.max_watts) tiles.push({ value: detail.max_watts, label: 'max watts' })
+  if (detail.avg_cadence) tiles.push({ value: detail.avg_cadence, label: 'avg rpm' })
+  if (ef) tiles.push({ value: ef.toFixed(2), label: 'watts / bpm' })
+
+  return (
+    <div className="mt-4 flex flex-col gap-3 animate-fade-in" style={{ animationDelay: '30ms' }}>
+      <div className="flex gap-2 flex-wrap">
+        {tiles.map(t => (
+          <div key={t.label} className="bg-surface-container rounded-xl px-3 py-2 flex flex-col items-center min-w-[60px]">
+            <span className="text-xl font-black font-headline" style={t.main ? { color: POWER_COLOR } : undefined}>{t.value}</span>
+            <span className="text-[9px] font-bold font-label uppercase tracking-wider text-outline">{t.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {(best20 || (!isInterval && detail.hr_drift != null)) && (
+        <div className="flex gap-2 flex-wrap">
+          {best20 && (
+            <div className="bg-surface rounded-xl px-3 py-2 flex flex-col">
+              <span className="text-[9px] font-bold font-label uppercase tracking-wider" style={{ color: POWER_COLOR }}>Best 20 min</span>
+              <span className="text-xs text-outline">{best20} W{detail.ftp ? ` · FTP ${detail.ftp} W` : ''}</span>
+            </div>
+          )}
+          {/* Power:HR drift only makes sense for a steady ride — intervals swing HR on purpose */}
+          {!isInterval && detail.hr_drift != null && (() => {
+            const steady = detail.hr_drift <= 5
+            return (
+              <div className="bg-surface rounded-xl px-3 py-2 flex flex-col">
+                <span className={`text-[9px] font-bold font-label uppercase tracking-wider ${steady ? 'text-tertiary' : 'text-primary-container'}`}>
+                  {steady ? 'HR held steady' : 'HR drifted up'}
+                </span>
+                <span className="text-xs text-outline">{detail.hr_drift > 0 ? '+' : ''}{detail.hr_drift.toFixed(1)}% vs power</span>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {pts && (
+        <div className="bg-surface rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-2 h-5">
+            <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Power over time</p>
+            {hIdx != null && (
+              <span className="flex items-center gap-2">
+                <span className="text-[10px] text-outline">{fmtClock(samples[hIdx].time_offset_sec)}</span>
+                <span className="text-sm font-black font-headline" style={{ color: POWER_COLOR }}>{smooth[hIdx]} W</span>
+              </span>
+            )}
+          </div>
+          <svg
+            className="w-full h-40"
+            viewBox="0 0 300 96"
+            preserveAspectRatio="none"
+            style={{ touchAction: 'pan-y' }}
+            onPointerMove={e => {
+              const rect = e.currentTarget.getBoundingClientRect()
+              const t = ((e.clientX - rect.left) / rect.width) * maxT
+              let i = samples.findIndex(p => p.time_offset_sec >= t)
+              if (i < 0) i = n - 1
+              setHoverIdx(i)
+            }}
+            onPointerLeave={() => setHoverIdx(null)}
+          >
+            <defs>
+              <linearGradient id="powerGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={POWER_COLOR} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={POWER_COLOR} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {detail.ftp && (
+              <>
+                <line x1={0} y1={y(detail.ftp)} x2={300} y2={y(detail.ftp)} stroke="#a48b83" strokeWidth="0.5" strokeDasharray="2,3" />
+                <text x={298} y={y(detail.ftp) - 2} fill="#a48b83" fontSize="6.5" fontFamily="sans-serif" textAnchor="end">FTP {detail.ftp}</text>
+              </>
+            )}
+            {avg && <line x1={0} y1={y(avg)} x2={300} y2={y(avg)} stroke={POWER_COLOR} strokeWidth="0.5" strokeDasharray="4,4" strokeOpacity="0.5" />}
+            <polygon points={`0,80 ${pts} 300,80`} fill="url(#powerGrad)" />
+            <polyline points={pts} fill="none" stroke={POWER_COLOR} strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            {hIdx != null && (() => {
+              const x = (samples[hIdx].time_offset_sec / (maxT || 1)) * 300
+              return <>
+                <line x1={x} y1={0} x2={x} y2={80} stroke={POWER_COLOR} strokeWidth="1" strokeOpacity="0.3" strokeDasharray="3,3" />
+                <circle cx={x} cy={y(smooth[hIdx])} r="3.5" fill={POWER_COLOR} />
+              </>
+            })()}
+            <line x1={0} y1={80} x2={300} y2={80} stroke="#2a2a2a" strokeWidth="0.5" />
+            <text x={2} y={92} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif">0:00</text>
+            <text x={298} y={92} fill="#5a5a5a" fontSize="6.5" fontFamily="sans-serif" textAnchor="end">{fmtClock(maxT)}</text>
+          </svg>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Run Detail Sheet ──────────────────────────────────────────────────────────
@@ -500,6 +638,8 @@ function RunDetailSheet({
               )}
             </div>
           )}
+
+          {detail.avg_watts != null && <RidePowerPanel detail={detail} />}
 
           {/* Pace Chart */}
           {hasPace && (
@@ -1258,6 +1398,7 @@ export default function ProgressPage() {
   }, [])
   const [cardioInsights, setCardioInsights] = useState<CardioInsights | null>(null)
   const [aeroHoverIdx, setAeroHoverIdx] = useState<number | null>(null)
+  const [powerHoverIdx, setPowerHoverIdx] = useState<number | null>(null)
   const [bodyWeightLog, setBodyWeightLog] = useState<{ date: string; weight_kg: number }[]>([])
   const [bwInput, setBwInput] = useState('')
   const [bwHoveredIdx, setBwHoveredIdx] = useState<number | null>(null)
@@ -1867,6 +2008,116 @@ export default function ProgressPage() {
           <div className="bg-surface rounded-xl h-[200px]" />
         </div>
       )}
+
+      {/* Cycling power fitness — watts per heartbeat (normalized power ÷ avg HR) per ride. Indoor
+          rides are the same conditions every time, so the same watts at a lower HR = fitter. */}
+      {tab === 'cardio' && cardioInsights && cardioActivity === 'Cycling' && (cardioInsights.ridePower ?? []).length > 0 && (() => {
+        const rides = cardioInsights.ridePower!
+        const efRides = rides.filter(r => r.ef != null)
+        // smoothedTrend rounds to integers, so trend in hundredths of a W/bpm
+        const t = smoothedTrend(efRides.map(r => ({ date: r.date, value: Math.round(r.ef! * 100) })))
+        const values = t ? t.smoothed.map(p => p.value) : []
+        const n = values.length
+        const hIdx = powerHoverIdx != null && powerHoverIdx < n ? powerHoverIdx : null
+        const latestEf = efRides.length > 0 ? efRides[efRides.length - 1].ef! : null
+        const headline = hIdx != null ? values[hIdx] / 100 : t ? t.current / 100 : latestEf
+        const steady = t ? Math.abs(t.delta) < 2 : true
+        const better = t ? t.delta > 0 : false
+        const pts = n > 1 ? buildSvgPoints(values) : null
+        const hX = hIdx != null ? (hIdx / Math.max(n - 1, 1)) * 300 : 0
+        const hY = hIdx != null ? ptY(values, values[hIdx], false) : 0
+        const onPointer = (e: React.PointerEvent<SVGSVGElement>) => {
+          if (n < 2) return
+          const rect = e.currentTarget.getBoundingClientRect()
+          setPowerHoverIdx(Math.max(0, Math.min(n - 1, Math.round(((e.clientX - rect.left) / rect.width) * (n - 1)))))
+        }
+
+        // Best 20-min power over the last 6 weeks (all time if nothing recent)
+        const sixWeeksAgo = new Date(Date.now() - 42 * 86400000).toISOString().slice(0, 10)
+        const withBest = rides.filter(r => r.best20 != null)
+        const recent = withBest.filter(r => r.date >= sixWeeksAgo)
+        const bestPool = recent.length > 0 ? recent : withBest
+        const best = bestPool.reduce<typeof rides[number] | null>((b, r) => (!b || r.best20! > b.best20! ? r : b), null)
+        const last5 = rides.slice(-5).map(r => r.avgWatts).sort((a, b) => a - b)
+        const typicalWatts = last5[Math.floor(last5.length / 2)]
+
+        return (
+          <section className="bg-surface-container rounded-xl p-5 flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold font-label uppercase tracking-widest text-outline">Watts per heartbeat</p>
+                <p className="mt-1">
+                  <span className="text-3xl font-black font-headline" style={{ color: POWER_COLOR }}>{headline != null ? headline.toFixed(2) : '–'}</span>
+                  <span className="text-sm text-outline ml-1">W/bpm</span>
+                </p>
+                <p className="text-[10px] font-bold font-label uppercase text-on-surface-variant">
+                  {hIdx != null && t ? formatDate(t.smoothed[hIdx].date) : t ? 'now' : 'latest ride'}
+                </p>
+              </div>
+              {t && (
+                <span className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold font-label ${
+                  steady ? 'bg-surface-container-high text-outline' : better ? 'bg-tertiary/20 text-tertiary' : 'bg-red-500/20 text-red-400'
+                }`}>
+                  <span className="material-symbols-outlined text-[12px]">{steady ? 'trending_flat' : better ? 'north' : 'south'}</span>
+                  {steady ? 'Steady' : `${Math.round((Math.abs(t.delta) / t.baseline) * 100)}% ${better ? 'fitter' : 'lower'}`}
+                </span>
+              )}
+            </div>
+            {pts && (
+              <>
+                <svg
+                  className="w-full h-24"
+                  viewBox="0 0 300 100" preserveAspectRatio="none"
+                  style={{ touchAction: 'pan-y' }}
+                  onPointerMove={onPointer}
+                  onPointerDown={onPointer}
+                  onPointerLeave={() => setPowerHoverIdx(null)}
+                  onPointerCancel={() => setPowerHoverIdx(null)}
+                >
+                  <defs>
+                    <linearGradient id="efGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={POWER_COLOR} stopOpacity="0.18" />
+                      <stop offset="100%" stopColor={POWER_COLOR} stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <polygon points={`0,100 ${pts} 300,100`} fill="url(#efGrad)" />
+                  <polyline points={pts} fill="none" stroke={POWER_COLOR} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                  {hIdx != null && <>
+                    <line x1={hX} y1={0} x2={hX} y2={100} stroke={POWER_COLOR} strokeWidth="1" strokeOpacity="0.4" strokeDasharray="3,3" />
+                    <circle cx={hX} cy={hY} r="5" fill={POWER_COLOR} />
+                  </>}
+                </svg>
+                <div className="flex justify-between text-[10px] text-outline-variant -mt-1">
+                  <span>{formatDate(t!.smoothed[0].date)}</span>
+                  <span>{t!.runs} rides</span>
+                  <span>{formatDate(t!.smoothed[n - 1].date)}</span>
+                </div>
+              </>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                disabled={!best}
+                onClick={() => best && setSelectedRunId(best.cardio_id)}
+                className="bg-surface rounded-xl px-3 py-2 flex flex-col text-left active:scale-[0.97] transition-transform"
+              >
+                <span className="text-[9px] font-bold font-label uppercase tracking-widest text-outline">Best 20 min</span>
+                <span className="text-lg font-black font-headline text-on-surface">{best ? `${best.best20} W` : '–'}</span>
+                <span className="text-[9px] text-outline">{best ? `${recent.length > 0 ? 'last 6 weeks' : formatDate(best.date)} · ≈ FTP ${Math.round(best.best20! * 0.95)} W` : 'ride 20 min+ to see'}</span>
+              </button>
+              <div className="bg-surface rounded-xl px-3 py-2 flex flex-col">
+                <span className="text-[9px] font-bold font-label uppercase tracking-widest text-outline">Typical ride</span>
+                <span className="text-lg font-black font-headline text-on-surface">{typicalWatts} W</span>
+                <span className="text-[9px] text-outline">avg power, last {last5.length} ride{last5.length === 1 ? '' : 's'}</span>
+              </div>
+            </div>
+            <p className="text-xs text-outline leading-relaxed">
+              {t
+                ? <>How many watts you push for each heartbeat, vs {t.baselineLabel.replace('runs', 'rides')} ({(t.baseline / 100).toFixed(2)}). Higher is better: the same power at a lower heart rate means your fitness is improving.</>
+                : <>How many watts you push for each heartbeat. Higher is better. A trend appears after 3 rides of 20 minutes or more.</>}
+            </p>
+          </section>
+        )
+      })()}
 
       {/* Real best-segment PRs (computed from distance samples — actual fastest window) */}
       {tab === 'cardio' && cardioInsights && (() => {
@@ -2768,6 +3019,7 @@ export default function ProgressPage() {
                       <p className="text-[10px] font-bold font-label text-on-surface-variant uppercase"><ActivityLabel activity={s.activity} /></p>
                       {s.pace && <p className="font-bold text-on-surface text-sm">{paceLabel(s.pace, s.activity)}</p>}
                       {s.duration && <p className="text-xs text-on-surface-variant">{s.duration}</p>}
+                      {s.avg_watts != null && <p className="text-xs font-bold" style={{ color: POWER_COLOR }}>⚡ {s.avg_watts} W avg</p>}
                       {s.heart_rate && <p className="text-xs text-primary-container">♥ {s.heart_rate} avg</p>}
                     </div>
                   </button>

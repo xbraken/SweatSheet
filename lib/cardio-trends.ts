@@ -74,8 +74,8 @@ export function fmtDuration(d: string | null | undefined): string | null {
   return /^\d+$/.test(String(d).trim()) ? `${Number(d)} min` : String(d)
 }
 
-/** "19.0 km · 43 min · 26.5 km/h" for rides, "5.8 km · 43:04 · 7:24/km" for runs */
-export function cardioSummary(c: { activity: string; distance?: number | string | null; duration?: string | null; pace?: string | null }): string {
+/** "19.0 km · 43 min · 26.5 km/h" for rides ("… · 125 W" with power), "5.8 km · 43:04 · 7:24/km" for runs */
+export function cardioSummary(c: { activity: string; distance?: number | string | null; duration?: string | null; pace?: string | null; avg_watts?: number | null }): string {
   const km = c.distance != null && Number(c.distance) > 0 ? Number(c.distance) : null
   const durSec = durationToSec(c.duration)
   let rate: string | null = null
@@ -86,5 +86,6 @@ export function cardioSummary(c: { activity: string; distance?: number | string 
   } else if (c.pace) {
     rate = `${c.pace}/km`
   }
-  return [km != null ? `${km.toFixed(1)} km` : null, fmtDuration(c.duration), rate].filter(Boolean).join(' · ')
+  const watts = usesSpeed(c.activity) && c.avg_watts ? `${Math.round(Number(c.avg_watts))} W` : null
+  return [km != null ? `${km.toFixed(1)} km` : null, fmtDuration(c.duration), rate, watts].filter(Boolean).join(' · ')
 }

@@ -6,6 +6,7 @@ import {
   findBestSegment, zoneSeconds, longestZ2Window, weekStart, plausibleSamples, warmupHr,
 } from '@/lib/run-analysis'
 import { baseActivity, isIntervalActivity } from '@/lib/cardio-activity'
+import { bestAvgPower, efficiencyFactor, type PowerSample } from '@/lib/cycling-power'
 
 await initDb()
 
@@ -33,9 +34,9 @@ export async function GET(_req: NextRequest) {
   try {
     // Fetch all run-like cardio entries + their HR + distance samples in one go.
     // Friends-only scale: a few hundred runs at most.
-    const [cardioRes, hrRes, distRes, hrMaxRes] = await Promise.all([
+    const [cardioRes, hrRes, distRes, hrMaxRes, powerRes] = await Promise.all([
       db.execute({
-        sql: `SELECT c.id, s.date, c.distance, c.duration, c.hr_max, c.activity, c.heart_rate
+        sql: `SELECT c.id, s.date, c.distance, c.duration, c.hr_max, c.activity, c.heart_rate, c.avg_watts, c.np_watts
               FROM cardio c
               JOIN blocks b ON c.block_id = b.id
               JOIN sessions s ON b.session_id = s.id
@@ -71,6 +72,16 @@ export async function GET(_req: NextRequest) {
               WHERE s.user_id = ?`,
         args: [userId],
       }),
+      db.execute({
+        sql: `SELECT p.cardio_id, p.time_offset_sec, p.watts
+              FROM cardio_power_samples p
+              JOIN cardio c ON c.id = p.cardio_id
+              JOIN blocks b ON c.block_id = b.id
+              JOIN sessions s ON b.session_id = s.id
+              WHERE s.user_id = ?
+              ORDER BY p.cardio_id, p.time_offset_sec`,
+        args: [userId],
+      }),
     ])
 
     const userHrMax = (hrMaxRes.rows[0]?.hr_max as number | null) ?? 0
@@ -88,6 +99,16 @@ export async function GET(_req: NextRequest) {
       if (!distByRun.has(id)) distByRun.set(id, [])
       distByRun.get(id)!.push({ time_offset_sec: Number(r.time_offset_sec), distance_km: Number(r.distance_km) })
     }
+
+    const powerByRide = new Map<number, PowerSample[]>()
+    for (const r of powerRes.rows) {
+      const id = Number(r.cardio_id)
+      if (!powerByRide.has(id)) powerByRide.set(id, [])
+      powerByRide.get(id)!.push({ time_offset_sec: Number(r.time_offset_sec), watts: Number(r.watts) })
+    }
+
+    // Per-ride power for the cycling cards: watts per heartbeat + best 20-min power
+    const ridePower: { date: string; cardio_id: number; avgWatts: number; ef: number | null; best20: number | null; interval: boolean }[] = []
 
     // Recent bests (last ~6 months) drive race predictions — an all-time PR from years ago would mislead
     const recentCutoff = new Date(Date.now() - 183 * 86400000).toISOString().slice(0, 10)
@@ -168,6 +189,19 @@ export async function GET(_req: NextRequest) {
         if (w) z2Trend.push({ date, cardio_id: cardioId, paceSec: w.paceSecPerKm, durationSec: w.durationSec })
       }
 
+      // Cycling power. EF needs a ride long enough (20 min+) for HR to settle.
+      if (activity === 'Cycling' && r.avg_watts != null) {
+        const watts = r.np_watts != null ? Number(r.np_watts) : Number(r.avg_watts)
+        ridePower.push({
+          date,
+          cardio_id: cardioId,
+          avgWatts: Number(r.avg_watts),
+          ef: durSec >= 1200 ? efficiencyFactor(watts, r.heart_rate != null ? Number(r.heart_rate) : null) : null,
+          best20: bestAvgPower(powerByRide.get(cardioId) ?? [], 1200),
+          interval: typeof r.activity === 'string' && isIntervalActivity(r.activity),
+        })
+      }
+
       // Warm-up heart rate: minutes 5–9 of each interval session's warm-up — a repeatable,
       // same-effort check. The same session imported twice (e.g. Strava + Intervals) counts once.
       const isInterval = typeof r.activity === 'string' && isIntervalActivity(r.activity)
@@ -190,6 +224,7 @@ export async function GET(_req: NextRequest) {
 
     z2Trend.sort((a, b) => a.date.localeCompare(b.date))
     warmupSessions.sort((a, b) => a.date.localeCompare(b.date))
+    ridePower.sort((a, b) => a.date.localeCompare(b.date))
 
     return NextResponse.json({
       userHrMax,
@@ -199,6 +234,7 @@ export async function GET(_req: NextRequest) {
       weeklyZones: weeklyZonesArr,
       z2Trend,
       warmupSessions,
+      ridePower,
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'

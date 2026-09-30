@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const stravaStatus = searchParams.get('strava')
   const [intervalsSyncing, setIntervalsSyncing] = useState(false)
   const [intervalsForce, setIntervalsForce] = useState(false)
-  const [intervalsSyncResult, setIntervalsSyncResult] = useState<{ imported: number; skipped: number } | null>(null)
+  const [intervalsSyncResult, setIntervalsSyncResult] = useState<{ imported: number; skipped: number; backfilled: number } | null>(null)
   const [unitPref, setUnitPref] = useState<'metric' | 'imperial'>('metric')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -349,7 +349,7 @@ export default function SettingsPage() {
                 body: JSON.stringify({ force: intervalsForce }),
               }).then(r => r.json())
               setIntervalsSyncing(false)
-              setIntervalsSyncResult({ imported: res.imported ?? 0, skipped: res.skipped ?? 0 })
+              setIntervalsSyncResult({ imported: res.imported ?? 0, skipped: res.skipped ?? 0, backfilled: res.backfilled ?? 0 })
               setTimeout(() => setIntervalsSyncResult(null), 4000)
             }}
             disabled={intervalsSyncing}
@@ -366,6 +366,7 @@ export default function SettingsPage() {
                 ? `✓ ${intervalsSyncResult.imported} imported, ${intervalsSyncResult.skipped} already up to date`
                 : `All ${intervalsSyncResult.skipped} activities already up to date`
               }
+              {intervalsSyncResult.backfilled > 0 && ` · power added to ${intervalsSyncResult.backfilled} ride${intervalsSyncResult.backfilled === 1 ? '' : 's'}`}
             </p>
           )}
         </div>

@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 12
+const SCHEMA_VERSION = 13
 
 let _initPromise: Promise<void> | null = null
 
@@ -227,6 +227,23 @@ async function _runInit() {
   )`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prs_session ON prs(session_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prs_user ON prs(user_id, created_at)`)
+
+  // v13 — cycling power from Intervals.icu (indoor bike / power meter). Additive only.
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN avg_watts INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN np_watts INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN max_watts INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN avg_cadence INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN ftp INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN training_load INTEGER`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE cardio ADD COLUMN hr_drift REAL`) } catch { /* exists */ }
+  // Power averaged into 10s buckets (for the ride power chart + best 20-min power)
+  await db.execute(`CREATE TABLE IF NOT EXISTS cardio_power_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cardio_id INTEGER NOT NULL REFERENCES cardio(id) ON DELETE CASCADE,
+    time_offset_sec INTEGER NOT NULL,
+    watts INTEGER NOT NULL
+  )`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_power_samples_cardio ON cardio_power_samples(cardio_id)`)
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)

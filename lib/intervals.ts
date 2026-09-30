@@ -1,5 +1,6 @@
 import { db } from './db'
 import { recordCardioPrs } from '@/lib/cardio-prs'
+import { bucketPower, maxPower } from '@/lib/cycling-power'
 
 const API_KEY = process.env.INTERVALS_ICU_API_KEY!
 const ATHLETE_ID = process.env.INTERVALS_ICU_ATHLETE_ID!
@@ -45,7 +46,7 @@ export async function getRecentActivities(oldest: string, newest: string): Promi
 
 // Streams come back as an array of {type, data} objects (not keyed by type like Strava)
 async function getActivityStreams(activityId: string): Promise<Record<string, number[]>> {
-  const res = await intervalsFetch(`/activity/${activityId}/streams.json?types=heartrate,velocity_smooth,distance,time`)
+  const res = await intervalsFetch(`/activity/${activityId}/streams.json?types=heartrate,velocity_smooth,distance,time,watts,cadence`)
   if (!res.ok) return {}
   const streams = await res.json() as { type: string; data: number[] }[]
   const byType: Record<string, number[]> = {}
@@ -55,11 +56,60 @@ async function getActivityStreams(activityId: string): Promise<Record<string, nu
   return byType
 }
 
+function num(v: unknown): number | null {
+  return typeof v === 'number' && isFinite(v) ? v : null
+}
+
+type RidePower = {
+  avgWatts: number | null
+  npWatts: number | null
+  maxWatts: number | null
+  avgCadence: number | null
+  ftp: number | null
+  trainingLoad: number | null
+  hrDrift: number | null
+  samples: { time_offset_sec: number; watts: number }[]
+}
+
+// Power summary + 10s power samples for a ride. Intervals.icu computes avg / normalized
+// power and power:HR decoupling itself; max comes from the raw stream.
+function ridePower(activity: Record<string, unknown>, streams: Record<string, number[]>): RidePower | null {
+  const avg = num(activity.icu_average_watts) ?? num(activity.average_watts)
+  const watts = streams.watts
+  if (!avg && !(watts && watts.some(w => w > 0))) return null
+  const round = (v: number | null) => (v != null ? Math.round(v) : null)
+  return {
+    avgWatts: round(avg),
+    npWatts: round(num(activity.icu_weighted_avg_watts)),
+    maxWatts: watts ? maxPower(watts) : null,
+    avgCadence: round(num(activity.average_cadence)),
+    ftp: round(num(activity.icu_ftp)),
+    trainingLoad: round(num(activity.icu_training_load)),
+    hrDrift: num(activity.decoupling) != null ? Math.round(num(activity.decoupling)! * 10) / 10 : null,
+    samples: watts && streams.time ? bucketPower(watts, streams.time) : [],
+  }
+}
+
+async function savePower(cardioId: number, p: RidePower) {
+  await db.execute({
+    sql: `UPDATE cardio SET avg_watts = ?, np_watts = ?, max_watts = ?, avg_cadence = ?, ftp = ?, training_load = ?, hr_drift = ?
+          WHERE id = ?`,
+    args: [p.avgWatts, p.npWatts, p.maxWatts, p.avgCadence, p.ftp, p.trainingLoad, p.hrDrift, cardioId],
+  })
+  await db.execute({ sql: 'DELETE FROM cardio_power_samples WHERE cardio_id = ?', args: [cardioId] })
+  if (p.samples.length > 0) {
+    await db.batch(p.samples.map(s => ({
+      sql: 'INSERT INTO cardio_power_samples (cardio_id, time_offset_sec, watts) VALUES (?, ?, ?)',
+      args: [cardioId, s.time_offset_sec, s.watts] as (string | number | null)[],
+    })))
+  }
+}
+
 export async function importActivity(
   userId: number,
   activity: Record<string, unknown>,
   opts: { force?: boolean } = {}
-): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+): Promise<{ ok: boolean; skipped?: boolean; backfilled?: boolean; error?: string }> {
   try {
     const activityId = activity.id as string
 
@@ -71,11 +121,22 @@ export async function importActivity(
     // Dedup check (skipped when force=true so user can re-import after a delete)
     if (!opts.force) {
       const dup = await db.execute({
-        sql: `SELECT c.id FROM cardio c JOIN blocks b ON b.id = c.block_id JOIN sessions s ON s.id = b.session_id
+        sql: `SELECT c.id, c.avg_watts FROM cardio c JOIN blocks b ON b.id = c.block_id JOIN sessions s ON s.id = b.session_id
               WHERE s.user_id = ? AND c.imported_from = ?`,
         args: [userId, `intervals:${activityId}`],
       })
-      if (dup.rows.length > 0) return { ok: true, skipped: true }
+      if (dup.rows.length > 0) {
+        // Backfill power onto rides imported before power was captured
+        const row = dup.rows[0]
+        if (activityType === 'Cycling' && row.avg_watts == null && num(activity.icu_average_watts)) {
+          const p = ridePower(activity, await getActivityStreams(activityId))
+          if (p) {
+            await savePower(Number(row.id), p)
+            return { ok: true, backfilled: true }
+          }
+        }
+        return { ok: true, skipped: true }
+      }
     }
 
     const streams = await getActivityStreams(activityId)
@@ -194,6 +255,10 @@ export async function importActivity(
         args: [cardioId, s.offsetSec, s.distKm] as (string | number | null)[],
       })))
     }
+    if (blockType === 'cycle') {
+      const p = ridePower(activity, streams)
+      if (p) await savePower(cardioId, p)
+    }
     await recordCardioPrs(cardioId)
 
     return { ok: true }
@@ -206,7 +271,7 @@ export async function importActivity(
 export async function syncRecentActivities(
   userId: number,
   opts: { lookbackDays?: number; force?: boolean } = {}
-): Promise<{ ok: boolean; imported: number; skipped: number; errors: number; errorDetails: string[] }> {
+): Promise<{ ok: boolean; imported: number; skipped: number; backfilled: number; errors: number; errorDetails: string[] }> {
   const lookbackDays = opts.lookbackDays ?? 3
   const newest = new Date().toISOString().slice(0, 10)
   const oldest = new Date(Date.now() - lookbackDays * 86400000).toISOString().slice(0, 10)
@@ -215,6 +280,7 @@ export async function syncRecentActivities(
 
   let imported = 0
   let skipped = 0
+  let backfilled = 0
   let errors = 0
   const errorDetails: string[] = []
 
@@ -223,6 +289,8 @@ export async function syncRecentActivities(
     if (!result.ok) {
       errors++
       if (result.error) errorDetails.push(result.error)
+    } else if (result.backfilled) {
+      backfilled++
     } else if (result.skipped) {
       skipped++
     } else {
@@ -230,5 +298,5 @@ export async function syncRecentActivities(
     }
   }
 
-  return { ok: true, imported, skipped, errors, errorDetails }
+  return { ok: true, imported, skipped, backfilled, errors, errorDetails }
 }
