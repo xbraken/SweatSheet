@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   const res = await db.execute({
     sql: `SELECT u.id, u.username, u.avatar,
-                 EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND following_id = u.id) as is_following
+                 (SELECT status FROM follows WHERE follower_id = ? AND following_id = u.id) as follow_status
           FROM users u
           WHERE lower(u.username) LIKE ? AND u.id != ?
           LIMIT 10`,

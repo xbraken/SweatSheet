@@ -17,8 +17,11 @@ interface SessionItem {
 }
 interface ProfileData {
   username: string
-  totalWorkouts: number
+  totalWorkouts: number | null
   isFollowing: boolean
+  followStatus: 'none' | 'pending' | 'accepted'
+  /** You can't see their workouts until they accept your follow request */
+  isPrivate: boolean
   isOwnProfile: boolean
   sessions: SessionItem[]
   avatar?: string | null
@@ -104,7 +107,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
   const [loading, setLoading] = useState(true)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set())
-  const [following, setFollowing] = useState(false)
+  const [followStatus, setFollowStatus] = useState<'none' | 'pending' | 'accepted'>('none')
   const [copiedDate, setCopiedDate] = useState<string | null>(null)
   const [copiedRoutines, setCopiedRoutines] = useState<Set<number>>(new Set())
 
@@ -166,28 +169,38 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
     })
   }, [profile])
 
+  const loadProfile = (name: string) =>
+    fetch(`/api/social/profile/${encodeURIComponent(name)}`)
+      .then(r => r.json())
+      .then(d => {
+        setProfile(d)
+        setFollowStatus(d.followStatus ?? (d.isFollowing ? 'accepted' : 'none'))
+        if (d.sessions?.length > 0) setExpandedDate(d.sessions[0].date)
+      })
+
   useEffect(() => {
     params.then(p => {
       setUsername(p.username)
-      fetch(`/api/social/profile/${encodeURIComponent(p.username)}`)
-        .then(r => r.json())
-        .then(d => {
-          setProfile(d)
-          setFollowing(d.isFollowing)
-          if (d.sessions?.length > 0) setExpandedDate(d.sessions[0].date)
-        })
-        .finally(() => setLoading(false))
+      loadProfile(p.username).finally(() => setLoading(false))
     })
   }, [params])
 
-  function toggleFollow() {
+  // Follow → Requested (they have to accept) → Following. Tapping Requested cancels the request.
+  async function toggleFollow() {
     if (!profile) return
-    const next = !following
-    setFollowing(next)
-    if (!next) {
-      fetch(`/api/social/follow?username=${encodeURIComponent(username)}`, { method: 'DELETE' })
+    if (followStatus === 'none') {
+      setFollowStatus('pending')
+      const res = await fetch('/api/social/follow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) }).catch(() => null)
+      if (!res?.ok) { setFollowStatus('none'); toast('Could not send request', { tone: 'error' }); return }
+      const d = await res.json()
+      setFollowStatus(d.status ?? 'pending')
+      if (d.status === 'accepted') loadProfile(username)
+      else toast(`Request sent — ${username} needs to accept it`)
     } else {
-      fetch('/api/social/follow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) })
+      const wasFollowing = followStatus === 'accepted'
+      setFollowStatus('none')
+      await fetch(`/api/social/follow?username=${encodeURIComponent(username)}`, { method: 'DELETE' }).catch(() => null)
+      if (wasFollowing) loadProfile(username)
     }
   }
 
@@ -205,11 +218,11 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
             onClick={toggleFollow}
             disabled={!profile}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-label transition-colors ${
-              following ? 'bg-surface-container text-outline' : 'bg-primary-container text-surface-container-lowest'
+              followStatus === 'none' ? 'bg-primary-container text-surface-container-lowest' : 'bg-surface-container text-outline'
             }`}
           >
-            <span className="material-symbols-outlined text-base">{following ? 'person_check' : 'person_add'}</span>
-            {following ? 'Following' : 'Follow'}
+            <span className="material-symbols-outlined text-base">{followStatus === 'accepted' ? 'person_check' : followStatus === 'pending' ? 'schedule' : 'person_add'}</span>
+            {followStatus === 'accepted' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
           </button>
         )}
       </header>
@@ -226,9 +239,20 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
             <section className="flex flex-col items-center pt-8 pb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
               <Avatar username={profile.username} avatar={profile.avatar} size="lg" className="mb-4" />
               <h2 className="font-headline text-2xl font-extrabold text-on-surface mb-1">{profile.username}</h2>
-              <p className="text-outline text-sm font-medium">{profile.totalWorkouts} Workouts</p>
+              {profile.totalWorkouts != null && <p className="text-outline text-sm font-medium">{profile.totalWorkouts} Workouts</p>}
             </section>
 
+            {profile.isPrivate ? (
+              <section className="bg-surface-container rounded-2xl p-6 flex flex-col items-center text-center gap-2 animate-fade-in" style={{ animationDelay: '40ms' }}>
+                <span className="material-symbols-outlined text-3xl text-outline">lock</span>
+                <p className="font-headline font-bold text-on-surface">Workouts are private</p>
+                <p className="text-sm text-outline">
+                  {followStatus === 'pending'
+                    ? `Request sent. You'll see ${profile.username}'s workouts once they accept.`
+                    : `Follow ${profile.username} to send a request. Their workouts show up once they accept.`}
+                </p>
+              </section>
+            ) : <>
             {!profile.isOwnProfile && (profile.routines?.length ?? 0) > 0 && (
               <section className="mb-8 animate-fade-in" style={{ animationDelay: '40ms' }}>
                 <h3 className="font-headline text-base font-bold text-on-surface mb-3">Routines</h3>
@@ -398,6 +422,7 @@ export default function FriendProfilePage({ params }: { params: Promise<{ userna
                 })}
               </div>
             )}
+            </>}
           </>
         )}
       </main>

@@ -1,15 +1,14 @@
 import { db } from '@/lib/db'
+import { ACCEPTED_FOLLOWING } from '@/lib/follows'
 
 export const REACTION_EMOJIS = ['🔥', '💪', '👏'] as const
 export type ReactionEmoji = typeof REACTION_EMOJIS[number]
 
-/** A session is visible to its owner and to anyone who follows the owner */
+/** A session is visible to its owner and to anyone whose follow request the owner accepted */
 export async function canSeeSession(viewerId: number, sessionId: number): Promise<boolean> {
   const res = await db.execute({
     sql: `SELECT 1 FROM sessions s
-          WHERE s.id = ? AND (s.user_id = ? OR EXISTS (
-            SELECT 1 FROM follows f WHERE f.follower_id = ? AND f.following_id = s.user_id
-          ))`,
+          WHERE s.id = ? AND (s.user_id = ? OR s.user_id IN (${ACCEPTED_FOLLOWING}))`,
     args: [sessionId, viewerId, viewerId],
   })
   return res.rows.length > 0

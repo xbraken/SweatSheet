@@ -3,6 +3,7 @@ import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { getUserTz } from '@/lib/tz'
 import { addDays, todayIn, weekStartMon } from '@/lib/dates'
+import { ACCEPTED_FOLLOWING } from '@/lib/follows'
 
 await initDb()
 
@@ -22,7 +23,7 @@ export async function GET() {
     sql: `WITH people AS (
             SELECT id, username, avatar FROM users WHERE id = ?
             UNION
-            SELECT u.id, u.username, u.avatar FROM follows f JOIN users u ON u.id = f.following_id WHERE f.follower_id = ?
+            SELECT u.id, u.username, u.avatar FROM users u WHERE u.id IN (${ACCEPTED_FOLLOWING})
           )
           SELECT p.id as user_id, p.username, p.avatar,
             (SELECT COUNT(DISTINCT s.date) FROM sessions s

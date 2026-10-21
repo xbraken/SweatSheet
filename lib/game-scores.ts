@@ -1,3 +1,5 @@
+import { ACCEPTED_FOLLOWING } from '@/lib/follows'
+
 // Mini-game high scores (the Friends page penguin easter egg). SQL lives here so the API route
 // and the better-sqlite3 tests run exactly the same statements.
 
@@ -19,7 +21,7 @@ export const FRIENDS_BEST_SQL = `
   WITH people AS (
     SELECT id, username FROM users WHERE id = ?
     UNION
-    SELECT u.id, u.username FROM follows f JOIN users u ON u.id = f.following_id WHERE f.follower_id = ?
+    SELECT u.id, u.username FROM users u WHERE u.id IN (${ACCEPTED_FOLLOWING})
   )
   SELECT p.id AS user_id, p.username, g.best
   FROM people p JOIN game_scores g ON g.user_id = p.id AND g.game = ?

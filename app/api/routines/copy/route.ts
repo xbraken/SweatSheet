@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { ACCEPTED_FOLLOWING } from '@/lib/follows'
 
 await initDb()
 
-/** POST { routineId } — copy a routine from someone you follow into your own routines */
+/** POST { routineId } — copy a routine from someone who accepted your follow into your own routines */
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const src = await db.execute({
     sql: `SELECT r.id, r.name, u.username FROM routines r JOIN users u ON u.id = r.user_id
-          WHERE r.id = ? AND EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = ? AND f.following_id = r.user_id)`,
+          WHERE r.id = ? AND r.user_id IN (${ACCEPTED_FOLLOWING})`,
     args: [routineId, session.userId],
   })
   if (src.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })

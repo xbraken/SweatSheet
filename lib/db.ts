@@ -6,7 +6,7 @@ export const db = createClient({
 })
 
 // Increment this whenever new migrations are added
-const SCHEMA_VERSION = 14
+const SCHEMA_VERSION = 15
 
 let _initPromise: Promise<void> | null = null
 
@@ -253,6 +253,11 @@ async function _runInit() {
     updated_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, game)
   )`)
+
+  // v15 — follow requests. Additive only: existing follows default to 'accepted' so current
+  // friends keep access; new follows are inserted as 'pending' until the other person accepts.
+  try { await db.execute(`ALTER TABLE follows ADD COLUMN status TEXT NOT NULL DEFAULT 'accepted'`) } catch { /* exists */ }
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_follows_following_status ON follows(following_id, status)`)
 
   // Mark schema as current — future cold starts skip all DDL above
   await db.execute(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)`)
