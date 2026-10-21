@@ -3,6 +3,7 @@ import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import type { FeedSet } from '@/lib/feed-format'
 import { prsFor, reactionsFor } from '@/lib/social'
+import { ACCEPTED_FOLLOWING } from '@/lib/follows'
 
 await initDb()
 
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   const cursorArgs = beforeTs && beforeId ? [beforeTs, beforeTs, Number(beforeId)] : []
 
   const followingRes = await db.execute({
-    sql: 'SELECT COUNT(*) as n FROM follows WHERE follower_id = ?',
+    sql: `SELECT COUNT(*) as n FROM follows WHERE follower_id = ? AND status = 'accepted'`,
     args: [session.userId],
   })
   const followingCount = Number(followingRes.rows[0].n)
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
                  u.id as user_id, u.username, u.avatar
           FROM sessions s
           JOIN users u ON u.id = s.user_id
-          WHERE (s.user_id = ? OR s.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?))
+          WHERE (s.user_id = ? OR s.user_id IN (${ACCEPTED_FOLLOWING}))
             AND EXISTS (SELECT 1 FROM blocks b WHERE b.session_id = s.id)
             ${cursorSql}
           ORDER BY s.created_at DESC, s.id DESC

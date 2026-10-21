@@ -8,14 +8,14 @@ beforeEach(() => {
   db = new Database(':memory:')
   db.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE);
-    CREATE TABLE follows (follower_id INTEGER NOT NULL, following_id INTEGER NOT NULL);
+    CREATE TABLE follows (follower_id INTEGER NOT NULL, following_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'accepted');
     CREATE TABLE game_scores (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       game TEXT NOT NULL, best INTEGER NOT NULL, updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (user_id, game)
     );
     INSERT INTO users (username) VALUES ('edmond'), ('cameron'), ('stranger');
-    INSERT INTO follows VALUES (1, 2);
+    INSERT INTO follows (follower_id, following_id) VALUES (1, 2);
   `)
 })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, initDb } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { FOLLOW_STATUS_SQL, toFollowStatus } from '@/lib/follows'
 
 await initDb()
 
@@ -17,20 +18,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
 
   const isOwnProfile = Number(targetId) === Number(session.userId)
 
-  const [followRes, countRes, sessionsRes] = await Promise.all([
-    db.execute({ sql: 'SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?', args: [session.userId, targetId] }),
+  const followRes = await db.execute({ sql: FOLLOW_STATUS_SQL, args: [session.userId, targetId] })
+  const followStatus = toFollowStatus(followRes.rows[0]?.status)
+  const isFollowing = followStatus === 'accepted'
+
+  // Private until they accept your request: name and avatar only, no workouts, counts or routines
+  if (!isOwnProfile && !isFollowing) {
+    return NextResponse.json({ username, avatar: targetAvatar, isPrivate: true, followStatus, isFollowing, isOwnProfile, totalWorkouts: null, sessions: [], routines: [] })
+  }
+
+  const [countRes, sessionsRes] = await Promise.all([
     db.execute({ sql: 'SELECT COUNT(*) as count FROM sessions WHERE user_id = ?', args: [targetId] }),
     isOwnProfile
       ? db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY date DESC, created_at DESC', args: [targetId] })
       : db.execute({ sql: 'SELECT id, date, created_at FROM sessions WHERE user_id = ? ORDER BY date DESC, created_at DESC LIMIT 100', args: [targetId] }),
   ])
 
-  const isFollowing = followRes.rows.length > 0
   const totalWorkouts = countRes.rows[0].count as number
 
-  // Routines are visible to followers so friends can copy them
+  // Routines are visible to accepted followers so friends can copy them
   let routines: { id: number; name: string; exercises: string[] }[] = []
-  if (isFollowing || isOwnProfile) {
+  {
     const rtn = await db.execute({
       sql: `SELECT r.id, r.name, re.exercise FROM routines r
             LEFT JOIN routine_exercises re ON re.routine_id = r.id
@@ -47,7 +55,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
   }
 
   if (sessionsRes.rows.length === 0) {
-    return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions: [], routines })
+    return NextResponse.json({ username, avatar: targetAvatar, isPrivate: false, followStatus, totalWorkouts, isFollowing, isOwnProfile, sessions: [], routines })
   }
 
   const sessionIds = sessionsRes.rows.map(r => r.id as number)
@@ -127,5 +135,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
     }
   })
 
-  return NextResponse.json({ username, avatar: targetAvatar, totalWorkouts, isFollowing, isOwnProfile, sessions, routines })
+  return NextResponse.json({ username, avatar: targetAvatar, isPrivate: false, followStatus, totalWorkouts, isFollowing, isOwnProfile, sessions, routines })
 }
